@@ -156,7 +156,9 @@ interface ITransmuter {
     /// @notice Emits a {PositionClaimed} event.
     ///
     /// @param id   Id of the nft representing the position.
-    function claimRedemption(uint256 id) external;
+    function claimRedemption(
+        uint256 id
+    ) external returns (uint256 claimYield, uint256 feeYield, uint256 syntheticReturned, uint256 syntheticFee);
 
     /// @notice Queries the staking graph from `startBlock` to `endBlock`.
     ///
