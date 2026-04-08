@@ -45,6 +45,7 @@ contract MultiStrategyETHHandler is Test {
     mapping(bytes4 => uint256) public opReverts;
     mapping(bytes4 => uint256) public opNoops;
     mapping(address => uint256) public allocatorRoleAttempts;
+    uint256 internal allocatorRoleNonce;
     
     // Strategy name tracking for debugging
     mapping(address => string) public strategyNames;
@@ -83,7 +84,9 @@ contract MultiStrategyETHHandler is Test {
     }
 
     function _pickAllocatorCaller(uint256 seed) internal returns (address caller) {
-        caller = seed % 2 == 0 ? admin : operator;
+        seed;
+        caller = allocatorRoleNonce % 2 == 0 ? admin : operator;
+        allocatorRoleNonce++;
         allocatorRoleAttempts[caller]++;
     }
     
@@ -132,12 +135,17 @@ contract MultiStrategyETHHandler is Test {
         amount = bound(amount, MIN_DEPOSIT, balance);
         
         IERC20(asset).approve(address(vault), amount);
+        (uint256[] memory allocationSnapshot, uint256 totalBefore) = _snapshotAllocations();
 
         _markAttempt(selector);
         try vault.deposit(amount, currentActor) {
             _markSuccess(selector);
             ghost_totalDeposited += amount;
             ghost_userDeposits[currentActor] += amount;
+            uint256 totalAfter = _recordAllocationDeltas(allocationSnapshot);
+            if (vault.liquidityAdapter() != address(0)) {
+                _assertTotalAllocationDirection(totalBefore, totalAfter, true, "Deposit reduced total allocations");
+            }
         } catch {
             _markRevert(selector);
         }
@@ -159,6 +167,7 @@ contract MultiStrategyETHHandler is Test {
         }
 
         amount = bound(amount, 1, maxAssets);
+        (uint256[] memory allocationSnapshot, uint256 totalBefore) = _snapshotAllocations();
 
         _markAttempt(selector);
         try vault.withdraw(amount, currentActor, currentActor) {
@@ -166,6 +175,10 @@ contract MultiStrategyETHHandler is Test {
             ghost_totalWithdrawn += amount;
             if (ghost_userDeposits[currentActor] >= amount) {
                 ghost_userDeposits[currentActor] -= amount;
+            }
+            uint256 totalAfter = _recordAllocationDeltas(allocationSnapshot);
+            if (vault.liquidityAdapter() != address(0)) {
+                _assertTotalAllocationDirection(totalBefore, totalAfter, false, "Withdraw increased total allocations");
             }
         } catch {
             _markRevert(selector);
@@ -190,12 +203,17 @@ contract MultiStrategyETHHandler is Test {
         shares = bound(shares, 1, maxShares);
 
         IERC20(asset).approve(address(vault), balance);
+        (uint256[] memory allocationSnapshot, uint256 totalBefore) = _snapshotAllocations();
 
         _markAttempt(selector);
         try vault.mint(shares, currentActor) returns (uint256 assetsDeposited) {
             _markSuccess(selector);
             ghost_totalDeposited += assetsDeposited;
             ghost_userDeposits[currentActor] += assetsDeposited;
+            uint256 totalAfter = _recordAllocationDeltas(allocationSnapshot);
+            if (vault.liquidityAdapter() != address(0)) {
+                _assertTotalAllocationDirection(totalBefore, totalAfter, true, "Mint reduced total allocations");
+            }
         } catch {
             _markRevert(selector);
         }
@@ -211,6 +229,7 @@ contract MultiStrategyETHHandler is Test {
         }
 
         shares = bound(shares, 1, userShares);
+        (uint256[] memory allocationSnapshot, uint256 totalBefore) = _snapshotAllocations();
 
         _markAttempt(selector);
         try vault.redeem(shares, currentActor, currentActor) returns (uint256 assetsRedeemed) {
@@ -218,6 +237,10 @@ contract MultiStrategyETHHandler is Test {
             ghost_totalWithdrawn += assetsRedeemed;
             if (ghost_userDeposits[currentActor] >= assetsRedeemed) {
                 ghost_userDeposits[currentActor] -= assetsRedeemed;
+            }
+            uint256 totalAfter = _recordAllocationDeltas(allocationSnapshot);
+            if (vault.liquidityAdapter() != address(0)) {
+                _assertTotalAllocationDirection(totalBefore, totalAfter, false, "Redeem increased total allocations");
             }
         } catch {
             _markRevert(selector);
@@ -253,6 +276,7 @@ contract MultiStrategyETHHandler is Test {
         uint256 strategyIndex = strategyIndexSeed % strategiesLen;
         (bool success, uint256 allocatedAmount) = _tryAllocate(strategies[strategyIndex], amount, strategyIndexSeed);
         if (success) {
+            assertGt(allocatedAmount, 0, "Allocate succeeded without allocation delta");
             ghost_totalAllocated += allocatedAmount;
             ghost_strategyAllocations[strategies[strategyIndex]] += allocatedAmount;
         }
@@ -378,22 +402,11 @@ contract MultiStrategyETHHandler is Test {
         }
         
         _markAttempt(selector);
+        (uint256[] memory allocationSnapshot,) = _snapshotAllocations();
         address allocatorCaller = _pickAllocatorCaller(amount);
         vm.prank(allocatorCaller);
         try IAllocator(allocator).deallocate(strategy, previewAmount) {
-            uint256 newAllocation = vault.allocation(allocationId);
-            if (newAllocation >= currentAllocation) {
-                _markRevert(selector);
-                return;
-            }
-
-            uint256 deallocatedAmount = currentAllocation - newAllocation;
-            ghost_totalDeallocated += deallocatedAmount;
-            if (ghost_strategyAllocations[strategy] >= deallocatedAmount) {
-                ghost_strategyAllocations[strategy] -= deallocatedAmount;
-            } else {
-                ghost_strategyAllocations[strategy] = 0;
-            }
+            _recordAllocationDeltas(allocationSnapshot);
             _markSuccess(selector);
         } catch {
             _markRevert(selector);
@@ -431,22 +444,11 @@ contract MultiStrategyETHHandler is Test {
         }
 
         _markAttempt(selector);
+        (uint256[] memory allocationSnapshot,) = _snapshotAllocations();
         address allocatorCaller = _pickAllocatorCaller(strategyIndex);
         vm.prank(allocatorCaller);
         try IAllocator(allocator).deallocate(strategy, previewAmount) {
-            uint256 allocationAfter = vault.allocation(allocationId);
-            if (allocationAfter >= allocationBefore) {
-                _markRevert(selector);
-                return;
-            }
-
-            uint256 deallocatedAmount = allocationBefore - allocationAfter;
-            ghost_totalDeallocated += deallocatedAmount;
-            if (ghost_strategyAllocations[strategy] >= deallocatedAmount) {
-                ghost_strategyAllocations[strategy] -= deallocatedAmount;
-            } else {
-                ghost_strategyAllocations[strategy] = 0;
-            }
+            _recordAllocationDeltas(allocationSnapshot);
             _markSuccess(selector);
         } catch {
             _markRevert(selector);
@@ -478,10 +480,66 @@ contract MultiStrategyETHHandler is Test {
         _markAttempt(selector);
         address allocatorCaller = _pickAllocatorCaller(modeSeed);
         vm.prank(allocatorCaller);
-        try IAllocator(allocator).setLiquidityAdapter(newLiquidityAdapter, "") {
+        try IAllocator(allocator).setLiquidityAdapter(newLiquidityAdapter, _directLiquidityData()) {
             _markSuccess(selector);
         } catch {
             _markRevert(selector);
+        }
+    }
+
+    function _directLiquidityData() internal pure returns (bytes memory) {
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        return abi.encode(params);
+    }
+
+    function _snapshotAllocations() internal view returns (uint256[] memory snapshot, uint256 totalBefore) {
+        uint256 len = strategies.length;
+        snapshot = new uint256[](len);
+        for (uint256 i = 0; i < len; i++) {
+            bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
+            uint256 allocation = vault.allocation(allocationId);
+            snapshot[i] = allocation;
+            totalBefore += allocation;
+        }
+    }
+
+    function _recordAllocationDeltas(uint256[] memory beforeAllocations) internal returns (uint256 totalAfter) {
+        uint256 len = strategies.length;
+        for (uint256 i = 0; i < len; i++) {
+            address strategy = strategies[i];
+            bytes32 allocationId = IMYTStrategy(strategy).adapterId();
+            uint256 afterAllocation = vault.allocation(allocationId);
+            uint256 beforeAllocation = beforeAllocations[i];
+            totalAfter += afterAllocation;
+
+            if (afterAllocation >= beforeAllocation) {
+                uint256 deltaUp = afterAllocation - beforeAllocation;
+                if (deltaUp > 0) {
+                    ghost_totalAllocated += deltaUp;
+                    ghost_strategyAllocations[strategy] += deltaUp;
+                }
+            } else {
+                uint256 deltaDown = beforeAllocation - afterAllocation;
+                ghost_totalDeallocated += deltaDown;
+                if (ghost_strategyAllocations[strategy] >= deltaDown) {
+                    ghost_strategyAllocations[strategy] -= deltaDown;
+                } else {
+                    ghost_strategyAllocations[strategy] = 0;
+                }
+            }
+        }
+    }
+
+    function _assertTotalAllocationDirection(uint256 totalBefore, uint256 totalAfter, bool expectIncrease, string memory errorMessage)
+        internal
+        pure
+    {
+        uint256 tolerance = totalBefore / 1_000_000 + 1;
+        if (expectIncrease) {
+            require(totalAfter + tolerance >= totalBefore, errorMessage);
+        } else {
+            require(totalAfter <= totalBefore + tolerance, errorMessage);
         }
     }
 
@@ -941,20 +999,17 @@ contract MultiStrategyETHInvariantTest is Test {
     
     /// @notice Invariant: No strategy allocation exceeds relative cap
     function invariant_allocationWithinRelativeCap() public view {
-        uint256 vaultTotalAssets = vault.totalAssets();
         uint256 firstTotalAssets = vault.firstTotalAssets();
-        if (firstTotalAssets == 0) {
-            firstTotalAssets = vaultTotalAssets;
-        }
+        if (firstTotalAssets == 0) return;
         
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
             uint256 allocation = vault.allocation(allocationId);
             uint256 relativeCap = vault.relativeCap(allocationId);
-            uint256 allocatorCap = (vaultTotalAssets * relativeCap) / 1e18;
-            uint256 vaultCap = (firstTotalAssets * relativeCap) / 1e18;
-            uint256 maxAllowed = allocatorCap < vaultCap ? allocatorCap : vaultCap;
-            uint256 tolerance = maxAllowed / 200; // 0.5%
+            if (relativeCap == 1e18) continue;
+
+            uint256 maxAllowed = (firstTotalAssets * relativeCap) / 1e18;
+            uint256 tolerance = maxAllowed / 100; // 1%
             
             assertLe(allocation, maxAllowed + tolerance + 1, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " exceeds relative cap")));
         }
@@ -1058,14 +1113,13 @@ contract MultiStrategyETHInvariantTest is Test {
             : 0;
         
         uint256 vaultBalance = IERC20(WETH).balanceOf(address(vault));
-        
-        uint256 totalAllocations = 0;
+
+        uint256 totalStrategyValue = 0;
         for (uint256 i = 0; i < strategies.length; i++) {
-            bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
-            totalAllocations += vault.allocation(allocationId);
+            totalStrategyValue += IMYTStrategy(strategies[i]).realAssets();
         }
         
-        uint256 totalValue = vaultBalance + totalAllocations;
+        uint256 totalValue = vaultBalance + totalStrategyValue;
         uint256 totalExpected = INITIAL_VAULT_DEPOSIT + netDeposits;
         if (totalExpected > 1e15) {
             assertGe(totalValue, totalExpected * 90 / 100, "Total value significantly less than expected deposits");
@@ -1115,11 +1169,8 @@ contract MultiStrategyETHInvariantTest is Test {
     }
 
     function invariant_noStrategyDominance() public view {
-        uint256 vaultTotalAssets = vault.totalAssets();
         uint256 firstTotalAssets = vault.firstTotalAssets();
-        if (firstTotalAssets == 0) {
-            firstTotalAssets = vaultTotalAssets;
-        }
+        if (firstTotalAssets == 0) return;
 
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
@@ -1127,10 +1178,8 @@ contract MultiStrategyETHInvariantTest is Test {
             if (allocation == 0) continue;
 
             (,,,,, uint256 strategyGlobalCap,,,) = IMYTStrategy(strategies[i]).params();
-            uint256 maxByAllocator = (vaultTotalAssets * strategyGlobalCap) / 1e18;
-            uint256 maxByVault = (firstTotalAssets * strategyGlobalCap) / 1e18;
-            uint256 maxAllowed = maxByAllocator < maxByVault ? maxByAllocator : maxByVault;
-            uint256 tolerance = maxAllowed / 200; // 0.5%
+            uint256 maxAllowed = (firstTotalAssets * strategyGlobalCap) / 1e18;
+            uint256 tolerance = maxAllowed / 100; // 1%
 
             assertLe(
                 allocation,

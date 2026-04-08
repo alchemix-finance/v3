@@ -109,12 +109,13 @@ contract AlchemistAllocatorTest is Test {
     }
 
     function testSetLiquidityAdapterUnauthorizedAccessRevert() public {
+        bytes memory directData = _directLiquidityData();
         vm.expectRevert(abi.encode("PD"));
-        allocator.setLiquidityAdapter(address(mytStrategy), "");
+        allocator.setLiquidityAdapter(address(mytStrategy), directData);
     }
 
     function testSetLiquidityAdapter() public {
-        bytes memory data = abi.encode("liq-data");
+        bytes memory data = _directLiquidityData();
 
         vm.startPrank(operator);
         allocator.setLiquidityAdapter(address(mytStrategy), data);
@@ -122,6 +123,12 @@ contract AlchemistAllocatorTest is Test {
 
         assertEq(vault.liquidityAdapter(), address(mytStrategy));
         assertEq(keccak256(vault.liquidityData()), keccak256(data));
+    }
+
+    function _directLiquidityData() internal pure returns (bytes memory) {
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        return abi.encode(params);
     }
 
     function testAllocateRevertIfAboveAbsoluteCap() public {
