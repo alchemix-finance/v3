@@ -73,9 +73,6 @@ contract DeployV3ArbScript is Script {
     // Fluid addresses
     address public fluidVaultUSDC_ARB = 0x1A996cb54bb95462040408C06122D45D6Cdb6096; // Fluid USDC vault on Arbitrum
 
-    // Beefy gUSDC addresses
-    address public beefyGUSDC_ARB = 0xd3443ee1e91aF28e5FB858Fbd0D72A63bA8046E0; // gUSDC on Arbitrum
-
     // Strategy parameters
     IMYTStrategy.StrategyParams public aaveWETHParams = IMYTStrategy.StrategyParams({
         owner: newOwner,
@@ -133,18 +130,6 @@ contract DeployV3ArbScript is Script {
         cap: 1000 * 1e6,
         globalCap: 0.3e18, // 30% relative cap
         estimatedYield: 525, // 5.25% annual yield
-        additionalIncentives: false,
-        slippageBPS: 50
-    });
-
-    IMYTStrategy.StrategyParams public beefyGUSDCParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
-        name: "Beefy gUSDC Arbitrum",
-        protocol: "Beefy",
-        riskClass: IMYTStrategy.RiskClass.MEDIUM,
-        cap: 1000 * 1e6,
-        globalCap: 0.3e18, // 30% relative cap
-        estimatedYield: 575, // 5.75% annual yield
         additionalIncentives: false,
         slippageBPS: 50
     });
@@ -249,38 +234,17 @@ contract DeployV3ArbScript is Script {
         return strategy;
     }
 
-    function deployBeefyGUSDCStrategy(address myt) internal returns (ERC4626Strategy) {
-        ERC4626Strategy strategy = new ERC4626Strategy(
-            myt,
-            beefyGUSDCParams,
-            beefyGUSDC_ARB
-        );
-        
-        curator.submitSetStrategy(address(strategy), address(myt));
-        curator.setStrategy(address(strategy), address(myt));
-        bytes memory idData = strategy.getIdData();
-        curator.submitIncreaseAbsoluteCap(address(strategy), beefyGUSDCParams.cap);
-        curator.increaseAbsoluteCap(address(strategy), beefyGUSDCParams.cap);
-        curator.submitIncreaseRelativeCap(address(strategy), beefyGUSDCParams.globalCap);
-        curator.increaseRelativeCap(address(strategy), beefyGUSDCParams.globalCap);
-
-        return strategy;
-    }
-
     function deployUSDCStrategies(address myt) public {
         AaveStrategy aaveUSDCStrategy = deployAaveUSDCStrategy(myt);
         ERC4626Strategy eulerUSDCStrategy = deployEulerUSDCStrategy(myt);
         ERC4626Strategy fluidUSDCStrategy = deployFluidUSDCStrategy(myt);
-        ERC4626Strategy beefyGUSDCStrategy = deployBeefyGUSDCStrategy(myt);
         usdcStrategies.push(address(aaveUSDCStrategy));
         usdcStrategies.push(address(eulerUSDCStrategy));
         usdcStrategies.push(address(fluidUSDCStrategy));
-        usdcStrategies.push(address(beefyGUSDCStrategy));
 
         console.log("Aave V3 USDC Strategy deployed at:", address(aaveUSDCStrategy));
         console.log("Euler USDC Strategy deployed at:", address(eulerUSDCStrategy));
         console.log("Fluid USDC Strategy deployed at:", address(fluidUSDCStrategy));
-        console.log("Beefy gUSDC Strategy deployed at:", address(beefyGUSDCStrategy));
     }
 
     function deployETHStrategies(address myt) public {

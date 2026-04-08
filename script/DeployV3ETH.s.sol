@@ -17,6 +17,7 @@ import {VaultV2, IVaultV2} from "../lib/vault-v2/src/VaultV2.sol";
 
 import {ERC4626Strategy} from "../src/strategies/ERC4626Strategy.sol";
 import {TokeAutoStrategy} from "../src/strategies/TokeAutoStrategy.sol";
+import {WstethStrategy} from "../src/strategies/WStethStrategy.sol";
 import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
 import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
 import {AlchemistTokenVault} from "../src/AlchemistTokenVault.sol";
@@ -69,6 +70,8 @@ contract DeployV3ETHScript is Script {
     address public tokeRewardsToken = 0x2e9d63788249371f1DFC918a52f8d799F4a38C94; // TOKE token on Mainnet
     address public tokeAutoUsd = 0xa7569A44f348d3D70d8ad5889e50F78E33d80D35;
     address public tokeAutoUsdRewarder = 0x726104CfBd7ece2d1f5b3654a19109A9e2b6c27B;
+    address public wstETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+    address public wstEthEthOracle = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
 
     // Strategy parameters
     IMYTStrategy.StrategyParams public eulerUSDCParams = IMYTStrategy.StrategyParams({
@@ -115,6 +118,18 @@ contract DeployV3ETHScript is Script {
         cap: 1000000 * 1e18,
         globalCap: 0.3e18, // 30% relative cap
         estimatedYield: 750, // 7.5% annual yield
+        additionalIncentives: false,
+        slippageBPS: 50
+    });
+
+    IMYTStrategy.StrategyParams public wstEthParams = IMYTStrategy.StrategyParams({
+        owner: newOwner,
+        name: "WstETH Mainnet",
+        protocol: "WstETH",
+        riskClass: IMYTStrategy.RiskClass.LOW,
+        cap: 0.7 * 1e18,
+        globalCap: 1e18,
+        estimatedYield: 350, // 3.5% annual yield
         additionalIncentives: false,
         slippageBPS: 50
     });
@@ -209,14 +224,38 @@ contract DeployV3ETHScript is Script {
         console.log("TokeAutoUSD Mainnet Strategy deployed at:", address(tokeAutoUSDStrategy));
     }
 
+    function deployWstEthStrategy(address myt) internal returns (WstethStrategy) {
+        WstethStrategy strategy = new WstethStrategy(
+            myt,
+            wstEthParams,
+            wstETH,
+            wstEthEthOracle,
+            true,
+            7000
+        );
+        
+        curator.submitSetStrategy(address(strategy), address(myt));
+        curator.setStrategy(address(strategy), address(myt));
+        bytes memory idData = strategy.getIdData();
+        curator.submitIncreaseAbsoluteCap(address(strategy), wstEthParams.cap);
+        curator.increaseAbsoluteCap(address(strategy), wstEthParams.cap);
+        curator.submitIncreaseRelativeCap(address(strategy), wstEthParams.globalCap);
+        curator.increaseRelativeCap(address(strategy), wstEthParams.globalCap);
+
+        return strategy;
+    }
+
     function deployETHStrategies(address myt) public {
         ERC4626Strategy eulerWETHStrategy = deployEulerWETHStrategy(myt);
         TokeAutoStrategy tokeAutoEthStrategy = deployTokeAutoEthStrategy(myt);
+        WstethStrategy wstEthStrategy = deployWstEthStrategy(myt);
         ethStrategies.push(address(eulerWETHStrategy));
         ethStrategies.push(address(tokeAutoEthStrategy));
+        ethStrategies.push(address(wstEthStrategy));
 
         console.log("Euler Mainnet WETH Strategy deployed at:", address(eulerWETHStrategy));
         console.log("TokeAutoEth Mainnet Strategy deployed at:", address(tokeAutoEthStrategy));
+        console.log("WstETH Mainnet Strategy deployed at:", address(wstEthStrategy));
     }
 
     function deployAlAsset(string memory name, string memory ticker) public returns (address) {

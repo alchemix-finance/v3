@@ -16,6 +16,7 @@ import {VaultV2Factory} from "../lib/vault-v2/src/VaultV2Factory.sol";
 import {VaultV2, IVaultV2} from "../lib/vault-v2/src/VaultV2.sol";
 
 import {AaveStrategy} from "../src/strategies/AaveStrategy.sol";
+import {WstethStrategy} from "../src/strategies/WStethStrategy.sol";
 import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
 import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
 import {AlchemistTokenVault} from "../src/AlchemistTokenVault.sol";
@@ -71,6 +72,10 @@ contract DeployV3OptimismScript is Script {
     address public aaveRewardsController_OP = 0x929EC64c34a17401F460460D4B9390518E5B473e; // Aave RewardsController on Optimism
     address public aaveRewardToken_OP = 0x4200000000000000000000000000000000000042; // OP token on Optimism
 
+    // wstETH
+    address public wstETH = 0x1F32b1c2345538c0c6f582fCB022739c4A194Ebb;
+    address public wstEthEthOracle = 0x524299Ab0987a7c4B3c8022a35669DdcdC715a10;
+
     // Strategy parameters
     IMYTStrategy.StrategyParams public aaveUSDCParams = IMYTStrategy.StrategyParams({
         owner: newOwner,
@@ -80,6 +85,18 @@ contract DeployV3OptimismScript is Script {
         cap: 1000000 * 1e18,
         globalCap: 1e18,
         estimatedYield: 500, // 5% annual yield
+        additionalIncentives: false,
+        slippageBPS: 50
+    });
+
+    IMYTStrategy.StrategyParams public wstEthParams = IMYTStrategy.StrategyParams({
+        owner: newOwner,
+        name: "WstETH Optimism",
+        protocol: "WstETH",
+        riskClass: IMYTStrategy.RiskClass.LOW,
+        cap: 0.7 * 1e18,
+        globalCap: 1e18,
+        estimatedYield: 350,
         additionalIncentives: false,
         slippageBPS: 50
     });
@@ -108,6 +125,27 @@ contract DeployV3OptimismScript is Script {
         return aaveUSDCStrategy;
     }
 
+    function deployWstEthStrategy(address myt) internal returns (WstethStrategy) {
+        WstethStrategy strategy = new WstethStrategy(
+            myt,
+            wstEthParams,
+            wstETH,
+            wstEthEthOracle,
+            false,
+            7000
+        );
+        
+        curator.submitSetStrategy(address(strategy), address(myt));
+        curator.setStrategy(address(strategy), address(myt));
+        bytes memory idData = strategy.getIdData();
+        curator.submitIncreaseAbsoluteCap(address(strategy), wstEthParams.cap);
+        curator.increaseAbsoluteCap(address(strategy), wstEthParams.cap);
+        curator.submitIncreaseRelativeCap(address(strategy), wstEthParams.globalCap);
+        curator.increaseRelativeCap(address(strategy), wstEthParams.globalCap);
+
+        return strategy;
+    }
+
     function deployUSDCStrategies(address myt) public {
         AaveStrategy aaveUSDCStrategy = deployAaveV3OPUSDCStrategy(myt);
         usdcStrategies.push(address(aaveUSDCStrategy));
@@ -116,6 +154,10 @@ contract DeployV3OptimismScript is Script {
     }
 
     function deployETHStrategies(address myt) public {
+        WstethStrategy wstEthStrategy = deployWstEthStrategy(myt);
+        ethStrategies.push(address(wstEthStrategy));
+
+        console.log("WstETH Optimism Strategy deployed at:", address(wstEthStrategy));
     }
 
     function deployAlAsset(string memory name, string memory ticker) public returns (address) {
