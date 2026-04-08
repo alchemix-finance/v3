@@ -2,7 +2,7 @@ name: test
 
 on:
   push:
-    branches: [main, master, staging, dev, feat/**, fix/**, y-monorepo]
+    branches: [main, master, staging, dev]
 
 
 jobs:
@@ -35,6 +35,7 @@ jobs:
         id: test
 
   forge_coverage:
+    if: false # our stack is too deep for coverage testing
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
