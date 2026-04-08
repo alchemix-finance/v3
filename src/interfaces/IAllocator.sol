@@ -13,6 +13,8 @@ interface IAllocator {
     function deallocateWithSwap(address adapter, uint256 amount, bytes memory txData) external;
     /// @notice Deallocate with unwrap + swap (uses ActionType.unwrapAndSwap)
     function deallocateWithUnwrapAndSwap(address adapter, uint256 amount, bytes memory txData, uint256 minIntermediateOut) external;
+    /// @notice Set the vault liquidity adapter used on deposit/withdraw paths
+    function setLiquidityAdapter(address adapter, bytes memory data) external;
     /// @notice Thrown when the effectice cap is exceeded during allocation
     error EffectiveCap(uint256 amount, uint256 limit);
 }

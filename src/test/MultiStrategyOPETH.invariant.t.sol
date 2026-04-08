@@ -350,12 +350,10 @@ contract MultiStrategyOPETHHandler is Test {
         }
 
         uint256 protocolMaxWithdraw = _getUnderlyingMaxWithdraw(strategy);
-        if (protocolMaxWithdraw < MIN_ALLOCATE) {
-            _markNoop(selector);
-            return;
+        uint256 maxDeallocate = currentAllocation;
+        if (protocolMaxWithdraw >= MIN_ALLOCATE && protocolMaxWithdraw < maxDeallocate) {
+            maxDeallocate = protocolMaxWithdraw;
         }
-
-        uint256 maxDeallocate = currentAllocation < protocolMaxWithdraw ? currentAllocation : protocolMaxWithdraw;
         if (maxDeallocate < MIN_ALLOCATE) {
             _markNoop(selector);
             return;
@@ -410,12 +408,10 @@ contract MultiStrategyOPETHHandler is Test {
         }
 
         uint256 protocolMaxWithdraw = _getUnderlyingMaxWithdraw(strategy);
-        if (protocolMaxWithdraw < MIN_ALLOCATE) {
-            _markNoop(selector);
-            return;
+        uint256 maxDeallocate = allocationBefore;
+        if (protocolMaxWithdraw >= MIN_ALLOCATE && protocolMaxWithdraw < maxDeallocate) {
+            maxDeallocate = protocolMaxWithdraw;
         }
-
-        uint256 maxDeallocate = allocationBefore < protocolMaxWithdraw ? allocationBefore : protocolMaxWithdraw;
         if (maxDeallocate < MIN_ALLOCATE) {
             _markNoop(selector);
             return;
@@ -475,7 +471,7 @@ contract MultiStrategyOPETHHandler is Test {
         _markAttempt(selector);
         address allocatorCaller = _pickAllocatorCaller(modeSeed);
         vm.prank(allocatorCaller);
-        try vault.setLiquidityAdapterAndData(newLiquidityAdapter, "") {
+        try IAllocator(allocator).setLiquidityAdapter(newLiquidityAdapter, "") {
             _markSuccess(selector);
         } catch {
             _markRevert(selector);
@@ -777,10 +773,6 @@ contract MultiStrategyOPETHInvariantTest is Test {
         
         curator.submitSetAllocator(address(vault), allocator, true);
         vault.setIsAllocator(allocator, true);
-        curator.submitSetAllocator(address(vault), admin, true);
-        vault.setIsAllocator(admin, true);
-        curator.submitSetAllocator(address(vault), operator, true);
-        vault.setIsAllocator(operator, true);
         
         for (uint256 i = 0; i < strategies.length; i++) {
             curator.submitSetStrategy(strategies[i], address(vault));

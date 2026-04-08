@@ -114,6 +114,12 @@ contract AlchemistAllocator is PermissionedProxy, IAllocator {
         vault.deallocate(adapter, data, amount);
     }
 
+    /// @notice Set the vault liquidity adapter and calldata used by deposit/withdraw flows.
+    function setLiquidityAdapter(address adapter, bytes memory data) external {
+        require(msg.sender == admin || operators[msg.sender], "PD");
+        vault.setLiquidityAdapterAndData(adapter, data);
+    }
+
     /**
     * @notice Validate the caps for the given adapter and amount
     * @param adapter The strategy adapter address

@@ -108,6 +108,22 @@ contract AlchemistAllocatorTest is Test {
         allocator.deallocate(address(0x4444444444444444444444444444444444444444), 0);
     }
 
+    function testSetLiquidityAdapterUnauthorizedAccessRevert() public {
+        vm.expectRevert(abi.encode("PD"));
+        allocator.setLiquidityAdapter(address(mytStrategy), "");
+    }
+
+    function testSetLiquidityAdapter() public {
+        bytes memory data = abi.encode("liq-data");
+
+        vm.startPrank(operator);
+        allocator.setLiquidityAdapter(address(mytStrategy), data);
+        vm.stopPrank();
+
+        assertEq(vault.liquidityAdapter(), address(mytStrategy));
+        assertEq(keccak256(vault.liquidityData()), keccak256(data));
+    }
+
     function testAllocateRevertIfAboveAbsoluteCap() public {
         _magicDepositToVault(address(vault), user1, 1000 ether);
         
