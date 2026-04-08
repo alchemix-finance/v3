@@ -27,4 +27,7 @@ interface IAlchemistCurator {
     event StrategyRemoved(address indexed strategy, address indexed myt);
     event SubmitSetStrategy(address indexed strategy, address indexed myt);
     event SubmitRemoveStrategy(address indexed strategy, address indexed myt);
+
+    function submitSetForceDeallocatePenalty(address adapter, address myt, uint256 penalty) external;
+    event SubmitSetForceDeallocatePenalty(address indexed adapter, address indexed myt, uint256 penalty);
 }

@@ -17,6 +17,9 @@ import {VaultV2, IVaultV2} from "../lib/vault-v2/src/VaultV2.sol";
 
 import {ERC4626Strategy} from "../src/strategies/ERC4626Strategy.sol";
 import {TokeAutoStrategy} from "../src/strategies/TokeAutoStrategy.sol";
+import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
+import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
+import {AlchemistTokenVault} from "../src/AlchemistTokenVault.sol";
 
 // AlAsset
 import {CrossChainCanonicalAlchemicTokenV3} from "../src/AlTokenV3.sol";
@@ -55,11 +58,12 @@ contract DeployV3ETHScript is Script {
     AlchemistAllocator public usdcAllocator;
     AlchemistAllocator public ethAllocator;
 
+    address[] public usdcStrategies;
+    address[] public ethStrategies;
+
     // Strategy-specific addresses
     address public eulerVaultUSDC = 0xe0a80d35bB6618CBA260120b279d357978c42BCE;
     address public eulerVaultWETH = 0xD8b27CF359b7D15710a5BE299AF6e7Bf904984C2;
-    address public peapodsEthVault = 0x9a42e1bEA03154c758BeC4866ec5AD214D4F2191;
-    address public peapodsUsdcVault = 0x3717e340140D30F3A077Dd21fAc39A86ACe873AA;
     address public tokeAutoEth = 0x0A2b94F6871c1D7A32Fe58E1ab5e6deA2f114E56;
     address public tokeAutoRewarder = 0x60882D6f70857606Cdd37729ccCe882015d1755E;
     address public tokeRewardsToken = 0x2e9d63788249371f1DFC918a52f8d799F4a38C94; // TOKE token on Mainnet
@@ -73,7 +77,7 @@ contract DeployV3ETHScript is Script {
         protocol: "Euler",
         riskClass: IMYTStrategy.RiskClass.LOW,
         cap: 1000000 * 1e18,
-        globalCap: 0.5e18, // 50% relative cap
+        globalCap: 1e18,
         estimatedYield: 500, // 5% annual yield
         additionalIncentives: false,
         slippageBPS: 50
@@ -85,32 +89,8 @@ contract DeployV3ETHScript is Script {
         protocol: "Euler",
         riskClass: IMYTStrategy.RiskClass.LOW,
         cap: 0.7 * 1e18,
-        globalCap: 0.3e18, // 30% relative cap
+        globalCap: 1e18,
         estimatedYield: 600, // 6% annual yield
-        additionalIncentives: false,
-        slippageBPS: 50
-    });
-
-    IMYTStrategy.StrategyParams public peapodsETHParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
-        name: "Peapods Mainnet ETH",
-        protocol: "Peapods",
-        riskClass: IMYTStrategy.RiskClass.HIGH,
-        cap: 0.7 * 1e18,
-        globalCap: 0.2e18, // 20% relative cap
-        estimatedYield: 700, // 7% annual yield
-        additionalIncentives: false,
-        slippageBPS: 50
-    });
-
-    IMYTStrategy.StrategyParams public peapodsUSDCParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
-        name: "Peapods Mainnet USDC",
-        protocol: "Peapods",
-        riskClass: IMYTStrategy.RiskClass.HIGH,
-        cap: 0.7 * 1e18,
-        globalCap: 0.2e18, // 20% relative cap
-        estimatedYield: 550, // 5.5% annual yield
         additionalIncentives: false,
         slippageBPS: 50
     });
@@ -177,42 +157,6 @@ contract DeployV3ETHScript is Script {
         return strategy;
     }
 
-    function deployPeapodsETHStrategy(address myt) internal returns (ERC4626Strategy) {
-        ERC4626Strategy strategy = new ERC4626Strategy(
-            myt,
-            peapodsETHParams,
-            peapodsEthVault
-        );
-        
-        curator.submitSetStrategy(address(strategy), address(myt));
-        curator.setStrategy(address(strategy), address(myt));
-        bytes memory idData = strategy.getIdData();
-        curator.submitIncreaseAbsoluteCap(address(strategy), peapodsETHParams.cap);
-        curator.increaseAbsoluteCap(address(strategy), peapodsETHParams.cap);
-        curator.submitIncreaseRelativeCap(address(strategy), peapodsETHParams.globalCap);
-        curator.increaseRelativeCap(address(strategy), peapodsETHParams.globalCap);
-
-        return strategy;
-    }
-
-    function deployPeapodsUSDCStrategy(address myt) internal returns (ERC4626Strategy) {
-        ERC4626Strategy strategy = new ERC4626Strategy(
-            myt,
-            peapodsUSDCParams,
-            peapodsUsdcVault
-        );
-        
-        curator.submitSetStrategy(address(strategy), address(myt));
-        curator.setStrategy(address(strategy), address(myt));
-        bytes memory idData = strategy.getIdData();
-        curator.submitIncreaseAbsoluteCap(address(strategy), peapodsUSDCParams.cap);
-        curator.increaseAbsoluteCap(address(strategy), peapodsUSDCParams.cap);
-        curator.submitIncreaseRelativeCap(address(strategy), peapodsUSDCParams.globalCap);
-        curator.increaseRelativeCap(address(strategy), peapodsUSDCParams.globalCap);
-
-        return strategy;
-    }
-
     function deployTokeAutoEthStrategy(address myt) internal returns (TokeAutoStrategy) {
         TokeAutoStrategy strategy = new TokeAutoStrategy(
             myt,
@@ -257,21 +201,21 @@ contract DeployV3ETHScript is Script {
 
     function deployUSDCStrategies(address myt) public {
         ERC4626Strategy eulerUSDCStrategy = deployEulerUSDCStrategy(myt);
-        ERC4626Strategy peapodsUSDCStrategy = deployPeapodsUSDCStrategy(myt);
         TokeAutoStrategy tokeAutoUSDStrategy = deployTokeAutoUSDStrategy(myt);
+        usdcStrategies.push(address(eulerUSDCStrategy));
+        usdcStrategies.push(address(tokeAutoUSDStrategy));
 
         console.log("Euler Mainnet USDC Strategy deployed at:", address(eulerUSDCStrategy));
-        console.log("Peapods Mainnet USDC Strategy deployed at:", address(peapodsUSDCStrategy));
         console.log("TokeAutoUSD Mainnet Strategy deployed at:", address(tokeAutoUSDStrategy));
     }
 
     function deployETHStrategies(address myt) public {
         ERC4626Strategy eulerWETHStrategy = deployEulerWETHStrategy(myt);
-        ERC4626Strategy peapodsETHStrategy = deployPeapodsETHStrategy(myt);
         TokeAutoStrategy tokeAutoEthStrategy = deployTokeAutoEthStrategy(myt);
+        ethStrategies.push(address(eulerWETHStrategy));
+        ethStrategies.push(address(tokeAutoEthStrategy));
 
         console.log("Euler Mainnet WETH Strategy deployed at:", address(eulerWETHStrategy));
-        console.log("Peapods Mainnet ETH Strategy deployed at:", address(peapodsETHStrategy));
         console.log("TokeAutoEth Mainnet Strategy deployed at:", address(tokeAutoEthStrategy));
     }
 
@@ -294,14 +238,14 @@ contract DeployV3ETHScript is Script {
         ITransmuter.TransmuterInitializationParams memory transmuterParams = ITransmuter.TransmuterInitializationParams({
             syntheticToken: alAsset,
             feeReceiver: protocolFeeReceiver,
-            timeToTransmute: 3 days,
+            timeToTransmute: 604_800,
             transmutationFee: 0,
             exitFee: 100,
             graphSize: 365 days
         });
 
         Transmuter deployedTransmuter = new Transmuter(transmuterParams);
-        deployedTransmuter.setDepositCap(500); // FIXME migratedDebt * 0.25
+        deployedTransmuter.setDepositCap(0);
 
         require(deployedTransmuter.transmutationFee() == 0);
         require(deployedTransmuter.exitFee() == 100);
@@ -338,6 +282,15 @@ contract DeployV3ETHScript is Script {
         require(deployedAlchemist.protocolFee() == 25);
         require(deployedAlchemist.liquidatorFee() == 300);
         require(deployedAlchemist.repaymentFee() == 0);
+
+        AlchemistV3Position alchemistNFT = new AlchemistV3Position(address(deployedAlchemist), newOwner);
+        alchemistNFT.setMetadataRenderer(address(new AlchemistV3PositionRenderer()));
+        deployedAlchemist.setAlchemistPositionNFT(address(alchemistNFT));
+
+        AlchemistTokenVault alchemistFeeVault = new AlchemistTokenVault(underlying, address(deployedAlchemist), newOwner);
+        alchemistFeeVault.setAuthorization(address(deployedAlchemist), true);
+        deployedAlchemist.setAlchemistFeeVault(address(alchemistFeeVault));
+
         return deployedAlchemist;
     }
 
@@ -375,8 +328,8 @@ contract DeployV3ETHScript is Script {
         ethTransmuter = deployTransmuter(alETH);
 
         // Deploy Alchemists
-        usdcAlchemist = deployAlchemist(alUSD, USDC, address(usdcVault), address(usdcTransmuter), 1000 * 1e6); // FIXME
-        ethAlchemist = deployAlchemist(alETH, wethETH, address(ethVault), address(ethTransmuter), 3 * 1e17); // FIXME
+        usdcAlchemist = deployAlchemist(alUSD, USDC, address(usdcVault), address(usdcTransmuter), 0);
+        ethAlchemist = deployAlchemist(alETH, wethETH, address(ethVault), address(ethTransmuter), 0);
 
         // Deploy and link strategies
         deployUSDCStrategies(address(usdcVault));
@@ -390,6 +343,25 @@ contract DeployV3ETHScript is Script {
         curator.submitSetAllocator(address(ethVault), address(ethAllocator), true);
         ethVault.setIsAllocator(address(ethAllocator), true);
         ethVault.setOwner(newOwner);
+
+        // set max rate
+        usdcAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
+        ethAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
+
+
+        // set force deallocate penalty
+        usdcAllocator.setPermissionedCall(IVaultV2.setForceDeallocatePenalty.selector, true);
+        ethAllocator.setPermissionedCall(IVaultV2.setForceDeallocatePenalty.selector, true);
+        for (uint256 i = 0; i < usdcStrategies.length; i++) {
+            address adapter = usdcStrategies[i];
+            curator.submitSetForceDeallocatePenalty(adapter, address(usdcVault), 2e16);
+            usdcAllocator.proxy(address(usdcVault), abi.encodeCall(IVaultV2.setForceDeallocatePenalty, (adapter, 2e16)));
+        }
+        for (uint256 i = 0; i < ethStrategies.length; i++) {
+            address adapter = ethStrategies[i];
+            curator.submitSetForceDeallocatePenalty(adapter, address(ethVault), 2e16);
+            ethAllocator.proxy(address(ethVault), abi.encodeCall(IVaultV2.setForceDeallocatePenalty, (adapter, 2e16)));
+        }
 
         // Transfer curator ownership
         curator.transferAdminOwnerShip(newOwner);
@@ -429,6 +401,14 @@ contract DeployV3ETHScript is Script {
         require(curator.pendingAdmin() == newOwner);
         require(usdcAllocator.pendingAdmin() == newOwner);
         require(ethAllocator.pendingAdmin() == newOwner);
+        require(usdcVault.maxRate() == 3170979198);
+        require(ethVault.maxRate() == 3170979198);
+        for (uint256 i = 0; i < usdcStrategies.length; i++) {
+            require(usdcVault.forceDeallocatePenalty(usdcStrategies[i]) == 2e16);
+        }
+        for (uint256 i = 0; i < ethStrategies.length; i++) {
+            require(ethVault.forceDeallocatePenalty(ethStrategies[i]) == 2e16);
+        }
         //require(ethAllocator.admin() == newOwner);
         //require(usdcAllocator.admin() == newOwner);
         //require(IERC20(alUSD).balanceOf(newOwner) == 1e27);

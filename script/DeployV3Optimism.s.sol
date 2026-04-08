@@ -16,7 +16,9 @@ import {VaultV2Factory} from "../lib/vault-v2/src/VaultV2Factory.sol";
 import {VaultV2, IVaultV2} from "../lib/vault-v2/src/VaultV2.sol";
 
 import {AaveStrategy} from "../src/strategies/AaveStrategy.sol";
-import {MoonwellStrategy} from "../src/strategies/MoonwellStrategy.sol";
+import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
+import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
+import {AlchemistTokenVault} from "../src/AlchemistTokenVault.sol";
 
 // AlAsset
 //import {CrossChainCanonicalAlchemicTokenV2} from "../lib/v2-foundry/src/CrossChainCanonicalAlchemicTokenV2.sol";
@@ -60,17 +62,14 @@ contract DeployV3OptimismScript is Script {
     AlchemistAllocator public usdcAllocator;
     AlchemistAllocator public ethAllocator;
 
+    address[] public usdcStrategies;
+    address[] public ethStrategies;
+
     // Strategy-specific addresses
     // Aave V3
     address public aavePoolProvider = 0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb; // FIXME: verify PoolAddressProvider on Optimism
     address public aaveRewardsController_OP = 0x929EC64c34a17401F460460D4B9390518E5B473e; // Aave RewardsController on Optimism
     address public aaveRewardToken_OP = 0x4200000000000000000000000000000000000042; // OP token on Optimism
-
-    // Moonwell
-    address public moonwellMUSDC = 0x8E08617b0d66359D73Aa11E11017834C29155525;
-    address public moonwellMWETH = 0xb4104C02BBf4E9be85AAa41a62974E4e28D59A33;
-    address public moonwellComptroller = 0xCa889f40aae37FFf165BccF69aeF1E82b5C511B9; // Moonwell Comptroller on Optimism
-    address public moonwellRewardToken = 0xA88594D404727625A9437C3f886C7643872296AE; // WELL token on Optimism
 
     // Strategy parameters
     IMYTStrategy.StrategyParams public aaveUSDCParams = IMYTStrategy.StrategyParams({
@@ -79,32 +78,8 @@ contract DeployV3OptimismScript is Script {
         protocol: "AaveV3",
         riskClass: IMYTStrategy.RiskClass.LOW,
         cap: 1000000 * 1e18,
-        globalCap: 0.5e18, // 50% relative cap
+        globalCap: 1e18,
         estimatedYield: 500, // 5% annual yield
-        additionalIncentives: false,
-        slippageBPS: 50
-    });
-
-    IMYTStrategy.StrategyParams public moonwellUSDCParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
-        name: "Moonwell OP USDC",
-        protocol: "Moonwell",
-        riskClass: IMYTStrategy.RiskClass.LOW,
-        cap: 1000000 * 1e18,
-        globalCap: 0.5e18, // 50% relative cap
-        estimatedYield: 450, // 4.5% annual yield
-        additionalIncentives: false,
-        slippageBPS: 50
-    });
-
-    IMYTStrategy.StrategyParams public moonwellWETHParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
-        name: "Moonwell OP WETH",
-        protocol: "Moonwell",
-        riskClass: IMYTStrategy.RiskClass.LOW,
-        cap: 1000000 * 1e18,
-        globalCap: 0.5e18, // 50% relative cap
-        estimatedYield: 600, // 6% annual yield
         additionalIncentives: false,
         slippageBPS: 50
     });
@@ -133,64 +108,14 @@ contract DeployV3OptimismScript is Script {
         return aaveUSDCStrategy;
     }
 
-    function deployMoonwellUSDCStrategy(address myt) internal returns (MoonwellStrategy) {
-        MoonwellStrategy moonwellUSDCStrategy = new MoonwellStrategy(
-            myt,
-            moonwellUSDCParams,
-            USDC,
-            moonwellMUSDC,
-            moonwellComptroller,
-            moonwellRewardToken,
-            false
-        );
-    
-        curator.submitSetStrategy(address(moonwellUSDCStrategy), address(myt));
-        curator.setStrategy(address(moonwellUSDCStrategy), address(myt));
-        
-        bytes memory idData = moonwellUSDCStrategy.getIdData();
-        curator.submitIncreaseAbsoluteCap(address(moonwellUSDCStrategy), moonwellUSDCParams.cap);
-        curator.increaseAbsoluteCap(address(moonwellUSDCStrategy), moonwellUSDCParams.cap);
-        curator.submitIncreaseRelativeCap(address(moonwellUSDCStrategy), moonwellUSDCParams.globalCap);
-        curator.increaseRelativeCap(address(moonwellUSDCStrategy), moonwellUSDCParams.globalCap);
-
-        return moonwellUSDCStrategy;
-    }
-
-    function deployMoonwellWETHStrategy(address myt) internal returns (MoonwellStrategy) {
-        MoonwellStrategy moonwellWETHStrategy = new MoonwellStrategy(
-            myt,
-            moonwellWETHParams,
-            wethOP,
-            moonwellMWETH,
-            moonwellComptroller,
-            moonwellRewardToken,
-            true
-        );
-    
-        curator.submitSetStrategy(address(moonwellWETHStrategy), address(myt));
-        curator.setStrategy(address(moonwellWETHStrategy), address(myt));
-        
-        bytes memory idData = moonwellWETHStrategy.getIdData();
-        curator.submitIncreaseAbsoluteCap(address(moonwellWETHStrategy), moonwellWETHParams.cap);
-        curator.increaseAbsoluteCap(address(moonwellWETHStrategy), moonwellWETHParams.cap);
-        curator.submitIncreaseRelativeCap(address(moonwellWETHStrategy), moonwellWETHParams.globalCap);
-        curator.increaseRelativeCap(address(moonwellWETHStrategy), moonwellWETHParams.globalCap);
-
-        return moonwellWETHStrategy;
-    }
-
     function deployUSDCStrategies(address myt) public {
         AaveStrategy aaveUSDCStrategy = deployAaveV3OPUSDCStrategy(myt);
-        MoonwellStrategy moonwellUSDCStrategy = deployMoonwellUSDCStrategy(myt);
+        usdcStrategies.push(address(aaveUSDCStrategy));
 
         console.log("AaveV3 OP USDC Strategy deployed at:", address(aaveUSDCStrategy));
-        console.log("Moonwell OP USDC Strategy deployed at:", address(moonwellUSDCStrategy));
     }
 
     function deployETHStrategies(address myt) public {
-        MoonwellStrategy moonwellWETHStrategy = deployMoonwellWETHStrategy(myt);
-
-        console.log("Moonwell OP WETH Strategy deployed at:", address(moonwellWETHStrategy));
     }
 
     function deployAlAsset(string memory name, string memory ticker) public returns (address) {
@@ -212,14 +137,14 @@ contract DeployV3OptimismScript is Script {
         ITransmuter.TransmuterInitializationParams memory transmuterParams = ITransmuter.TransmuterInitializationParams({
             syntheticToken: alAsset,
             feeReceiver: protocolFeeReceiver,
-            timeToTransmute: 3 days, // TODO
+            timeToTransmute: 3_628_800, // TODO
             transmutationFee: 0,
             exitFee: 100,
             graphSize: 365 days
         });
 
         Transmuter deployedTransmuter = new Transmuter(transmuterParams);
-        deployedTransmuter.setDepositCap(500); // FIXME migratedDebt * 0.25
+        deployedTransmuter.setDepositCap(0);
 
         require(deployedTransmuter.transmutationFee() == 0);
         require(deployedTransmuter.exitFee() == 100);
@@ -256,6 +181,15 @@ contract DeployV3OptimismScript is Script {
         require(deployedAlchemist.protocolFee() == 25);
         require(deployedAlchemist.liquidatorFee() == 300);
         require(deployedAlchemist.repaymentFee() == 0);
+
+        AlchemistV3Position alchemistNFT = new AlchemistV3Position(address(deployedAlchemist), newOwner);
+        alchemistNFT.setMetadataRenderer(address(new AlchemistV3PositionRenderer()));
+        deployedAlchemist.setAlchemistPositionNFT(address(alchemistNFT));
+
+        AlchemistTokenVault alchemistFeeVault = new AlchemistTokenVault(underlying, address(deployedAlchemist), newOwner);
+        alchemistFeeVault.setAuthorization(address(deployedAlchemist), true);
+        deployedAlchemist.setAlchemistFeeVault(address(alchemistFeeVault));
+
         return deployedAlchemist;
     }
 
@@ -291,8 +225,8 @@ contract DeployV3OptimismScript is Script {
         usdcTransmuter = deployTransmuter(alUSD);
         ethTransmuter = deployTransmuter(alETH);
 
-        usdcAlchemist = deployAlchemist(alUSD, USDC, address(usdcVault), address(usdcTransmuter), 1000 * 1e6); // FIXME
-        ethAlchemist = deployAlchemist(alETH, wethOP, address(ethVault), address(ethTransmuter), 3 * 1e17); // 0.3ETH ~ $1000
+        usdcAlchemist = deployAlchemist(alUSD, USDC, address(usdcVault), address(usdcTransmuter), 0);
+        ethAlchemist = deployAlchemist(alETH, wethOP, address(ethVault), address(ethTransmuter), 0);
 
         // Whitelist alchemist proxy for minting tokens
         // TODO we dont have admin access
@@ -304,14 +238,26 @@ contract DeployV3OptimismScript is Script {
 
         // Set allocator on vault
         curator.submitSetAllocator(address(usdcVault), address(usdcAllocator), true);
-        //usdcVault.setIsAllocator(address(usdcAllocator), true);
+        usdcVault.setIsAllocator(address(usdcAllocator), true);
         usdcVault.setOwner(newOwner);
 
         curator.submitSetAllocator(address(ethVault), address(ethAllocator), true);
-        //ethVault.setIsAllocator(address(ethVault), true);
+        ethVault.setIsAllocator(address(ethAllocator), true);
         ethVault.setOwner(newOwner);
 
         // Transfer curator ownership after all strategy operations are complete
+        // set max rate
+        usdcAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
+        ethAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
+
+        // set force deallocate penalty
+        usdcAllocator.setPermissionedCall(IVaultV2.setForceDeallocatePenalty.selector, true);
+        for (uint256 i = 0; i < usdcStrategies.length; i++) {
+            address adapter = usdcStrategies[i];
+            curator.submitSetForceDeallocatePenalty(adapter, address(usdcVault), 2e16);
+            usdcAllocator.proxy(address(usdcVault), abi.encodeCall(IVaultV2.setForceDeallocatePenalty, (adapter, 2e16)));
+        }
+
         curator.transferAdminOwnerShip(newOwner);
 
         usdcAllocator.transferAdminOwnerShip(newOwner);
@@ -349,5 +295,10 @@ contract DeployV3OptimismScript is Script {
         require(curator.pendingAdmin() == newOwner);
         require(usdcAllocator.pendingAdmin() == newOwner);
         require(ethAllocator.pendingAdmin() == newOwner);
+        require(usdcVault.maxRate() == 3170979198);
+        require(ethVault.maxRate() == 3170979198);
+        for (uint256 i = 0; i < usdcStrategies.length; i++) {
+            require(usdcVault.forceDeallocatePenalty(usdcStrategies[i]) == 2e16);
+        }
     }
 }

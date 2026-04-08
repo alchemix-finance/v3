@@ -17,6 +17,9 @@ import {VaultV2, IVaultV2} from "../lib/vault-v2/src/VaultV2.sol";
 
 import {AaveStrategy} from "../src/strategies/AaveStrategy.sol";
 import {ERC4626Strategy} from "../src/strategies/ERC4626Strategy.sol";
+import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
+import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
+import {AlchemistTokenVault} from "../src/AlchemistTokenVault.sol";
 
 // AlAsset
 import {CrossChainCanonicalAlchemicTokenV3} from "../src/AlTokenV3.sol";
@@ -52,6 +55,9 @@ contract DeployV3ArbScript is Script {
     AlchemistAllocator public usdcAllocator;
     AlchemistAllocator public ethAllocator;
 
+    address[] public usdcStrategies;
+    address[] public ethStrategies;
+
     // Strategy-specific addresses
     // Aave V3 addresses
     address public aavePoolARB = 0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb; // Aave V3 PoolAddressProvider on Arbitrum
@@ -77,7 +83,7 @@ contract DeployV3ArbScript is Script {
         protocol: "AaveV3",
         riskClass: IMYTStrategy.RiskClass.LOW,
         cap: 0.7 * 1e18,
-        globalCap: 0.5e18, // 50% relative cap
+        globalCap: 1e18,
         estimatedYield: 500, // 5% annual yield
         additionalIncentives: false,
         slippageBPS: 50
@@ -89,7 +95,7 @@ contract DeployV3ArbScript is Script {
         protocol: "AaveV3",
         riskClass: IMYTStrategy.RiskClass.LOW,
         cap: 1000 * 1e6,
-        globalCap: 0.5e18, // 50% relative cap
+        globalCap: 1e18,
         estimatedYield: 450, // 4.5% annual yield
         additionalIncentives: false,
         slippageBPS: 50
@@ -101,7 +107,7 @@ contract DeployV3ArbScript is Script {
         protocol: "Euler",
         riskClass: IMYTStrategy.RiskClass.LOW,
         cap: 0.7 * 1e18,
-        globalCap: 0.5e18, // 50% relative cap
+        globalCap: 1e18,
         estimatedYield: 600, // 6% annual yield
         additionalIncentives: false,
         slippageBPS: 50
@@ -113,7 +119,7 @@ contract DeployV3ArbScript is Script {
         protocol: "Euler",
         riskClass: IMYTStrategy.RiskClass.LOW,
         cap: 1000 * 1e6,
-        globalCap: 0.5e18, // 50% relative cap
+        globalCap: 1e18,
         estimatedYield: 550, // 5.5% annual yield
         additionalIncentives: false,
         slippageBPS: 50
@@ -266,6 +272,10 @@ contract DeployV3ArbScript is Script {
         ERC4626Strategy eulerUSDCStrategy = deployEulerUSDCStrategy(myt);
         ERC4626Strategy fluidUSDCStrategy = deployFluidUSDCStrategy(myt);
         ERC4626Strategy beefyGUSDCStrategy = deployBeefyGUSDCStrategy(myt);
+        usdcStrategies.push(address(aaveUSDCStrategy));
+        usdcStrategies.push(address(eulerUSDCStrategy));
+        usdcStrategies.push(address(fluidUSDCStrategy));
+        usdcStrategies.push(address(beefyGUSDCStrategy));
 
         console.log("Aave V3 USDC Strategy deployed at:", address(aaveUSDCStrategy));
         console.log("Euler USDC Strategy deployed at:", address(eulerUSDCStrategy));
@@ -276,6 +286,8 @@ contract DeployV3ArbScript is Script {
     function deployETHStrategies(address myt) public {
         AaveStrategy aaveWETHStrategy = deployAaveWETHStrategy(myt);
         ERC4626Strategy eulerWETHStrategy = deployEulerWETHStrategy(myt);
+        ethStrategies.push(address(aaveWETHStrategy));
+        ethStrategies.push(address(eulerWETHStrategy));
 
         console.log("Aave V3 WETH Strategy deployed at:", address(aaveWETHStrategy));
         console.log("Euler WETH Strategy deployed at:", address(eulerWETHStrategy));
@@ -300,14 +312,14 @@ contract DeployV3ArbScript is Script {
         ITransmuter.TransmuterInitializationParams memory transmuterParams = ITransmuter.TransmuterInitializationParams({
             syntheticToken: alAsset,
             feeReceiver: protocolFeeReceiver,
-            timeToTransmute: 3 days,
+            timeToTransmute: 29_030_400,
             transmutationFee: 0,
             exitFee: 100,
             graphSize: 365 days
         });
 
         Transmuter deployedTransmuter = new Transmuter(transmuterParams);
-        deployedTransmuter.setDepositCap(500); // FIXME migratedDebt * 0.25
+        deployedTransmuter.setDepositCap(0);
 
         require(deployedTransmuter.transmutationFee() == 0);
         require(deployedTransmuter.exitFee() == 100);
@@ -344,6 +356,16 @@ contract DeployV3ArbScript is Script {
         require(deployedAlchemist.protocolFee() == 25);
         require(deployedAlchemist.liquidatorFee() == 300);
         require(deployedAlchemist.repaymentFee() == 0);
+
+        AlchemistV3Position alchemistNFT = new AlchemistV3Position(address(deployedAlchemist), newOwner);
+        alchemistNFT.setMetadataRenderer(address(new AlchemistV3PositionRenderer()));
+        deployedAlchemist.setAlchemistPositionNFT(address(alchemistNFT));
+
+        AlchemistTokenVault alchemistFeeVault = new AlchemistTokenVault(underlying, address(deployedAlchemist), newOwner);
+        alchemistFeeVault.setAuthorization(address(deployedAlchemist), true);
+        deployedAlchemist.setAlchemistFeeVault(address(alchemistFeeVault));
+
+        return deployedAlchemist;
     }
 
     function run() public {
@@ -381,8 +403,8 @@ contract DeployV3ArbScript is Script {
         ethTransmuter = deployTransmuter(alETH);
 
         // Deploy Alchemists
-        usdcAlchemist = deployAlchemist(alUSD, usdcARB, address(usdcVault), address(usdcTransmuter), 1000 * 1e6); // FIXME
-        ethAlchemist = deployAlchemist(alETH, wethARB, address(ethVault), address(ethTransmuter), 3 * 1e17); // FIXME
+        usdcAlchemist = deployAlchemist(alUSD, usdcARB, address(usdcVault), address(usdcTransmuter), 0);
+        ethAlchemist = deployAlchemist(alETH, wethARB, address(ethVault), address(ethTransmuter), 0);
 
         // Deploy and link strategies
         deployUSDCStrategies(address(usdcVault));
@@ -396,6 +418,24 @@ contract DeployV3ArbScript is Script {
         curator.submitSetAllocator(address(ethVault), address(ethAllocator), true);
         ethVault.setIsAllocator(address(ethAllocator), true);
         ethVault.setOwner(newOwner);
+
+        // set max rate
+        usdcAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
+        ethAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
+
+        // set force deallocate penalty
+        usdcAllocator.setPermissionedCall(IVaultV2.setForceDeallocatePenalty.selector, true);
+        ethAllocator.setPermissionedCall(IVaultV2.setForceDeallocatePenalty.selector, true);
+        for (uint256 i = 0; i < usdcStrategies.length; i++) {
+            address adapter = usdcStrategies[i];
+            curator.submitSetForceDeallocatePenalty(adapter, address(usdcVault), 2e16);
+            usdcAllocator.proxy(address(usdcVault), abi.encodeCall(IVaultV2.setForceDeallocatePenalty, (adapter, 2e16)));
+        }
+        for (uint256 i = 0; i < ethStrategies.length; i++) {
+            address adapter = ethStrategies[i];
+            curator.submitSetForceDeallocatePenalty(adapter, address(ethVault), 2e16);
+            ethAllocator.proxy(address(ethVault), abi.encodeCall(IVaultV2.setForceDeallocatePenalty, (adapter, 2e16)));
+        }
 
         // Transfer curator ownership
         curator.transferAdminOwnerShip(newOwner);
@@ -434,5 +474,13 @@ contract DeployV3ArbScript is Script {
         require(curator.pendingAdmin() == newOwner);
         require(usdcAllocator.pendingAdmin() == newOwner);
         require(ethAllocator.pendingAdmin() == newOwner);
+        require(usdcVault.maxRate() == 3170979198);
+        require(ethVault.maxRate() == 3170979198);
+        for (uint256 i = 0; i < usdcStrategies.length; i++) {
+            require(usdcVault.forceDeallocatePenalty(usdcStrategies[i]) == 2e16);
+        }
+        for (uint256 i = 0; i < ethStrategies.length; i++) {
+            require(ethVault.forceDeallocatePenalty(ethStrategies[i]) == 2e16);
+        }
     }
 }

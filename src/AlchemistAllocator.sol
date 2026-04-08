@@ -163,4 +163,8 @@ contract AlchemistAllocator is PermissionedProxy, IAllocator {
         // Ensure the requested amount does not exceed the calculated individual strategy limit
         require(vault.allocation(id) + amount <= limit, EffectiveCap(amount, limit));
     }
+
+    function setMaxRate(uint256 rate) external onlyAdmin {
+        vault.setMaxRate(rate);
+    }
 }
