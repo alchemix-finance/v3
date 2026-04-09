@@ -236,10 +236,8 @@ contract DeployV3OptimismScript is Script {
     }
 
     function run() public {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        deployerAddr = vm.addr(deployerPrivateKey);
-        require(deployerAddr == 0x1c9387747baA55C26197732Bda132955E1F56b80, "deployer");
-        vm.startBroadcast(deployerPrivateKey);
+        deployerAddr = 0x1c9387747baA55C26197732Bda132955E1F56b80;
+        vm.startBroadcast(deployerAddr);
         // ====== MOCK ONLY ======
         // Deploy alAssets
         //alUSD = deployAlAsset("thatsmy", "kungfu");
@@ -305,6 +303,8 @@ contract DeployV3OptimismScript is Script {
         usdcAllocator.transferAdminOwnerShip(newOwner);
         ethAllocator.transferAdminOwnerShip(newOwner);
 
+        usdcTransmuter.setAlchemist(address(usdcAlchemist));
+        ethTransmuter.setAlchemist(address(ethAlchemist));
         usdcTransmuter.setPendingAdmin(newOwner);
         ethTransmuter.setPendingAdmin(newOwner);
         

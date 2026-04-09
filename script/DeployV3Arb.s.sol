@@ -333,11 +333,8 @@ contract DeployV3ArbScript is Script {
     }
 
     function run() public {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployerAddr = vm.addr(deployerPrivateKey);
-        require(deployerAddr == 0x1c9387747baA55C26197732Bda132955E1F56b80, "deployer");
-        
-        vm.startBroadcast(deployerPrivateKey);
+        address deployerAddr = 0x1c9387747baA55C26197732Bda132955E1F56b80;
+        vm.startBroadcast(deployerAddr);
         
         // Deploy alAssets
         //alUSD = deployAlAsset("Alchemic USD", "alUSD");
@@ -407,6 +404,8 @@ contract DeployV3ArbScript is Script {
         usdcAllocator.transferAdminOwnerShip(newOwner);
         ethAllocator.transferAdminOwnerShip(newOwner);
 
+        usdcTransmuter.setAlchemist(address(usdcAlchemist));
+        ethTransmuter.setAlchemist(address(ethAlchemist));
         usdcTransmuter.setPendingAdmin(newOwner);
         ethTransmuter.setPendingAdmin(newOwner);
 

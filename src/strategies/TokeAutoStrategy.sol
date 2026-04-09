@@ -137,6 +137,8 @@ contract TokeAutoStrategy is MYTStrategy {
         
     function _totalValue() internal view virtual override returns (uint256) {
         uint256 shares = rewarder.balanceOf(address(this)) + autoVault.balanceOf(address(this));
+        if (shares == 0) return _idleAssets();
+
         uint256 assets = autoVault.convertToAssets(
             shares,
             autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw),

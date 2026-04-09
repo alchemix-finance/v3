@@ -44,8 +44,8 @@ contract DeployV3ETHScript is Script {
     // Contract addresses
     // address public vaultAdmin = 0x9e2b6378ee8ad2A4A95Fe481d63CAba8FB0EBBF9; FIXME
     // address public newOwner = 0x9e2b6378ee8ad2A4A95Fe481d63CAba8FB0EBBF9; FIXME
-    address public vaultAdmin = deployerAddr; // FIXME
-    address public newOwner = deployerAddr; // FIXME
+    address public vaultAdmin = 0xF56D660138815fC5d7a06cd0E1630225E788293D; // FIXME
+    address public newOwner = 0xF56D660138815fC5d7a06cd0E1630225E788293D; // FIXME
                                             
     VaultV2Factory public vaultFactory;
     VaultV2 public usdcVault;
@@ -295,7 +295,7 @@ contract DeployV3ETHScript is Script {
         AlchemistV3 alchemistLogic = new AlchemistV3();
 
         AlchemistInitializationParams memory params = AlchemistInitializationParams({
-            admin: newOwner,
+            admin: deployerAddr,
             debtToken: alAsset,
             underlyingToken: underlying,
             depositCap: cap, // FIXME migratedDeposits*1.5
@@ -314,7 +314,7 @@ contract DeployV3ETHScript is Script {
         bytes memory alchemParams = abi.encodeWithSelector(AlchemistV3.initialize.selector, params);
         AlchemistV3 deployedAlchemist = AlchemistV3(address(new TransparentUpgradeableProxy(
             address(alchemistLogic),
-            newOwner,
+            deployerAddr,
             alchemParams
         )));
 
@@ -322,22 +322,21 @@ contract DeployV3ETHScript is Script {
         require(deployedAlchemist.liquidatorFee() == 300);
         require(deployedAlchemist.repaymentFee() == 0);
 
-        AlchemistV3Position alchemistNFT = new AlchemistV3Position(address(deployedAlchemist), newOwner);
+        AlchemistV3Position alchemistNFT = new AlchemistV3Position(address(deployedAlchemist), deployerAddr);
         alchemistNFT.setMetadataRenderer(address(new AlchemistV3PositionRenderer()));
         deployedAlchemist.setAlchemistPositionNFT(address(alchemistNFT));
-
-        AlchemistTokenVault alchemistFeeVault = new AlchemistTokenVault(underlying, address(deployedAlchemist), newOwner);
+        alchemistNFT.setAdmin(newOwner);
+        AlchemistTokenVault alchemistFeeVault = new AlchemistTokenVault(underlying, address(deployedAlchemist), deployerAddr);
         alchemistFeeVault.setAuthorization(address(deployedAlchemist), true);
+        alchemistFeeVault.transferOwnership(newOwner);
         deployedAlchemist.setAlchemistFeeVault(address(alchemistFeeVault));
-
+        deployedAlchemist.setPendingAdmin(newOwner);
         return deployedAlchemist;
     }
 
     function run() public {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        deployerAddr = vm.addr(deployerPrivateKey);
-        require(deployerAddr == 0x1c9387747baA55C26197732Bda132955E1F56b80, "deployer");
-        vm.startBroadcast(deployerPrivateKey);
+        deployerAddr = 0x1c9387747baA55C26197732Bda132955E1F56b80;
+        vm.startBroadcast(deployerAddr);
         
         // Deploy alAssets
         //alUSD = deployAlAsset("Alchemic USD", "alUSD");
@@ -359,8 +358,8 @@ contract DeployV3ETHScript is Script {
         ethVault.setCurator(address(curator));
 
         // Deploy AlchemistAllocator
-        usdcAllocator = new AlchemistAllocator(address(usdcVault), deployerAddr, vaultAdmin, address(classifier));
-        ethAllocator = new AlchemistAllocator(address(ethVault), deployerAddr, vaultAdmin, address(classifier));
+        usdcAllocator = new AlchemistAllocator(address(usdcVault), deployerAddr, deployerAddr, address(classifier));
+        ethAllocator = new AlchemistAllocator(address(ethVault), deployerAddr, deployerAddr, address(classifier));
 
         // Deploy Transmuters
         usdcTransmuter = deployTransmuter(alUSD);
@@ -377,11 +376,9 @@ contract DeployV3ETHScript is Script {
         // Set allocator on vault
         curator.submitSetAllocator(address(usdcVault), address(usdcAllocator), true);
         usdcVault.setIsAllocator(address(usdcAllocator), true);
-        usdcVault.setOwner(newOwner);
 
         curator.submitSetAllocator(address(ethVault), address(ethAllocator), true);
         ethVault.setIsAllocator(address(ethAllocator), true);
-        ethVault.setOwner(newOwner);
 
         // set max rate
         usdcAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
@@ -401,6 +398,9 @@ contract DeployV3ETHScript is Script {
             curator.submitSetForceDeallocatePenalty(adapter, address(ethVault), 2e16);
             ethAllocator.proxy(address(ethVault), abi.encodeCall(IVaultV2.setForceDeallocatePenalty, (adapter, 2e16)));
         }
+        
+        usdcVault.setOwner(newOwner);
+        ethVault.setOwner(newOwner);
 
         // Transfer curator ownership
         curator.transferAdminOwnerShip(newOwner);
@@ -409,6 +409,8 @@ contract DeployV3ETHScript is Script {
         usdcAllocator.transferAdminOwnerShip(newOwner);
         ethAllocator.transferAdminOwnerShip(newOwner);
 
+        usdcTransmuter.setAlchemist(address(usdcAlchemist));
+        ethTransmuter.setAlchemist(address(ethAlchemist));
         usdcTransmuter.setPendingAdmin(newOwner);
         ethTransmuter.setPendingAdmin(newOwner);
         
@@ -433,9 +435,9 @@ contract DeployV3ETHScript is Script {
         console.log("----------- IMPORTANT -----------");
         console.log("- Add the new alchemists to the alAsset whitelist!");
 
-        require(usdcAlchemist.admin() == newOwner);
+        require(usdcAlchemist.pendingAdmin() == newOwner);
         require(usdcTransmuter.pendingAdmin() == newOwner);
-        require(ethAlchemist.admin() == newOwner);
+        require(ethAlchemist.pendingAdmin() == newOwner);
         require(ethTransmuter.pendingAdmin() == newOwner);
         require(curator.pendingAdmin() == newOwner);
         require(usdcAllocator.pendingAdmin() == newOwner);

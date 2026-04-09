@@ -44,7 +44,9 @@ contract ERC4626Strategy is MYTStrategy {
     }
 
     function _totalValue() internal view virtual override returns (uint256) {
-        return vault.previewRedeem(vault.balanceOf(address(this))) + _idleAssets();
+        uint256 shares = vault.balanceOf(address(this));
+        if (shares == 0) return _idleAssets();
+        return vault.previewRedeem(shares) + _idleAssets();
     }
 
     function _idleAssets() internal view virtual override returns (uint256) {
