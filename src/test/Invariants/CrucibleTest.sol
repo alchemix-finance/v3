@@ -664,15 +664,16 @@ contract CrucibleTest is InvariantsTest {
         if (colDelta > maxCollateralDelta) maxCollateralDelta = colDelta;
 
         uint256 cf = alchemist.underlyingConversionFactor();
-        uint256 debtTol = _max(1e12, cf * _max(active, 1));
-        // Higher collateral tolerance: mulDivUp rounding accumulates across
-        // redemption cycles at different share prices (loss + recovery shifts prices).
-        // Stress scenarios with 5-30% losses and 10-50% recoveries cause much larger
-        // share price swings than the hardened test's 0.1-3% range, amplifying the
-        // weighted-average divergence in lazy sync. Observed: ~4.2e18 in deep sequences.
-        // Not exploitable — conservative direction (positions track slightly more
-        // collateral than global).
-        uint256 colTol = _max(1e19, cf * _max(active, 1) * 1e7);
+        // Q128 rounding produces O(1) wei drift per account per sync cycle.
+        // Floor of 1e6 gives ~40x headroom; cf scaling handles 6-decimal tokens.
+        uint256 debtTol = _max(1e6, cf * _max(active, 1));
+        // Higher collateral tolerance: mulDivUp + weighted-average redemption
+        // accounting accumulates divergence in share units when loss/yield cycles
+        // move the share price between redemptions.
+        // Use relative tolerance (2e-11 of tracked shares) plus a small floor,
+        // instead of a fixed multi-ETH absolute value.
+        // NOTE: collateral values here are vault shares, not underlying units.
+        uint256 colTol = _max(1e15, totalDeposited / 50_000_000_000);
 
         assertLe(debtDelta, debtTol, "C1a: stored debt sum != totalDebt after full sync");
         assertLe(earmarkDelta, debtTol, "C1b: stored earmark sum != cumulativeEarmarked after full sync");
