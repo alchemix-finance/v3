@@ -108,9 +108,16 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
     }
 
     function _previewAdjustedWithdraw(uint256 amount) internal view virtual override returns (uint256) {
+        uint256 idleBalance = _idleAssets();
+        uint256 fromIdle = amount <= idleBalance ? amount : idleBalance;
+        if (fromIdle == amount) {
+            return amount;
+        }
+
+        uint256 remaining = amount - fromIdle;
         uint256 maxAsset = _oracleTokenToAsset(_positionBalance());
-        uint256 fundable = amount <= maxAsset ? amount : maxAsset;
-        return (fundable * (10_000 - params.slippageBPS)) / 10_000;
+        uint256 fundableFromPosition = remaining <= maxAsset ? remaining : maxAsset;
+        return fromIdle + (fundableFromPosition * (10_000 - params.slippageBPS)) / 10_000;
     }
 
     function _oracleTokenToAsset(uint256 oracleTokenAmount) internal view returns (uint256) {
