@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {OraclePricedSwapStrategy} from "./OraclePricedSwapStrategy.sol";
 import {TokenUtils} from "../libraries/TokenUtils.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IWETH} from "../interfaces/IWETH.sol";
 
 interface IDepositAdapter {
@@ -11,8 +12,27 @@ interface IDepositAdapter {
 }
 
 interface IRedemptionManager {
+    struct RedemptionLimit {
+        uint64 capacity;
+        uint64 remaining;
+        uint64 lastRefill;
+        uint64 refillRate;
+    }
+
     function canRedeem(uint256 amount, address token) external view returns (bool);
+    function liquidityPool() external view returns (address);
+    function previewRedeem(uint256 shares, address token) external view returns (uint256);
+    function tokenToRedemptionInfo(address token)
+        external
+        view
+        returns (RedemptionLimit memory limit, uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl);
     function redeemWeEth(uint256 amount, address receiver, address outputToken) external returns (uint256);
+}
+
+interface ILiquidityPoolLike {
+    function amountForShare(uint256 shares) external view returns (uint256);
+    function sharesForAmount(uint256 amount) external view returns (uint256);
+    function sharesForWithdrawalAmount(uint256 amount) external view returns (uint256);
 }
 
 interface IWeETH {
@@ -30,6 +50,8 @@ interface IWeETH {
  *
  */
 contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
+    uint256 internal constant BPS = 10_000;
+
     IDepositAdapter public immutable depositAdapter;
     IRedemptionManager public immutable redemptionManager;
     IWeETH public immutable weETH;
@@ -67,7 +89,7 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
     }
 
     /// @notice Deallocate via Ether.fi instant redemption (no queue delay).
-    /// @dev This path is liquidity-dependent and reverts when `canRedeem(amount, address(eETH))` is false.
+    /// @dev This path is liquidity-dependent and reverts when `canRedeem(amount, ETH)` is false.
     /// @param amount WETH amount expected to be returned to vault.
     function _deallocate(uint256 amount) internal override returns (uint256) {
         uint256 idleBalance = _idleAssets();
@@ -77,15 +99,18 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
         }
 
         uint256 shortfall = amount - idleBalance;
+        (, uint16 exitFeeInBps,) = _redemptionInfo();
+        require(exitFeeInBps < BPS, "Invalid exit fee");
+        uint256 weETHBalance = weETH.balanceOf(address(this));
+        require(weETHBalance > 0, "No weETH available");
+
+        uint256 weETHToRedeem = _weETHForNetShortfall(shortfall, exitFeeInBps, weETHBalance);
+        uint256 grossRedeemAmount = weETH.getEETHByWeETH(weETHToRedeem);
         require(
-            redemptionManager.canRedeem(shortfall, address(eETH)),
+            redemptionManager.canRedeem(grossRedeemAmount, ETH),
             "Cannot redeem. Instant redemption path is not available."
         );
 
-        uint256 weETHBalance = weETH.balanceOf(address(this));
-        require(weETHBalance > 0, "No weETH available");
-        uint256 weETHToRedeem = weETH.getWeETHByeETH(shortfall);
-        if (weETHToRedeem > weETHBalance) weETHToRedeem = weETHBalance;
         require(weETHToRedeem > 0, "No weETH to redeem");
 
         TokenUtils.safeApprove(address(weETH), address(redemptionManager), weETHToRedeem);
@@ -99,6 +124,35 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
         require(_idleAssets() >= amount, "Insufficient WETH available");
         TokenUtils.safeApprove(_asset(), msg.sender, amount);
         return amount;
+    }
+
+    function _redemptionInfo() internal view returns (uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl) {
+        (, exitFeeSplitToTreasuryInBps, exitFeeInBps, lowWatermarkInBpsOfTvl) = redemptionManager.tokenToRedemptionInfo(ETH);
+    }
+
+    function _weETHForGrossRedeem(uint256 grossRedeemAmount, uint256 weETHBalance) internal view returns (uint256) {
+        uint256 weETHToRedeem = weETH.getWeETHByeETH(grossRedeemAmount);
+        if (weETHToRedeem < weETHBalance && weETH.getEETHByWeETH(weETHToRedeem) < grossRedeemAmount) {
+            weETHToRedeem += 1;
+        }
+        return weETHToRedeem;
+    }
+
+    function _weETHForNetShortfall(uint256 shortfall, uint256 exitFeeInBps, uint256 weETHBalance) internal view returns (uint256) {
+        ILiquidityPoolLike liquidityPool = ILiquidityPoolLike(redemptionManager.liquidityPool());
+        uint256 requiredNetShares = liquidityPool.sharesForWithdrawalAmount(shortfall);
+        uint256 requiredGrossShares = Math.mulDiv(requiredNetShares, BPS, BPS - exitFeeInBps, Math.Rounding.Ceil);
+        uint256 grossRedeemAmount = liquidityPool.amountForShare(requiredGrossShares);
+
+        uint256 weETHToRedeem = _weETHForGrossRedeem(grossRedeemAmount, weETHBalance);
+        require(_previewNetEthFromWeETH(weETHToRedeem) >= shortfall, "Insufficient ETH redeemed");
+        return weETHToRedeem;
+    }
+
+    function _previewNetEthFromWeETH(uint256 weETHAmount) internal view returns (uint256) {
+        uint256 eETHAmount = weETH.getEETHByWeETH(weETHAmount);
+        uint256 shares = ILiquidityPoolLike(redemptionManager.liquidityPool()).sharesForAmount(eETHAmount);
+        return redemptionManager.previewRedeem(shares, ETH);
     }
 
     function _oracleToken() internal view override returns (address) {

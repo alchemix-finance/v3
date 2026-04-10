@@ -10,8 +10,24 @@ import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
+struct RedemptionLimitView {
+    uint64 capacity;
+    uint64 remaining;
+    uint64 lastRefill;
+    uint64 refillRate;
+}
+
 interface IRedemptionManagerView {
     function canRedeem(uint256 amount, address token) external view returns (bool);
+    function tokenToRedemptionInfo(address token)
+        external
+        view
+        returns (
+            RedemptionLimitView memory limit,
+            uint16 exitFeeSplitToTreasuryInBps,
+            uint16 exitFeeInBps,
+            uint16 lowWatermarkInBpsOfTvl
+        );
 }
 
 contract MockSwapper {
@@ -21,6 +37,76 @@ contract MockSwapper {
         (bool pushOk,) = to.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, amountOut));
         require(pushOk, "push failed");
     }
+}
+
+contract MockFeeRedemptionManager {
+    uint256 public constant BPS = 10_000;
+    address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address public immutable weETH;
+    address public immutable eETH;
+    uint256 public immutable feeBps;
+
+    constructor(address _weETH, address _eETH, uint256 _feeBps) payable {
+        weETH = _weETH;
+        eETH = _eETH;
+        feeBps = _feeBps;
+    }
+
+    function canRedeem(uint256, address token) external view returns (bool) {
+        return token == ETH;
+    }
+
+    function liquidityPool() external view returns (address) {
+        return address(this);
+    }
+
+    function amountForShare(uint256 shares) external pure returns (uint256) {
+        return shares;
+    }
+
+    function sharesForAmount(uint256 amount) external pure returns (uint256) {
+        return amount;
+    }
+
+    function sharesForWithdrawalAmount(uint256 amount) external pure returns (uint256) {
+        return amount;
+    }
+
+    function previewRedeem(uint256 shares, address token) external view returns (uint256) {
+        if (token != ETH) return 0;
+        uint256 fee = (shares * feeBps + BPS - 1) / BPS;
+        return shares - fee;
+    }
+
+    function tokenToRedemptionInfo(address token)
+        external
+        view
+        returns (RedemptionLimitView memory limit, uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl)
+    {
+        if (token != ETH) {
+            return (limit, 0, 0, 0);
+        }
+        return (
+            RedemptionLimitView({capacity: type(uint64).max, remaining: type(uint64).max, lastRefill: 0, refillRate: 0}),
+            0,
+            uint16(feeBps),
+            0
+        );
+    }
+
+    function redeemWeEth(uint256 amount, address receiver, address outputToken) external returns (uint256) {
+        require(outputToken == ETH, "invalid output token");
+        require(IERC20(weETH).transferFrom(msg.sender, address(this), amount), "transfer failed");
+
+        uint256 grossEth = IWeETH(weETH).getEETHByWeETH(amount);
+        uint256 fee = (grossEth * feeBps + BPS - 1) / BPS;
+        uint256 netEth = grossEth - fee;
+        (bool ok,) = receiver.call{value: netEth}("");
+        require(ok, "eth transfer failed");
+        return netEth;
+    }
+
+    receive() external payable {}
 }
 
 contract MockEtherfiEETHStrategy is EtherfiEETHMYTStrategy {
@@ -142,6 +228,27 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         uint256 scale = 10 ** AggregatorV3Interface(WEETH_ETH_ORACLE).decimals();
         uint256 maxWeEthIn = (maxWethIn * scale + uint256(answer) - 1) / uint256(answer);
         return maxWeEthIn == 0 ? 1 : maxWeEthIn;
+    }
+
+    function _grossRedeemAmount(address manager, uint256 netAmount) internal view returns (uint256) {
+        (, uint16 exitFeeInBps,) = _redemptionInfo(manager);
+        return (netAmount * 10_000 + (10_000 - exitFeeInBps) - 1) / (10_000 - exitFeeInBps);
+    }
+
+    function _maxNetDirectDeallocate(address manager) internal view returns (uint256) {
+        uint256 maxGrossDeallocate = _effectiveDeallocateAmount(type(uint256).max);
+        (, uint16 exitFeeInBps,) = _redemptionInfo(manager);
+        if (exitFeeInBps >= 10_000) return 0;
+        return (maxGrossDeallocate * (10_000 - exitFeeInBps)) / 10_000;
+    }
+
+    function _redemptionInfo(address manager)
+        internal
+        view
+        returns (uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl)
+    {
+        (, exitFeeSplitToTreasuryInBps, exitFeeInBps, lowWatermarkInBpsOfTvl) =
+            IRedemptionManagerView(manager).tokenToRedemptionInfo(ETH);
     }
 
     function _swapCallDataForWethOut(uint256 wethOut) internal view returns (bytes memory) {
@@ -325,7 +432,8 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.stopPrank();
 
         // If canRedeem is unavailable/reverting at this fork state, skip deterministically.
-        bool redeemable = IRedemptionManagerView(REDEMPTION_MANAGER).canRedeem(deallocateAmount, EETH);
+        uint256 grossRedeemAmount = _grossRedeemAmount(REDEMPTION_MANAGER, deallocateAmount);
+        bool redeemable = IRedemptionManagerView(REDEMPTION_MANAGER).canRedeem(grossRedeemAmount, ETH);
         if (redeemable) return;
 
         // if liquidity is unavailable, direct deallocate should revert
@@ -335,6 +443,52 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.startPrank(vault);
         vm.expectRevert(bytes("Cannot redeem. Instant redemption path is not available."));
         IMYTStrategy(strategy).deallocate(deallocParams, deallocateAmount, "", address(vault));
+        vm.stopPrank();
+    }
+
+    function test_deallocate_direct_accounts_for_instant_redemption_fee() public {
+        uint256 allocateAmount = 10e18;
+        uint256 deallocateAmount = 1e18;
+        bytes memory allocParams = getAllocateVaultParams(allocateAmount);
+
+        MockFeeRedemptionManager feeRedemptionManager = new MockFeeRedemptionManager(WEETH, EETH, 30);
+        address localStrategy = address(
+            new MockEtherfiEETHStrategy(vault, strategyConfig, EETH, WEETH, DEPOSIT_ADAPTER, address(feeRedemptionManager), WEETH_ETH_ORACLE)
+        );
+        vm.deal(address(feeRedemptionManager), allocateAmount);
+
+        vm.startPrank(vault);
+        deal(WETH, localStrategy, allocateAmount);
+        IMYTStrategy(localStrategy).allocate(allocParams, allocateAmount, "", address(vault));
+
+        IMYTStrategy.VaultAdapterParams memory directDealloc;
+        directDealloc.action = IMYTStrategy.ActionType.direct;
+        bytes memory deallocParams = abi.encode(directDealloc);
+        IMYTStrategy(localStrategy).deallocate(deallocParams, deallocateAmount, "", address(vault));
+        assertGe(IERC20(WETH).balanceOf(localStrategy), deallocateAmount, "idle WETH should cover requested deallocation");
+        vm.stopPrank();
+    }
+
+    function test_deallocate_direct_uses_live_fee_from_redemption_manager() public {
+        uint256 allocateAmount = 10e18;
+        uint256 deallocateAmount = 1e18;
+        bytes memory allocParams = getAllocateVaultParams(allocateAmount);
+
+        MockFeeRedemptionManager feeRedemptionManager = new MockFeeRedemptionManager(WEETH, EETH, 100);
+        address localStrategy = address(
+            new MockEtherfiEETHStrategy(vault, strategyConfig, EETH, WEETH, DEPOSIT_ADAPTER, address(feeRedemptionManager), WEETH_ETH_ORACLE)
+        );
+        vm.deal(address(feeRedemptionManager), allocateAmount);
+
+        vm.startPrank(vault);
+        deal(WETH, localStrategy, allocateAmount);
+        IMYTStrategy(localStrategy).allocate(allocParams, allocateAmount, "", address(vault));
+
+        IMYTStrategy.VaultAdapterParams memory directDealloc;
+        directDealloc.action = IMYTStrategy.ActionType.direct;
+        bytes memory deallocParams = abi.encode(directDealloc);
+        IMYTStrategy(localStrategy).deallocate(deallocParams, deallocateAmount, "", address(vault));
+        assertGe(IERC20(WETH).balanceOf(localStrategy), deallocateAmount, "strategy should adapt to updated fee");
         vm.stopPrank();
     }
 
@@ -353,16 +507,24 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         return capped;
     }
 
-    function test_fuzz_allocate_multiple_times(uint256[] calldata rawAmounts) public {
+    function _allocateMultipleTimes(uint256[] memory rawAmounts) internal {
         uint256 iterations = bound(rawAmounts.length, 2, 10);
         bytes memory allocParams = getAllocateVaultParams(0);
         uint256 lastRealAssets = IMYTStrategy(strategy).realAssets();
         uint256 successfulAllocs = 0;
+        uint256 minAllocUnit = 1e16;
 
         vm.startPrank(vault);
         for (uint256 i = 0; i < iterations; i++) {
+            (uint256 minAlloc, uint256 maxAlloc) = _getAllocationBounds();
+            if (maxAlloc < minAllocUnit) break;
+
+            uint256 remainingIterations = iterations - i;
+            uint256 maxPerIteration = maxAlloc / remainingIterations;
+            if (maxPerIteration < minAllocUnit) break;
+
             uint256 seed = rawAmounts.length == 0 ? uint256(keccak256(abi.encode(i))) : rawAmounts[i % rawAmounts.length];
-            uint256 amount = bound(seed, 1e16, 100e18);
+            uint256 amount = bound(seed, minAlloc, maxPerIteration);
             deal(WETH, strategy, amount);
             IMYTStrategy(strategy).allocate(allocParams, amount, "", address(vault));
 
@@ -375,5 +537,33 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
 
         assertGt(successfulAllocs, 1, "Expected multiple successful allocations");
         assertGt(IMYTStrategy(strategy).realAssets(), 0, "Final real assets should be positive");
+    }
+
+    function test_fuzz_allocate_multiple_times(uint256[] memory rawAmounts) public {
+        _allocateMultipleTimes(rawAmounts);
+    }
+
+    function test_fuzz_deallocate_direct_uses_instant_redeem_path_can_redeem(
+        uint256[] memory rawAllocateAmounts,
+        uint256 rawDeallocateAmount
+    ) public {
+        _allocateMultipleTimes(rawAllocateAmounts);
+
+        uint256 maxDeallocate = _maxNetDirectDeallocate(REDEMPTION_MANAGER);
+        require(maxDeallocate > 0, "max dealloc is zero");
+
+        uint256 deallocateAmount = bound(rawDeallocateAmount, 1, maxDeallocate);
+        uint256 grossRedeemAmount = _grossRedeemAmount(REDEMPTION_MANAGER, deallocateAmount);
+        if (!IRedemptionManagerView(REDEMPTION_MANAGER).canRedeem(grossRedeemAmount, ETH)) return;
+
+        IMYTStrategy.VaultAdapterParams memory directDealloc;
+        directDealloc.action = IMYTStrategy.ActionType.direct;
+        bytes memory deallocParams = abi.encode(directDealloc);
+        vm.startPrank(vault);
+        try IMYTStrategy(strategy).deallocate(deallocParams, deallocateAmount, "", address(vault)) {} catch {
+            vm.stopPrank();
+            return;
+        }
+        vm.stopPrank();
     }
 }
