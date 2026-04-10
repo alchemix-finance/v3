@@ -8,6 +8,7 @@ import {IMYTStrategy} from "../src/interfaces/IMYTStrategy.sol";
 import {AlchemistInitializationParams} from "../src/interfaces/IAlchemistV3.sol";
 import {ITransmuter} from "../src/interfaces/ITransmuter.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {Ownable} from "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import {AlchemistCurator} from "../src/AlchemistCurator.sol";
 import {AlchemistAllocator} from "../src/AlchemistAllocator.sol";
 import {AlchemistStrategyClassifier} from "../src/AlchemistStrategyClassifier.sol";
@@ -41,9 +42,7 @@ contract DeployV3ETHScript is Script {
     address public receiver = 0x9e2b6378ee8ad2A4A95Fe481d63CAba8FB0EBBF9;
     address public protocolFeeReceiver = 0x9e2b6378ee8ad2A4A95Fe481d63CAba8FB0EBBF9;
 
-    // Contract addresses
-    // address public vaultAdmin = 0x9e2b6378ee8ad2A4A95Fe481d63CAba8FB0EBBF9; FIXME
-    // address public newOwner = 0x9e2b6378ee8ad2A4A95Fe481d63CAba8FB0EBBF9; FIXME
+    // New ownership addresses
     address public vaultAdmin = 0xF56D660138815fC5d7a06cd0E1630225E788293D; // FIXME
     address public newOwner = 0xF56D660138815fC5d7a06cd0E1630225E788293D; // FIXME
                                             
@@ -75,11 +74,11 @@ contract DeployV3ETHScript is Script {
 
     // Strategy parameters
     IMYTStrategy.StrategyParams public eulerUSDCParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
+        owner: deployerAddr,
         name: "Euler Mainnet USDC",
         protocol: "Euler",
         riskClass: IMYTStrategy.RiskClass.LOW,
-        cap: 1000000 * 1e18,
+        cap: 1000 * 1e6,
         globalCap: 1e18,
         estimatedYield: 500, // 5% annual yield
         additionalIncentives: false,
@@ -87,7 +86,7 @@ contract DeployV3ETHScript is Script {
     });
 
     IMYTStrategy.StrategyParams public eulerWETHParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
+        owner: deployerAddr,
         name: "Euler Mainnet WETH",
         protocol: "Euler",
         riskClass: IMYTStrategy.RiskClass.LOW,
@@ -99,7 +98,7 @@ contract DeployV3ETHScript is Script {
     });
 
     IMYTStrategy.StrategyParams public tokeAutoEthParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
+        owner: deployerAddr,
         name: "TokeAutoEth Mainnet",
         protocol: "TokeAuto",
         riskClass: IMYTStrategy.RiskClass.MEDIUM,
@@ -111,11 +110,11 @@ contract DeployV3ETHScript is Script {
     });
 
     IMYTStrategy.StrategyParams public tokeAutoUSDParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
+        owner: deployerAddr,
         name: "TokeAutoUSD Mainnet",
         protocol: "TokeAuto",
         riskClass: IMYTStrategy.RiskClass.MEDIUM,
-        cap: 1000000 * 1e18,
+        cap: 1000 * 1e6,
         globalCap: 0.3e18, // 30% relative cap
         estimatedYield: 750, // 7.5% annual yield
         additionalIncentives: false,
@@ -123,7 +122,7 @@ contract DeployV3ETHScript is Script {
     });
 
     IMYTStrategy.StrategyParams public wstEthParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
+        owner: deployerAddr,
         name: "WstETH Mainnet",
         protocol: "WstETH",
         riskClass: IMYTStrategy.RiskClass.LOW,
@@ -142,7 +141,8 @@ contract DeployV3ETHScript is Script {
             eulerUSDCParams,
             eulerVaultUSDC
         );
-        
+
+        strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
         curator.setStrategy(address(strategy), address(myt));
         bytes memory idData = strategy.getIdData();
@@ -151,6 +151,7 @@ contract DeployV3ETHScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), eulerUSDCParams.globalCap);
         curator.increaseRelativeCap(address(strategy), eulerUSDCParams.globalCap);
 
+        strategy.transferOwnership(newOwner);
         return strategy;
     }
 
@@ -160,7 +161,7 @@ contract DeployV3ETHScript is Script {
             eulerWETHParams,
             eulerVaultWETH
         );
-        
+        strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
         curator.setStrategy(address(strategy), address(myt));
         bytes memory idData = strategy.getIdData();
@@ -169,6 +170,7 @@ contract DeployV3ETHScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), eulerWETHParams.globalCap);
         curator.increaseRelativeCap(address(strategy), eulerWETHParams.globalCap);
 
+        strategy.transferOwnership(newOwner);
         return strategy;
     }
 
@@ -181,7 +183,7 @@ contract DeployV3ETHScript is Script {
             tokeAutoRewarder,
             tokeRewardsToken
         );
-        
+        strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
         curator.setStrategy(address(strategy), address(myt));
         bytes memory idData = strategy.getIdData();
@@ -190,6 +192,7 @@ contract DeployV3ETHScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), tokeAutoEthParams.globalCap);
         curator.increaseRelativeCap(address(strategy), tokeAutoEthParams.globalCap);
 
+        strategy.transferOwnership(newOwner);
         return strategy;
     }
 
@@ -202,7 +205,7 @@ contract DeployV3ETHScript is Script {
             tokeAutoUsdRewarder,
             tokeRewardsToken
         );
-        
+        strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
         curator.setStrategy(address(strategy), address(myt));
         bytes memory idData = strategy.getIdData();
@@ -211,6 +214,7 @@ contract DeployV3ETHScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), tokeAutoUSDParams.globalCap);
         curator.increaseRelativeCap(address(strategy), tokeAutoUSDParams.globalCap);
 
+        strategy.transferOwnership(newOwner);
         return strategy;
     }
 
@@ -233,7 +237,7 @@ contract DeployV3ETHScript is Script {
             true,
             7000
         );
-        
+        strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
         curator.setStrategy(address(strategy), address(myt));
         bytes memory idData = strategy.getIdData();
@@ -242,6 +246,7 @@ contract DeployV3ETHScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), wstEthParams.globalCap);
         curator.increaseRelativeCap(address(strategy), wstEthParams.globalCap);
 
+        strategy.transferOwnership(newOwner);
         return strategy;
     }
 
@@ -314,7 +319,7 @@ contract DeployV3ETHScript is Script {
         bytes memory alchemParams = abi.encodeWithSelector(AlchemistV3.initialize.selector, params);
         AlchemistV3 deployedAlchemist = AlchemistV3(address(new TransparentUpgradeableProxy(
             address(alchemistLogic),
-            deployerAddr,
+            newOwner,
             alchemParams
         )));
 
@@ -446,9 +451,11 @@ contract DeployV3ETHScript is Script {
         require(ethVault.maxRate() == 3170979198);
         for (uint256 i = 0; i < usdcStrategies.length; i++) {
             require(usdcVault.forceDeallocatePenalty(usdcStrategies[i]) == 2e16);
+            require(Ownable(usdcStrategies[i]).owner() == newOwner);
         }
         for (uint256 i = 0; i < ethStrategies.length; i++) {
             require(ethVault.forceDeallocatePenalty(ethStrategies[i]) == 2e16);
+            require(Ownable(ethStrategies[i]).owner() == newOwner);
         }
         //require(ethAllocator.admin() == newOwner);
         //require(usdcAllocator.admin() == newOwner);

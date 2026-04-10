@@ -8,6 +8,7 @@ import {IMYTStrategy} from "../src/interfaces/IMYTStrategy.sol";
 import {AlchemistInitializationParams} from "../src/interfaces/IAlchemistV3.sol";
 import {ITransmuter} from "../src/interfaces/ITransmuter.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {Ownable} from "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import {AlchemistCurator} from "../src/AlchemistCurator.sol";
 import {AlchemistAllocator} from "../src/AlchemistAllocator.sol";
 import {AlchemistStrategyClassifier} from "../src/AlchemistStrategyClassifier.sol";
@@ -38,10 +39,8 @@ contract DeployV3ArbScript is Script {
     address public protocolFeeReceiver = 0x7e108711771DfdB10743F016D46d75A9379cA043;
 
     // Contract addresses
-    //address public vaultAdmin = 0x7e108711771DfdB10743F016D46d75A9379cA043;
-    //address public newOwner = 0x7e108711771DfdB10743F016D46d75A9379cA043;
-    address public vaultAdmin = deployerAddr; // FIXME
-    address public newOwner = deployerAddr; // FIXME
+    address public vaultAdmin = 0x7e108711771DfdB10743F016D46d75A9379cA043; // FIXME
+    address public newOwner = 0x7e108711771DfdB10743F016D46d75A9379cA043; // FIXME
     // Vault and factory
     VaultV2Factory public vaultFactory;
     VaultV2 public usdcVault;
@@ -75,7 +74,7 @@ contract DeployV3ArbScript is Script {
 
     // Strategy parameters
     IMYTStrategy.StrategyParams public aaveWETHParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
+        owner: deployerAddr,
         name: "Aave V3 WETH Arbitrum",
         protocol: "AaveV3",
         riskClass: IMYTStrategy.RiskClass.LOW,
@@ -87,7 +86,7 @@ contract DeployV3ArbScript is Script {
     });
 
     IMYTStrategy.StrategyParams public aaveUSDCParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
+        owner: deployerAddr,
         name: "Aave V3 USDC Arbitrum",
         protocol: "AaveV3",
         riskClass: IMYTStrategy.RiskClass.LOW,
@@ -99,7 +98,7 @@ contract DeployV3ArbScript is Script {
     });
 
     IMYTStrategy.StrategyParams public eulerWETHParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
+        owner: deployerAddr,
         name: "Euler WETH Arbitrum",
         protocol: "Euler",
         riskClass: IMYTStrategy.RiskClass.LOW,
@@ -111,7 +110,7 @@ contract DeployV3ArbScript is Script {
     });
 
     IMYTStrategy.StrategyParams public eulerUSDCParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
+        owner: deployerAddr,
         name: "Euler USDC Arbitrum",
         protocol: "Euler",
         riskClass: IMYTStrategy.RiskClass.LOW,
@@ -123,7 +122,7 @@ contract DeployV3ArbScript is Script {
     });
 
     IMYTStrategy.StrategyParams public fluidUSDCParams = IMYTStrategy.StrategyParams({
-        owner: newOwner,
+        owner: deployerAddr,
         name: "Fluid USDC Arbitrum",
         protocol: "Fluid",
         riskClass: IMYTStrategy.RiskClass.MEDIUM,
@@ -147,6 +146,7 @@ contract DeployV3ArbScript is Script {
             aaveRewardToken_ARB
         );
         
+        strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
         curator.setStrategy(address(strategy), address(myt));
         bytes memory idData = strategy.getIdData();
@@ -155,6 +155,7 @@ contract DeployV3ArbScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), aaveWETHParams.globalCap);
         curator.increaseRelativeCap(address(strategy), aaveWETHParams.globalCap);
 
+        strategy.transferOwnership(newOwner);
         return strategy;
     }
 
@@ -169,6 +170,7 @@ contract DeployV3ArbScript is Script {
             aaveRewardToken_ARB
         );
         
+        strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
         curator.setStrategy(address(strategy), address(myt));
         bytes memory idData = strategy.getIdData();
@@ -177,6 +179,7 @@ contract DeployV3ArbScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), aaveUSDCParams.globalCap);
         curator.increaseRelativeCap(address(strategy), aaveUSDCParams.globalCap);
 
+        strategy.transferOwnership(newOwner);
         return strategy;
     }
 
@@ -187,6 +190,7 @@ contract DeployV3ArbScript is Script {
             eulerVaultWETH_ARB
         );
         
+        strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
         curator.setStrategy(address(strategy), address(myt));
         bytes memory idData = strategy.getIdData();
@@ -195,6 +199,7 @@ contract DeployV3ArbScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), eulerWETHParams.globalCap);
         curator.increaseRelativeCap(address(strategy), eulerWETHParams.globalCap);
 
+        strategy.transferOwnership(newOwner);
         return strategy;
     }
 
@@ -205,6 +210,7 @@ contract DeployV3ArbScript is Script {
             eulerVaultUSDC_ARB
         );
         
+        strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
         curator.setStrategy(address(strategy), address(myt));
         bytes memory idData = strategy.getIdData();
@@ -213,6 +219,7 @@ contract DeployV3ArbScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), eulerUSDCParams.globalCap);
         curator.increaseRelativeCap(address(strategy), eulerUSDCParams.globalCap);
 
+        strategy.transferOwnership(newOwner);
         return strategy;
     }
 
@@ -223,6 +230,7 @@ contract DeployV3ArbScript is Script {
             fluidVaultUSDC_ARB
         );
         
+        strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
         curator.setStrategy(address(strategy), address(myt));
         bytes memory idData = strategy.getIdData();
@@ -231,6 +239,7 @@ contract DeployV3ArbScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), fluidUSDCParams.globalCap);
         curator.increaseRelativeCap(address(strategy), fluidUSDCParams.globalCap);
 
+        strategy.transferOwnership(newOwner);
         return strategy;
     }
 
@@ -294,7 +303,7 @@ contract DeployV3ArbScript is Script {
         AlchemistV3 alchemistLogic = new AlchemistV3();
 
         AlchemistInitializationParams memory params = AlchemistInitializationParams({
-            admin: newOwner,
+            admin: deployerAddr,
             debtToken: alAsset,
             underlyingToken: underlying,
             depositCap: cap, // FIXME 1.5 * migratedDeposits
@@ -321,19 +330,22 @@ contract DeployV3ArbScript is Script {
         require(deployedAlchemist.liquidatorFee() == 300);
         require(deployedAlchemist.repaymentFee() == 0);
 
-        AlchemistV3Position alchemistNFT = new AlchemistV3Position(address(deployedAlchemist), newOwner);
+        AlchemistV3Position alchemistNFT = new AlchemistV3Position(address(deployedAlchemist), deployerAddr);
         alchemistNFT.setMetadataRenderer(address(new AlchemistV3PositionRenderer()));
         deployedAlchemist.setAlchemistPositionNFT(address(alchemistNFT));
+        alchemistNFT.setAdmin(newOwner);
 
-        AlchemistTokenVault alchemistFeeVault = new AlchemistTokenVault(underlying, address(deployedAlchemist), newOwner);
+        AlchemistTokenVault alchemistFeeVault = new AlchemistTokenVault(underlying, address(deployedAlchemist), deployerAddr);
         alchemistFeeVault.setAuthorization(address(deployedAlchemist), true);
+        alchemistFeeVault.transferOwnership(newOwner);
         deployedAlchemist.setAlchemistFeeVault(address(alchemistFeeVault));
-
+        deployedAlchemist.setPendingAdmin(newOwner);
+        
         return deployedAlchemist;
     }
 
     function run() public {
-        address deployerAddr = 0x1c9387747baA55C26197732Bda132955E1F56b80;
+        deployerAddr = 0x1c9387747baA55C26197732Bda132955E1F56b80;
         vm.startBroadcast(deployerAddr);
         
         // Deploy alAssets
@@ -356,8 +368,8 @@ contract DeployV3ArbScript is Script {
         ethVault.setCurator(address(curator));
 
         // Deploy AlchemistAllocator
-        usdcAllocator = new AlchemistAllocator(address(usdcVault), deployerAddr, vaultAdmin, address(classifier));
-        ethAllocator = new AlchemistAllocator(address(ethVault), deployerAddr, vaultAdmin, address(classifier));
+        usdcAllocator = new AlchemistAllocator(address(usdcVault), deployerAddr, deployerAddr, address(classifier));
+        ethAllocator = new AlchemistAllocator(address(ethVault), deployerAddr, deployerAddr, address(classifier));
 
         // Deploy Transmuters
         usdcTransmuter = deployTransmuter(alUSD);
@@ -374,11 +386,9 @@ contract DeployV3ArbScript is Script {
         // Set allocator on vault
         curator.submitSetAllocator(address(usdcVault), address(usdcAllocator), true);
         usdcVault.setIsAllocator(address(usdcAllocator), true);
-        usdcVault.setOwner(newOwner);
 
         curator.submitSetAllocator(address(ethVault), address(ethAllocator), true);
         ethVault.setIsAllocator(address(ethAllocator), true);
-        ethVault.setOwner(newOwner);
 
         // set max rate
         usdcAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
@@ -397,10 +407,14 @@ contract DeployV3ArbScript is Script {
             curator.submitSetForceDeallocatePenalty(adapter, address(ethVault), 2e16);
             ethAllocator.proxy(address(ethVault), abi.encodeCall(IVaultV2.setForceDeallocatePenalty, (adapter, 2e16)));
         }
+        
+        usdcVault.setOwner(newOwner);
+        ethVault.setOwner(newOwner);
 
         // Transfer curator ownership
         curator.transferAdminOwnerShip(newOwner);
 
+        // transfer allocator ownership
         usdcAllocator.transferAdminOwnerShip(newOwner);
         ethAllocator.transferAdminOwnerShip(newOwner);
 
@@ -430,9 +444,9 @@ contract DeployV3ArbScript is Script {
         console.log("----------- IMPORTANT -----------");
         console.log("- Add the new alchemists to the alAsset whitelist!");
 
-        require(usdcAlchemist.admin() == newOwner);
+        require(usdcAlchemist.pendingAdmin() == newOwner);
         require(usdcTransmuter.pendingAdmin() == newOwner);
-        require(ethAlchemist.admin() == newOwner);
+        require(ethAlchemist.pendingAdmin() == newOwner);
         require(ethTransmuter.pendingAdmin() == newOwner);
         require(curator.pendingAdmin() == newOwner);
         require(usdcAllocator.pendingAdmin() == newOwner);
@@ -441,9 +455,11 @@ contract DeployV3ArbScript is Script {
         require(ethVault.maxRate() == 3170979198);
         for (uint256 i = 0; i < usdcStrategies.length; i++) {
             require(usdcVault.forceDeallocatePenalty(usdcStrategies[i]) == 2e16);
+            require(Ownable(usdcStrategies[i]).owner() == newOwner);
         }
         for (uint256 i = 0; i < ethStrategies.length; i++) {
             require(ethVault.forceDeallocatePenalty(ethStrategies[i]) == 2e16);
+            require(Ownable(ethStrategies[i]).owner() == newOwner);
         }
     }
 }
