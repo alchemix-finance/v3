@@ -283,6 +283,17 @@ contract WstethOptimismStrategyTest is Test {
         uint256 previewExcess = IMYTStrategy(mytStrategy).previewAdjustedWithdraw(excessAmount);
         uint256 expectedCapped = (maxCapacity * (10_000 - STRATEGY_SLIPPAGE_BPS)) / 10_000;
         assertEq(previewExcess, expectedCapped, "preview should be capped at max capacity minus haircut");
+
+        uint256 idleLeftover = 10e18;
+        deal(WETH, mytStrategy, idleLeftover);
+
+        uint256 previewIdleOnly = IMYTStrategy(mytStrategy).previewAdjustedWithdraw(8e18);
+        assertEq(previewIdleOnly, 8e18, "idle assets should be previewed at par");
+
+        uint256 mixedRequest = idleLeftover + 20e18;
+        uint256 mixedPreview = IMYTStrategy(mytStrategy).previewAdjustedWithdraw(mixedRequest);
+        uint256 expectedMixedPreview = idleLeftover + (20e18 * (10_000 - STRATEGY_SLIPPAGE_BPS)) / 10_000;
+        assertEq(mixedPreview, expectedMixedPreview, "preview should use idle assets before haircutting invested assets");
     }
 
     function test_realAssets_reverts_when_oracle_is_stale() public {
