@@ -62,6 +62,7 @@ contract DeployV3ETHScript is Script {
     address[] public ethStrategies;
 
     // Strategy-specific addresses
+    address public yvVaultUSDC = 0x696d02Db93291651ED510704c9b286841d506987;
     address public eulerVaultUSDC = 0xe0a80d35bB6618CBA260120b279d357978c42BCE;
     address public eulerVaultWETH = 0xD8b27CF359b7D15710a5BE299AF6e7Bf904984C2;
     address public tokeAutoEth = 0x0A2b94F6871c1D7A32Fe58E1ab5e6deA2f114E56;
@@ -73,6 +74,18 @@ contract DeployV3ETHScript is Script {
     address public wstEthEthOracle = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
 
     // Strategy parameters
+    IMYTStrategy.StrategyParams public yvUSDCParams = IMYTStrategy.StrategyParams({
+        owner: deployerAddr,
+        name: "Yearn Mainnet USDC",
+        protocol: "Yearn",
+        riskClass: IMYTStrategy.RiskClass.LOW,
+        cap: 1000 * 1e6,
+        globalCap: 1e18,
+        estimatedYield: 500,
+        additionalIncentives: false,
+        slippageBPS: 50
+    });
+
     IMYTStrategy.StrategyParams public eulerUSDCParams = IMYTStrategy.StrategyParams({
         owner: deployerAddr,
         name: "Euler Mainnet USDC",
@@ -106,7 +119,7 @@ contract DeployV3ETHScript is Script {
         globalCap: 0.3e18, // 30% relative cap
         estimatedYield: 800, // 8% annual yield
         additionalIncentives: false,
-        slippageBPS: 50
+        slippageBPS: 600
     });
 
     IMYTStrategy.StrategyParams public tokeAutoUSDParams = IMYTStrategy.StrategyParams({
@@ -134,6 +147,26 @@ contract DeployV3ETHScript is Script {
     });
 
     function setUp() public {}
+
+    function deployYvUSDCStrategy(address myt) internal returns (ERC4626Strategy) {
+        ERC4626Strategy strategy = new ERC4626Strategy(
+            myt,
+            yvUSDCParams,
+            yvVaultUSDC
+        );
+
+        strategy.setKillSwitch(true);
+        curator.submitSetStrategy(address(strategy), address(myt));
+        curator.setStrategy(address(strategy), address(myt));
+        bytes memory idData = strategy.getIdData();
+        curator.submitIncreaseAbsoluteCap(address(strategy), yvUSDCParams.cap);
+        curator.increaseAbsoluteCap(address(strategy), yvUSDCParams.cap);
+        curator.submitIncreaseRelativeCap(address(strategy), yvUSDCParams.globalCap);
+        curator.increaseRelativeCap(address(strategy), yvUSDCParams.globalCap);
+
+        strategy.transferOwnership(newOwner);
+        return strategy;
+    }
 
     function deployEulerUSDCStrategy(address myt) internal returns (ERC4626Strategy) {
         ERC4626Strategy strategy = new ERC4626Strategy(
@@ -219,11 +252,14 @@ contract DeployV3ETHScript is Script {
     }
 
     function deployUSDCStrategies(address myt) public {
+        ERC4626Strategy yvUSDCStrategy = deployYvUSDCStrategy(myt);
         ERC4626Strategy eulerUSDCStrategy = deployEulerUSDCStrategy(myt);
         TokeAutoStrategy tokeAutoUSDStrategy = deployTokeAutoUSDStrategy(myt);
+        usdcStrategies.push(address(yvUSDCStrategy));
         usdcStrategies.push(address(eulerUSDCStrategy));
         usdcStrategies.push(address(tokeAutoUSDStrategy));
 
+        console.log("Yearn Mainnet USDC Strategy deployed at:", address(yvUSDCStrategy));
         console.log("Euler Mainnet USDC Strategy deployed at:", address(eulerUSDCStrategy));
         console.log("TokeAutoUSD Mainnet Strategy deployed at:", address(tokeAutoUSDStrategy));
     }

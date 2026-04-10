@@ -749,6 +749,7 @@ contract MultiStrategyUSDCInvariantTest is Test {
     uint256 public initialSharePrice;
     
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address public constant YV_USDC_VAULT = 0x696d02Db93291651ED510704c9b286841d506987;
     address public constant EULER_USDC_VAULT = 0xe0a80d35bB6618CBA260120b279d357978c42BCE;
     address public constant PEAPODS_USDC_VAULT = 0x3717e340140D30F3A077Dd21fAc39A86ACe873AA;
     address public constant TOKE_AUTO_USD_VAULT = 0xa7569A44f348d3D70d8ad5889e50F78E33d80D35;
@@ -764,7 +765,7 @@ contract MultiStrategyUSDCInvariantTest is Test {
     function setUp() public {
         // Fork mainnet at specific block
         string memory rpc = vm.envString("MAINNET_RPC_URL");
-        forkId = vm.createFork(rpc, 22_089_302);
+        forkId = vm.createFork(rpc, 24_850_461);
         vm.selectFork(forkId);
         
         // Setup vault
@@ -772,11 +773,15 @@ contract MultiStrategyUSDCInvariantTest is Test {
         vault = _setupVault(USDC);
         
         // Setup strategies
-        string[] memory strategyNames = new string[](3);
-        strategyNames[0] = "Euler Mainnet USDC";
-        strategyNames[1] = "Peapods Mainnet USDC";
-        strategyNames[2] = "TokeAutoUSD Mainnet";
-        
+        string[] memory strategyNames = new string[](4);
+        strategyNames[0] = "Yearn Mainnet USDC";
+        strategyNames[1] = "Euler Mainnet USDC";
+        strategyNames[2] = "Peapods Mainnet USDC";
+        strategyNames[3] = "TokeAutoUSD Mainnet";
+
+        // Deploy Yearn USDC Strategy
+        strategies.push(_deployYvUSDCStrategy());
+
         // Deploy Euler USDC Strategy
         strategies.push(_deployEulerStrategy());
         
@@ -833,7 +838,23 @@ contract MultiStrategyUSDCInvariantTest is Test {
         VaultV2Factory factory = new VaultV2Factory();
         return IVaultV2(factory.createVaultV2(admin, asset, bytes32(0)));
     }
-    
+
+    function _deployYvUSDCStrategy() internal returns (address) {
+        IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({
+            owner: admin,
+            name: "Yearn Mainnet USDC",
+            protocol: "Yearn",
+            riskClass: IMYTStrategy.RiskClass.LOW,
+            cap: 1000 * 1e6,
+            globalCap: 1e18,
+            estimatedYield: 500,
+            additionalIncentives: false,
+            slippageBPS: 50
+        });
+
+        return address(new ERC4626Strategy(address(vault), params, YV_USDC_VAULT));
+    }
+
     function _deployEulerStrategy() internal returns (address) {
         IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({
             owner: admin,
