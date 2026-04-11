@@ -19,6 +19,7 @@ import {VaultV2, IVaultV2} from "../lib/vault-v2/src/VaultV2.sol";
 import {ERC4626Strategy} from "../src/strategies/ERC4626Strategy.sol";
 import {TokeAutoStrategy} from "../src/strategies/TokeAutoStrategy.sol";
 import {WstethStrategy} from "../src/strategies/WStethStrategy.sol";
+import {AaveStrategy} from "../src/strategies/AaveStrategy.sol";
 import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
 import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
 import {AlchemistTokenVault} from "../src/AlchemistTokenVault.sol";
@@ -72,6 +73,10 @@ contract DeployV3ETHScript is Script {
     address public tokeAutoUsdRewarder = 0x726104CfBd7ece2d1f5b3654a19109A9e2b6c27B;
     address public wstETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
     address public wstEthEthOracle = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
+    address public aaveV3WethAToken = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
+    address public aaveV3PoolAddressProvider = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
+    address public aaveRewardsController = 0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb;
+    address public aaveRewardToken = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; // wstETH
 
     // Strategy parameters
     IMYTStrategy.StrategyParams public yvUSDCParams = IMYTStrategy.StrategyParams({
@@ -132,6 +137,18 @@ contract DeployV3ETHScript is Script {
         estimatedYield: 750, // 7.5% annual yield
         additionalIncentives: false,
         slippageBPS: 50
+    });
+
+    IMYTStrategy.StrategyParams public aaveV3WethParams = IMYTStrategy.StrategyParams({
+        owner: deployerAddr,
+        name: "AaveV3 Mainnet WETH",
+        protocol: "AaveV3",
+        riskClass: IMYTStrategy.RiskClass.LOW,
+        cap: 10_000e18,
+        globalCap: 1e18,
+        estimatedYield: 400, // 4% annual yield
+        additionalIncentives: false,
+        slippageBPS: 1
     });
 
     IMYTStrategy.StrategyParams public wstEthParams = IMYTStrategy.StrategyParams({
@@ -286,17 +303,43 @@ contract DeployV3ETHScript is Script {
         return strategy;
     }
 
+    function deployAaveV3WethStrategy(address myt) internal returns (AaveStrategy) {
+        AaveStrategy strategy = new AaveStrategy(
+            myt,
+            aaveV3WethParams,
+            wethETH,
+            aaveV3WethAToken,
+            aaveV3PoolAddressProvider,
+            aaveRewardsController,
+            aaveRewardToken
+        );
+        strategy.setKillSwitch(true);
+        curator.submitSetStrategy(address(strategy), address(myt));
+        curator.setStrategy(address(strategy), address(myt));
+        bytes memory idData = strategy.getIdData();
+        curator.submitIncreaseAbsoluteCap(address(strategy), aaveV3WethParams.cap);
+        curator.increaseAbsoluteCap(address(strategy), aaveV3WethParams.cap);
+        curator.submitIncreaseRelativeCap(address(strategy), aaveV3WethParams.globalCap);
+        curator.increaseRelativeCap(address(strategy), aaveV3WethParams.globalCap);
+
+        strategy.transferOwnership(newOwner);
+        return strategy;
+    }
+
     function deployETHStrategies(address myt) public {
         ERC4626Strategy eulerWETHStrategy = deployEulerWETHStrategy(myt);
         TokeAutoStrategy tokeAutoEthStrategy = deployTokeAutoEthStrategy(myt);
         WstethStrategy wstEthStrategy = deployWstEthStrategy(myt);
+        AaveStrategy aaveV3WethStrategy = deployAaveV3WethStrategy(myt);
         ethStrategies.push(address(eulerWETHStrategy));
         ethStrategies.push(address(tokeAutoEthStrategy));
         ethStrategies.push(address(wstEthStrategy));
+        ethStrategies.push(address(aaveV3WethStrategy));
 
         console.log("Euler Mainnet WETH Strategy deployed at:", address(eulerWETHStrategy));
         console.log("TokeAutoEth Mainnet Strategy deployed at:", address(tokeAutoEthStrategy));
         console.log("WstETH Mainnet Strategy deployed at:", address(wstEthStrategy));
+        console.log("AaveV3 Mainnet WETH Strategy deployed at:", address(aaveV3WethStrategy));
     }
 
     function deployAlAsset(string memory name, string memory ticker) public returns (address) {
