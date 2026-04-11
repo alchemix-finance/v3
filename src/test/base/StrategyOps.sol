@@ -24,6 +24,17 @@ abstract contract StrategyOps is StrategySetup, StrategyRevertUtils {
     }
 
     function _deallocateOrSkipWhitelisted(uint256 amount, RevertContext context) internal returns (bool) {
+        if (_useAllocatorDeallocateUnwrapAndSwap()) {
+            try IAllocator(allocator).deallocateWithUnwrapAndSwap(
+                strategy, amount, _allocatorDeallocateSwapData(amount), _allocatorDeallocateMinIntermediateOut(amount)
+            ) {
+                return true;
+            } catch (bytes memory errData) {
+                _revertUnlessWhitelisted(errData, _isWhitelistedRevert(_revertSelector(errData), context));
+                return false;
+            }
+        }
+
         if (_useAllocatorDeallocateSwap()) {
             try IAllocator(allocator).deallocateWithSwap(strategy, amount, _allocatorDeallocateSwapData(amount)) {
                 return true;

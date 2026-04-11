@@ -107,13 +107,21 @@ contract StrategyHandler is Test, StrategyRevertUtils {
         amount = bound(amount, 1, currentAllocation);
 
         vm.startPrank(admin);
-        try IAllocator(allocator).deallocate(address(strategy), amount) {
-            vm.stopPrank();
-        } catch (bytes memory errData) {
-            vm.stopPrank();
-            _revertUnlessWhitelisted(errData, _isWhitelistedRevert(_revertSelector(errData), RevertContext.HandlerDeallocate));
-            return;
+        if (IRevertAllowlistProvider(limitProvider).useAllocatorDeallocateUnwrapAndSwap()) {
+            IAllocator(allocator).deallocateWithUnwrapAndSwap(
+                address(strategy),
+                amount,
+                IRevertAllowlistProvider(limitProvider).allocatorDeallocateSwapData(amount),
+                IRevertAllowlistProvider(limitProvider).allocatorDeallocateMinIntermediateOut(amount)
+            );
+        } else if (IRevertAllowlistProvider(limitProvider).useAllocatorDeallocateSwap()) {
+            IAllocator(allocator).deallocateWithSwap(
+                address(strategy), amount, IRevertAllowlistProvider(limitProvider).allocatorDeallocateSwapData(amount)
+            );
+        } else {
+            IAllocator(allocator).deallocate(address(strategy), amount);
         }
+        vm.stopPrank();
 
         ghost_totalDeallocated += amount;
     }

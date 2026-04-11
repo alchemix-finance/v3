@@ -20,6 +20,18 @@ contract MockMYTForSiUSDDeployTest {
     fallback() external payable {}
 }
 
+contract MockDeployOracle {
+    uint8 internal immutable _decimals;
+
+    constructor(uint8 decimals_) {
+        _decimals = decimals_;
+    }
+
+    function decimals() external view returns (uint8) {
+        return _decimals;
+    }
+}
+
 contract DeploySiUSDStrategiesScriptTest is Test {
     DeploySiUSDStrategiesScript internal deployScript;
     AlchemistCurator internal curator;
@@ -30,9 +42,12 @@ contract DeploySiUSDStrategiesScriptTest is Test {
     address internal iUSD;
     address internal siUSD;
     address internal gateway;
-    address internal mintController;
+    address internal mintControllerA;
+    address internal mintControllerB;
     address internal redeemControllerA;
     address internal redeemControllerB;
+    MockDeployOracle internal iUsdUsdcOracleA;
+    MockDeployOracle internal iUsdUsdcOracleB;
 
     function setUp() public {
         deployScript = new DeploySiUSDStrategiesScript();
@@ -45,9 +60,12 @@ contract DeploySiUSDStrategiesScriptTest is Test {
         iUSD = makeAddr("iUSD");
         siUSD = makeAddr("siUSD");
         gateway = makeAddr("gateway");
-        mintController = makeAddr("mintController");
+        mintControllerA = makeAddr("mintControllerA");
+        mintControllerB = makeAddr("mintControllerB");
         redeemControllerA = makeAddr("redeemControllerA");
         redeemControllerB = makeAddr("redeemControllerB");
+        iUsdUsdcOracleA = new MockDeployOracle(18);
+        iUsdUsdcOracleB = new MockDeployOracle(18);
     }
 
     function test_deploySiUSDStrategy_setsCoreAddressesAndName() public {
@@ -57,8 +75,9 @@ contract DeploySiUSDStrategiesScriptTest is Test {
             iUSD: iUSD,
             siUSD: siUSD,
             gateway: gateway,
-            mintController: mintController,
+            mintController: mintControllerA,
             redeemController: redeemControllerA,
+            iUsdUsdcOracle: address(iUsdUsdcOracleA),
             params: _buildParams("SiUSD Mainnet USDC", "InfiniFi")
         });
 
@@ -70,8 +89,9 @@ contract DeploySiUSDStrategiesScriptTest is Test {
         assertEq(address(strategy.iUSD()), iUSD, "unexpected iUSD");
         assertEq(address(strategy.siUSD()), siUSD, "unexpected siUSD");
         assertEq(address(strategy.gateway()), gateway, "unexpected gateway");
-        assertEq(address(strategy.mintController()), mintController, "unexpected mint controller");
+        assertEq(address(strategy.mintController()), mintControllerA, "unexpected mint controller");
         assertEq(address(strategy.redeemController()), redeemControllerA, "unexpected redeem controller");
+        assertEq(address(strategy.pricedTokenEthOracle()), address(iUsdUsdcOracleA), "unexpected iUSD oracle");
         (, string memory strategyName,,,,,,,) = strategy.params();
         assertEq(strategyName, "SiUSD Mainnet USDC", "unexpected strategy name");
     }
@@ -86,8 +106,9 @@ contract DeploySiUSDStrategiesScriptTest is Test {
             iUSD: iUSD,
             siUSD: siUSD,
             gateway: gateway,
-            mintController: mintController,
+            mintController: mintControllerA,
             redeemController: redeemControllerA,
+            iUsdUsdcOracle: address(iUsdUsdcOracleA),
             params: _buildParams("SiUSD Mainnet USDC", "InfiniFi")
         });
 
@@ -97,8 +118,9 @@ contract DeploySiUSDStrategiesScriptTest is Test {
             iUSD: makeAddr("iUSDB"),
             siUSD: makeAddr("siUSDB"),
             gateway: makeAddr("gatewayB"),
-            mintController: makeAddr("mintControllerB"),
+            mintController: mintControllerB,
             redeemController: redeemControllerB,
+            iUsdUsdcOracle: address(iUsdUsdcOracleB),
             params: _buildParams("SiUSD Alternate USDC", "InfiniFi")
         });
 
@@ -111,8 +133,9 @@ contract DeploySiUSDStrategiesScriptTest is Test {
         assertEq(address(strategy0.iUSD()), iUSD, "strategy0 unexpected iUSD");
         assertEq(address(strategy0.siUSD()), siUSD, "strategy0 unexpected siUSD");
         assertEq(address(strategy0.gateway()), gateway, "strategy0 unexpected gateway");
-        assertEq(address(strategy0.mintController()), mintController, "strategy0 unexpected mint controller");
+        assertEq(address(strategy0.mintController()), mintControllerA, "strategy0 unexpected mint controller");
         assertEq(address(strategy0.redeemController()), redeemControllerA, "strategy0 unexpected redeem controller");
+        assertEq(address(strategy0.pricedTokenEthOracle()), address(iUsdUsdcOracleA), "strategy0 unexpected iUSD oracle");
         (, string memory name0,,,,,,,) = strategy0.params();
         assertEq(name0, "SiUSD Mainnet USDC", "strategy0 unexpected name");
 
@@ -122,14 +145,13 @@ contract DeploySiUSDStrategiesScriptTest is Test {
         assertEq(address(strategy1.iUSD()), configs[1].iUSD, "strategy1 unexpected iUSD");
         assertEq(address(strategy1.siUSD()), configs[1].siUSD, "strategy1 unexpected siUSD");
         assertEq(address(strategy1.gateway()), configs[1].gateway, "strategy1 unexpected gateway");
-        assertEq(
-            address(strategy1.mintController()), configs[1].mintController, "strategy1 unexpected mint controller"
-        );
+        assertEq(address(strategy1.mintController()), configs[1].mintController, "strategy1 unexpected mint controller");
         assertEq(
             address(strategy1.redeemController()),
             configs[1].redeemController,
             "strategy1 unexpected redeem controller"
         );
+        assertEq(address(strategy1.pricedTokenEthOracle()), configs[1].iUsdUsdcOracle, "strategy1 unexpected iUSD oracle");
         (, string memory name1,,,,,,,) = strategy1.params();
         assertEq(name1, "SiUSD Alternate USDC", "strategy1 unexpected name");
     }

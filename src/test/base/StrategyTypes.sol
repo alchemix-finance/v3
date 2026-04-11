@@ -15,4 +15,8 @@ enum RevertContext {
 interface IRevertAllowlistProvider {
     function isProtocolRevertAllowed(bytes4 selector, RevertContext context) external view returns (bool);
     function isMytRevertAllowed(bytes4 selector, RevertContext context) external view returns (bool);
+    function useAllocatorDeallocateSwap() external view returns (bool);
+    function useAllocatorDeallocateUnwrapAndSwap() external view returns (bool);
+    function allocatorDeallocateSwapData(uint256 amount) external view returns (bytes memory);
+    function allocatorDeallocateMinIntermediateOut(uint256 amount) external view returns (uint256);
 }
