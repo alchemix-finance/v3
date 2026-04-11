@@ -6,6 +6,9 @@ interface IFrxEthEthDualOracle {
 }
 
 /// @notice Adapts the Frax dual-oracle frxETH/ETH source to a Chainlink-style reader.
+/// @dev The Frax dual oracle does not expose a publication timestamp. This adapter therefore
+///      returns the current block timestamp for `startedAt` and `updatedAt`, which satisfies
+///      the AggregatorV3Interface shape but does not provide an underlying freshness signal.
 contract FrxEthEthDualOracleAggregatorAdapter {
     IFrxEthEthDualOracle public immutable dualOracle;
 
@@ -29,6 +32,7 @@ contract FrxEthEthDualOracleAggregatorAdapter {
         uint256 averagePrice = (priceLow + priceHigh) / 2;
         require(averagePrice > 0, "Invalid dual oracle price");
 
+        // The dual oracle exposes no round ids or publication time, so these fields are synthesized.
         return (uint80(block.number), int256(averagePrice), block.timestamp, block.timestamp, uint80(block.number));
     }
 }
