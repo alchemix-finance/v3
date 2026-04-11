@@ -83,7 +83,7 @@ contract SFraxETHStrategy is OraclePricedSwapStrategy {
     }
 
     function _positionBalance() internal view override returns (uint256) {
-        return sfrxETH.convertToAssets(sfrxETH.balanceOf(address(this)));
+        return frxETH.balanceOf(address(this)) + sfrxETH.convertToAssets(sfrxETH.balanceOf(address(this)));
     }
 
     function _allocationSwapGuard(uint256 assetAmountIn, uint256, uint256 oracleTokenReceived) internal view override {

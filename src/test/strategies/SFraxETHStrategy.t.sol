@@ -139,6 +139,14 @@ contract SFraxETHStrategyTest is Test {
         assertApproxEqRel(IMYTStrategy(address(strategy)).realAssets(), ISfrxETHView(SFRXETH).convertToAssets(sharesBalance), 1e15);
     }
 
+    function test_realAssets_includesRawFrxEthBalance() public {
+        _mockFreshFrxEthEthOracle();
+
+        deal(FRXETH, address(strategy), 3e18);
+
+        assertEq(IMYTStrategy(address(strategy)).realAssets(), 3e18, "raw frxETH should be counted in real assets");
+    }
+
     function test_allocator_allocateWithSwap_reverts_below_minFrxEthOut_floor_when_oracle_min_is_weakened() public {
         uint256 amountIn = 10e18;
         uint256 minFrxEthOut = (amountIn * MIN_FRXETH_OUT_BPS) / 10_000;
