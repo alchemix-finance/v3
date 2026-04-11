@@ -39,6 +39,7 @@ import {IMockYieldToken} from "./mocks/MockYieldToken.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 import {VaultV2} from "lib/vault-v2/src/VaultV2.sol";
 import {MockYieldToken} from "./mocks/MockYieldToken.sol";
+import {HardenedInvariantHandler} from "./Invariants/HardenedInvariantsTest.sol";
 
 contract AlchemistV3Test is Test {
     // ----- [SETUP] Variables for setting up a minimal CDP -----
@@ -1728,6 +1729,76 @@ contract AlchemistV3Test is Test {
         // Half of all debt was earmarked which is 25
         // Repay of 25 will pay off all earmarked debt
         assertEq(earmarked, 0);
+    }
+
+    function testRegression_EarmarkedRepaySyncsBaselineAndPreservesNextGraphWindow() external {
+        uint256 debtAmount = 100e18;
+        uint256 firstRedemptionAmount = 30e18;
+        uint256 transmutationTime = transmuterLogic.timeToTransmute();
+
+        vm.startPrank(address(0xbeef));
+        SafeERC20.safeApprove(address(vault), address(alchemist), type(uint256).max);
+        SafeERC20.safeApprove(address(alToken), address(transmuterLogic), type(uint256).max);
+        alchemist.deposit(200e18, address(0xbeef), 0);
+        uint256 tokenId = AlchemistNFTHelper.getFirstTokenId(address(0xbeef), address(alchemistNFT));
+        alchemist.mint(tokenId, debtAmount, address(0xbeef));
+        transmuterLogic.createRedemption(firstRedemptionAmount, address(0xbeef));
+        vm.stopPrank();
+
+        // Start from a synced baseline so only the earmarked repay transfer can become "new cover".
+        uint256 initialTransmuterBalance = vault.balanceOf(address(transmuterLogic));
+        vm.prank(address(transmuterLogic));
+        alchemist.setTransmuterTokenBalance(initialTransmuterBalance);
+
+        vm.roll(block.number + transmutationTime);
+        uint256 firstWindowDemand = transmuterLogic.queryGraph(alchemist.lastEarmarkBlock() + 1, block.number);
+        alchemist.poke(tokenId);
+
+        (, uint256 debtAfterFirstWindow, uint256 earmarkedAfterFirstWindow) = alchemist.getCDP(tokenId);
+        assertEq(debtAfterFirstWindow, debtAmount, "first earmark should not change debt");
+        assertApproxEqAbs(
+            earmarkedAfterFirstWindow, firstWindowDemand, 1, "first real graph window should earmark its full demand"
+        );
+        assertApproxEqAbs(
+            alchemist.cumulativeEarmarked(), firstWindowDemand, 1, "global earmark should match the first real graph window"
+        );
+
+        uint256 repayShares = alchemist.convertDebtTokensToYield(earmarkedAfterFirstWindow);
+        vm.prank(address(0xbeef));
+        alchemist.repay(repayShares, tokenId);
+
+        assertEq(alchemist.cumulativeEarmarked(), 0, "repay should clear the old earmark");
+        assertEq(alchemist.totalDebt(), debtAmount - earmarkedAfterFirstWindow, "repay should retire the earmarked debt");
+
+        uint256 transmuterBalanceAfterRepay = vault.balanceOf(address(transmuterLogic));
+        assertEq(
+            transmuterBalanceAfterRepay - initialTransmuterBalance,
+            repayShares,
+            "repay should move the old earmark amount into the transmuter"
+        );
+        assertEq(
+            alchemist.lastTransmuterTokenBalance(),
+            transmuterBalanceAfterRepay,
+            "repay should sync the earmarked transfer into the transmuter baseline"
+        );
+
+        // The next real graph window should earmark normally without an extra transmuter sync call.
+        vm.prank(address(0xbeef));
+        transmuterLogic.createRedemption(earmarkedAfterFirstWindow, address(0xbeef));
+        vm.roll(block.number + transmutationTime);
+        uint256 secondWindowDemand = transmuterLogic.queryGraph(alchemist.lastEarmarkBlock() + 1, block.number);
+        assertGt(secondWindowDemand, 0, "second graph window should have demand");
+        alchemist.poke(tokenId);
+        assertApproxEqAbs(
+            alchemist.cumulativeEarmarked(),
+            secondWindowDemand,
+            1,
+            "the next real graph window should be preserved after earmarked repay"
+        );
+        (, , uint256 syncedAccountEarmarked) = alchemist.getCDP(tokenId);
+        assertApproxEqAbs(
+            syncedAccountEarmarked, secondWindowDemand, 1, "account should receive the next real graph earmark"
+        );
     }
 
     function testRepayZeroAmount() external {
@@ -3800,6 +3871,8 @@ contract AlchemistV3Test is Test {
 
         uint256 transmuterPreviousBalance = IERC20(address(vault)).balanceOf(address(transmuterLogic));
         uint256 recipientPreviousBalance = IERC20(address(vault)).balanceOf(address(0xbeef));
+        vm.prank(address(transmuterLogic));
+        alchemist.setTransmuterTokenBalance(transmuterPreviousBalance);
 
         // Self liquidate with partial earmarked debt
         vm.startPrank(address(0xbeef));
@@ -3819,6 +3892,18 @@ contract AlchemistV3Test is Test {
             transmuterPreviousBalance + expectedTotalDebtInYield,
             minimumDepositOrWithdrawalLoss * 2,
             "Transmuter should receive all debt collateral"
+        );
+        uint256 expectedEarmarkedInYield = alchemist.convertDebtTokensToYield(earmarked);
+        vm.assertApproxEqAbs(
+            alchemist.lastTransmuterTokenBalance(),
+            transmuterPreviousBalance + expectedEarmarkedInYield,
+            minimumDepositOrWithdrawalLoss * 2,
+            "Only the earmarked self-liquidation transfer should sync the baseline"
+        );
+        assertGt(
+            IERC20(address(vault)).balanceOf(address(transmuterLogic)),
+            alchemist.lastTransmuterTokenBalance(),
+            "The unearmarked self-liquidation transfer should remain available as cover"
         );
 
         // Verify recipient received remaining collateral
@@ -5072,6 +5157,75 @@ contract AlchemistV3Test is Test {
         assertLe(sumEarmarked, sumDebt);
     }
 
+    function test_Regression_InvariantReplay_SecondClaimTracksGlobals() external {
+        _applyHardenedInvariantEconomicParams();
+
+        address[] memory actors = _makeInvariantReplayActors();
+        _prepareInvariantReplayActors(actors);
+        HardenedInvariantHandler handler = new HardenedInvariantHandler(
+            alchemist,
+            transmuterLogic,
+            alchemistNFT,
+            alToken,
+            IVaultV2(address(vault)),
+            mockVaultCollateral,
+            mockStrategyYieldToken,
+            actors
+        );
+
+        // Exact 8-call shrink from cache/invariant/failures/HardenedInvariantsTest/invariantStorageDebtConsistency.
+        handler.depositCollateral(50656196122083666101050802168726, 2307710199772021343146531995881073408591);
+        handler.borrowCollateral(
+            6898614042340823311443164314616101103946273311309345106222312434892064,
+            10342624683033276849786914209664490721770558159855212392
+        );
+        handler.transmuterStake(
+            115792089237316195423570985008687907853269984665640564039457584007913129639934,
+            73354180014973063332737046566626065127071582521983296318296535285
+        );
+        handler.transmuterClaim(99999000000000000000000);
+        handler.borrowCollateral(
+            28070098845813904317817776102929512538107600590,
+            1947135037254001479810614350013618995486761510397454874914886440968
+        );
+        handler.transmuterStake(25e18, 90e18);
+        handler.transmuterStake(8779635673169312679884516201897249313134705047968610450959861163, 89280301420392);
+        handler.transmuterClaim(112713400);
+
+        uint256 active;
+        uint256 sumCollateral;
+        uint256 sumDebt;
+        uint256 sumEarmarked;
+
+        for (uint256 i = 0; i < actors.length; ++i) {
+            uint256 tokenId = AlchemistNFTHelper.getFirstTokenId(actors[i], address(alchemistNFT));
+            if (tokenId != 0) {
+                alchemist.poke(tokenId);
+            }
+        }
+
+        for (uint256 i = 0; i < actors.length; ++i) {
+            uint256 tokenId = AlchemistNFTHelper.getFirstTokenId(actors[i], address(alchemistNFT));
+            if (tokenId == 0) continue;
+
+            (uint256 collateral, uint256 debt, uint256 earmarked) = alchemist.getCDP(tokenId);
+            active++;
+            sumCollateral += collateral;
+            sumDebt += debt;
+            sumEarmarked += earmarked;
+        }
+
+        assertEq(active, 1, "expected one live replay account");
+
+        uint256 totalDebt = alchemist.totalDebt();
+        uint256 cumulativeEarmarked = alchemist.cumulativeEarmarked();
+        uint256 totalDeposited = alchemist.getTotalDeposited();
+
+        assertEq(sumDebt, totalDebt, "replay debt drift");
+        assertEq(sumEarmarked, cumulativeEarmarked, "replay earmark drift");
+        assertEq(sumCollateral, totalDeposited, "replay collateral drift");
+    }
+
     struct ReplayState {
         uint256 collateral;
         uint256 debt;
@@ -5151,6 +5305,46 @@ contract AlchemistV3Test is Test {
         assertApproxEqAbs(split.sumDebt, unsplit.sumDebt, tol, "split-vs-unsplit debt mismatch");
         assertApproxEqAbs(split.sumEarmarked, unsplit.sumEarmarked, tol, "split-vs-unsplit earmarked mismatch");
         assertApproxEqAbs(split.sumCollateral, unsplit.sumCollateral, tol, "split-vs-unsplit collateral mismatch");
+    }
+
+    function _applyHardenedInvariantEconomicParams() internal {
+        vm.startPrank(alOwner);
+        alchemist.setProtocolFee(25);
+        alchemist.setLiquidatorFee(300);
+        alchemist.setRepaymentFee(0);
+        alchemist.setMinimumCollateralization(1_111_111_111_111_111_111);
+        alchemist.setCollateralizationLowerBound(1_052_631_578_950_000_000);
+        alchemist.setLiquidationTargetCollateralization(1_111_111_111_111_111_111);
+
+        transmuterLogic.setProtocolFeeReceiver(protocolFeeReceiver);
+        transmuterLogic.setTransmutationFee(0);
+        transmuterLogic.setExitFee(100);
+        transmuterLogic.setTransmutationTime(604_800);
+        vm.stopPrank();
+    }
+
+    function _makeInvariantReplayActors() internal returns (address[] memory actors) {
+        actors = new address[](8);
+        actors[0] = makeAddr("Sender1");
+        actors[1] = makeAddr("Sender2");
+        actors[2] = makeAddr("Sender3");
+        actors[3] = makeAddr("Sender4");
+        actors[4] = makeAddr("Sender5");
+        actors[5] = makeAddr("Sender6");
+        actors[6] = makeAddr("Sender7");
+        actors[7] = makeAddr("Sender8");
+    }
+
+    function _prepareInvariantReplayActors(address[] memory actors) internal {
+        for (uint256 i = 0; i < actors.length; ++i) {
+            vm.prank(address(0xdead));
+            alToken.setWhitelist(actors[i], true);
+
+            vm.startPrank(actors[i]);
+            TokenUtils.safeApprove(address(alToken), address(alchemist), type(uint256).max);
+            TokenUtils.safeApprove(address(alchemist.myt()), address(alchemist), type(uint256).max);
+            vm.stopPrank();
+        }
     }
 
     function _assertStaleEpochReplayEquivalence(uint256 staleEpochs) internal {
