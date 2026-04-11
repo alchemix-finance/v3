@@ -72,6 +72,7 @@ contract DeployV3OptimismScript is Script {
     address public aavePoolProvider = 0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb; 
     address public aaveRewardsController_OP = 0x929EC64c34a17401F460460D4B9390518E5B473e; // Aave RewardsController on Optimism
     address public aaveRewardToken_OP = 0x4200000000000000000000000000000000000042; // OP token on Optimism
+    address public aaveV3WethAToken = 0xe50fA9b3c56FfB159cB0FCA61F5c9D750e8128c8;
 
     // wstETH
     address public wstETH = 0x1F32b1c2345538c0c6f582fCB022739c4A194Ebb;
@@ -100,6 +101,18 @@ contract DeployV3OptimismScript is Script {
         estimatedYield: 350,
         additionalIncentives: false,
         slippageBPS: 50
+    });
+
+    IMYTStrategy.StrategyParams public aaveV3WethParams = IMYTStrategy.StrategyParams({
+        owner: deployerAddr,
+        name: "AaveV3 OP WETH",
+        protocol: "AaveV3",
+        riskClass: IMYTStrategy.RiskClass.LOW,
+        cap: 10_000e18,
+        globalCap: 1e18,
+        estimatedYield: 400,
+        additionalIncentives: false,
+        slippageBPS: 1
     });
 
     function setUp() public {}
@@ -150,6 +163,29 @@ contract DeployV3OptimismScript is Script {
         return strategy;
     }
 
+    function deployAaveV3OPWETHStrategy(address myt) internal returns (AaveStrategy) {
+        AaveStrategy strategy = new AaveStrategy(
+            myt,
+            aaveV3WethParams,
+            wethOP,
+            aaveV3WethAToken,
+            aavePoolProvider,
+            aaveRewardsController_OP,
+            aaveRewardToken_OP
+        );
+        strategy.setKillSwitch(true);
+        curator.submitSetStrategy(address(strategy), address(myt));
+        curator.setStrategy(address(strategy), address(myt));
+        bytes memory idData = strategy.getIdData();
+        curator.submitIncreaseAbsoluteCap(address(strategy), aaveV3WethParams.cap);
+        curator.increaseAbsoluteCap(address(strategy), aaveV3WethParams.cap);
+        curator.submitIncreaseRelativeCap(address(strategy), aaveV3WethParams.globalCap);
+        curator.increaseRelativeCap(address(strategy), aaveV3WethParams.globalCap);
+
+        strategy.transferOwnership(newOwner);
+        return strategy;
+    }
+
     function deployUSDCStrategies(address myt) public {
         AaveStrategy aaveUSDCStrategy = deployAaveV3OPUSDCStrategy(myt);
         usdcStrategies.push(address(aaveUSDCStrategy));
@@ -159,9 +195,12 @@ contract DeployV3OptimismScript is Script {
 
     function deployETHStrategies(address myt) public {
         WstethStrategy wstEthStrategy = deployWstEthStrategy(myt);
+        AaveStrategy aaveV3WethStrategy = deployAaveV3OPWETHStrategy(myt);
         ethStrategies.push(address(wstEthStrategy));
+        ethStrategies.push(address(aaveV3WethStrategy));
 
         console.log("WstETH Optimism Strategy deployed at:", address(wstEthStrategy));
+        console.log("AaveV3 OP WETH Strategy deployed at:", address(aaveV3WethStrategy));
     }
 
     function deployAlAsset(string memory name, string memory ticker) public returns (address) {
