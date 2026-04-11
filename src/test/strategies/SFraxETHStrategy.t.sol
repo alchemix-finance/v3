@@ -30,6 +30,7 @@ contract MockSwapperForSFraxETH {
 contract SFraxETHStrategyTest is Test {
     uint256 internal constant ABSOLUTE_CAP = 1_000_000e18;
     uint256 internal constant RELATIVE_CAP = 1e18;
+    uint256 internal constant MIN_FRXETH_OUT_BPS = 9000;
 
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant FRXETH = 0x5E8422345238F34275888049021821E8E08CAa1f;
@@ -136,6 +137,54 @@ contract SFraxETHStrategyTest is Test {
         assertEq(IERC20(FRXETH).balanceOf(address(strategy)), 0, "strategy should not retain frxETH after deposit");
         assertEq(IERC20(WETH).balanceOf(address(strategy)), 0, "strategy should not retain idle WETH after swap allocation");
         assertApproxEqRel(IMYTStrategy(address(strategy)).realAssets(), ISfrxETHView(SFRXETH).convertToAssets(sharesBalance), 1e15);
+    }
+
+    function test_allocator_allocateWithSwap_reverts_below_minFrxEthOut_floor_when_oracle_min_is_weakened() public {
+        uint256 amountIn = 10e18;
+        uint256 minFrxEthOut = (amountIn * MIN_FRXETH_OUT_BPS) / 10_000;
+        uint256 mockedOut = minFrxEthOut - 1;
+
+        vm.mockCall(
+            FRXETH_ETH_DUAL_ORACLE,
+            abi.encodeWithSignature("getPrices()"),
+            abi.encode(false, uint256(100e18), uint256(100e18))
+        );
+
+        MockSwapperForSFraxETH swapper = new MockSwapperForSFraxETH();
+        deal(FRXETH, address(swapper), mockedOut);
+
+        vm.prank(admin);
+        strategy.setMinFrxEthOutBps(MIN_FRXETH_OUT_BPS);
+
+        vm.prank(admin);
+        MYTStrategy(address(strategy)).setAllowanceHolder(address(swapper));
+
+        bytes memory txData = abi.encodeCall(MockSwapperForSFraxETH.swap, (WETH, FRXETH, amountIn, mockedOut));
+
+        vm.expectRevert(abi.encodeWithSelector(IMYTStrategy.InvalidAmount.selector, minFrxEthOut, mockedOut));
+        vm.prank(admin);
+        IAllocator(address(allocator)).allocateWithSwap(address(strategy), amountIn, txData);
+    }
+
+    function test_setMinFrxEthOutBps_onlyOwner_updatesValue() public {
+        assertEq(strategy.minFrxEthOutBps(), 0, "unexpected initial minFrxEthOutBps");
+
+        vm.prank(admin);
+        strategy.setMinFrxEthOutBps(MIN_FRXETH_OUT_BPS);
+
+        assertEq(strategy.minFrxEthOutBps(), MIN_FRXETH_OUT_BPS, "minFrxEthOutBps should update");
+    }
+
+    function test_setMinFrxEthOutBps_reverts_for_non_owner() public {
+        vm.expectRevert();
+        vm.prank(operator);
+        strategy.setMinFrxEthOutBps(MIN_FRXETH_OUT_BPS);
+    }
+
+    function test_setMinFrxEthOutBps_reverts_above_bps_limit() public {
+        vm.expectRevert(bytes("Invalid min frxETH out bps"));
+        vm.prank(admin);
+        strategy.setMinFrxEthOutBps(10_001);
     }
 
     function test_allocator_deallocate_with_unwrapAndSwap_usesFrxEthIntermediate() public {

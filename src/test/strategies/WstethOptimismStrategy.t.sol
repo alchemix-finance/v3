@@ -67,7 +67,7 @@ contract MockWstethOptimismStrategy is WstethStrategy {
         address _wstETH,
         address _wstEthEthOracle
     )
-        WstethStrategy(_myt, _params, _wstETH, _wstEthEthOracle, false, 7000)
+        WstethStrategy(_myt, _params, _wstETH, _wstEthEthOracle, false)
     {}
 }
 

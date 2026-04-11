@@ -19,9 +19,12 @@ interface ISfrxETH {
 }
 
 contract SFraxETHStrategy is OraclePricedSwapStrategy {
+    event MinFrxEthOutBpsUpdated(uint256 indexed newMinFrxEthOutBps);
+
     IFraxMinter public immutable minter;
     IERC20 public immutable frxETH;
     ISfrxETH public immutable sfrxETH;
+    uint256 public minFrxEthOutBps;
 
     constructor(
         address _myt,
@@ -30,15 +33,17 @@ contract SFraxETHStrategy is OraclePricedSwapStrategy {
         address _frxETH,
         address _sfrxETH,
         address _pricedTokenEthOracle,
-        uint256 _minAllocationOutBps
-    ) OraclePricedSwapStrategy(_myt, _params, _pricedTokenEthOracle, _minAllocationOutBps) {
+        uint256 _minFrxEthOutBps
+    ) OraclePricedSwapStrategy(_myt, _params, _pricedTokenEthOracle) {
         require(_minter != address(0), "Zero minter address");
         require(_frxETH != address(0), "Zero frxETH address");
         require(_sfrxETH != address(0), "Zero sfrxETH address");
+        require(_minFrxEthOutBps <= 10_000, "Invalid min frxETH out bps");
 
         minter = IFraxMinter(_minter);
         frxETH = IERC20(_frxETH);
         sfrxETH = ISfrxETH(_sfrxETH);
+        minFrxEthOutBps = _minFrxEthOutBps;
     }
 
     function _allocate(uint256 amount) internal override returns (uint256) {
@@ -57,6 +62,14 @@ contract SFraxETHStrategy is OraclePricedSwapStrategy {
         require(sharesReceived > 0, "No sfrxETH received");
     }
 
+    /// @notice Updates the minimum raw frxETH output floor enforced after swap-based allocations.
+    /// @dev This is an oracle-independent downside guard against pathological quotes or severe frxETH depegs.
+    function setMinFrxEthOutBps(uint256 newMinFrxEthOutBps) external onlyOwner {
+        require(newMinFrxEthOutBps <= 10_000, "Invalid min frxETH out bps");
+        minFrxEthOutBps = newMinFrxEthOutBps;
+        emit MinFrxEthOutBpsUpdated(newMinFrxEthOutBps);
+    }
+
     function _deallocate(uint256, bytes memory) internal pure override returns (uint256) {
         revert ActionNotSupported();
     }
@@ -71,6 +84,13 @@ contract SFraxETHStrategy is OraclePricedSwapStrategy {
 
     function _positionBalance() internal view override returns (uint256) {
         return sfrxETH.convertToAssets(sfrxETH.balanceOf(address(this)));
+    }
+
+    function _allocationSwapGuard(uint256 assetAmountIn, uint256, uint256 oracleTokenReceived) internal view override {
+        if (minFrxEthOutBps == 0) return;
+
+        uint256 minFrxEthOut = (assetAmountIn * minFrxEthOutBps) / 10_000;
+        if (oracleTokenReceived < minFrxEthOut) revert InvalidAmount(minFrxEthOut, oracleTokenReceived);
     }
 
     function _prepareOracleTokenForSwap(uint256) internal pure override returns (uint256) {

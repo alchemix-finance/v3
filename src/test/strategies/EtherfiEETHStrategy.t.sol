@@ -126,8 +126,7 @@ contract MockEtherfiEETHStrategy is EtherfiEETHMYTStrategy {
             _weETH,
             _depositAdapter,
             _redemptionManager,
-            _weEthEthOracle,
-            0
+            _weEthEthOracle
         )
     {}
 }
