@@ -594,6 +594,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
         // Forward the repaid MYT to the transmuter.
         TokenUtils.safeTransferFrom(myt, msg.sender, transmuter, creditToYield);
+        _syncEarmarkedTransmuterTransfer(creditToYield, earmarkedRepaidToYield);
         if (feeAmount > 0) {
             TokenUtils.safeTransfer(myt, protocolFeeReceiver, feeAmount);
         }
@@ -846,6 +847,15 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         lastTransmuterTokenBalance = amount;
     }
 
+    /// @dev Keeps already-earmarked transfers from being re-counted as future cover.
+    function _syncEarmarkedTransmuterTransfer(uint256 sharesSent, uint256 earmarkedShares) internal {
+        if (earmarkedShares == 0) return;
+
+        // Only the portion that satisfied an existing earmark should bypass cover accounting.
+        if (sharesSent > earmarkedShares) sharesSent = earmarkedShares;
+        lastTransmuterTokenBalance += sharesSent;
+    }
+
     /// @inheritdoc IAlchemistV3Actions
     function poke(uint256 tokenId) external {
         _checkForValidAccountId(tokenId);
@@ -958,7 +968,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         uint256 credit = _capDebtCredit(amount, debt);
         if (credit == 0) return 0;
         // Reduce earmarked debt first, then total debt.
-        _subEarmarkedDebt(credit, accountId);
+        uint256 earmarkedRepaid = _subEarmarkedDebt(credit, accountId);
         _subDebt(accountId, credit);
         
         // Remove the collateral that backs the retired debt.
@@ -974,6 +984,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         if (creditToYield > 0) {
             // Route the retired collateral to the transmuter.
             TokenUtils.safeTransfer(myt, address(transmuter), creditToYield);
+            _syncEarmarkedTransmuterTransfer(creditToYield, convertDebtTokensToYield(earmarkedRepaid));
         }
 
         if (protocolFeeTotal > 0) {
@@ -1505,13 +1516,26 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         uint256 unredeemedRatio = FixedPointMath.divQ128(survivalDiff, earmarkSurvival);
         uint256 earmarkedUnredeemed = FixedPointMath.mulQ128(userExposure, unredeemedRatio);
 
+        uint256 oldEarEpoch = account.lastAccruedEarmarkWeight >> _EARMARK_INDEX_BITS;
+        uint256 newEarEpoch = earmarkWeightCurrent >> _EARMARK_INDEX_BITS;
+        if (newEarEpoch == oldEarEpoch) {
+            uint256 currentEarmarkIndex = earmarkWeightCurrent & _EARMARK_INDEX_MASK;
+            uint256 telescopedEarmarkDrop = earmarkSurvival > currentEarmarkIndex ? earmarkSurvival - currentEarmarkIndex : 0;
+
+            // When the current sync window stayed inside one earmark epoch and the accumulator
+            // collapses to the telescoped earmark drop, there were no interleaved pre-claim
+            // redemptions that require per-step weighting. Using the user-sized formula here
+            // avoids amplifying index-scale ceil rounding by exposure / earmarkSurvival.
+            if (survivalDiff == FixedPointMath.mulQ128(telescopedEarmarkDrop, survivalRatio)) {
+                earmarkedUnredeemed = FixedPointMath.mulQ128(earmarkRaw, survivalRatio);
+            }
+        }
+
         // If the account crossed an earmark epoch, split math at the first boundary:
         // - pre-boundary via accumulator diff at epoch boundary,
         // - post-boundary via redemption survival only.
         // This avoids both over-redemption (pre-boundary redemptions applied twice)
         // and under-redemption (post-boundary accumulator contamination).
-        uint256 oldEarEpoch = account.lastAccruedEarmarkWeight >> _EARMARK_INDEX_BITS;
-        uint256 newEarEpoch = earmarkWeightCurrent >> _EARMARK_INDEX_BITS;
         if (newEarEpoch > oldEarEpoch) {
             uint256 boundaryEpoch = oldEarEpoch + 1;
             uint256 boundaryRedemptionWeight = _earmarkEpochStartRedemptionWeight[boundaryEpoch];
