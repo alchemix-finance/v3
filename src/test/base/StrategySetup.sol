@@ -71,13 +71,40 @@ abstract contract StrategySetup is Test, IRevertAllowlistProvider {
         return false;
     }
 
+    /// @dev Optional strategy-specific allocator unwrap-and-swap deallocate mode.
+    ///      Default behavior does not use unwrap + swap.
+    function _useAllocatorDeallocateUnwrapAndSwap() internal pure virtual returns (bool) {
+        return false;
+    }
+
     /// @dev Optional strategy-specific calldata provider for allocator swap deallocate.
     function _allocatorDeallocateSwapData(uint256) internal view virtual returns (bytes memory) {
         return bytes("");
     }
 
+    /// @dev Optional strategy-specific minimum intermediate out provider for unwrap-and-swap deallocation.
+    function _allocatorDeallocateMinIntermediateOut(uint256) internal view virtual returns (uint256) {
+        return 0;
+    }
+
     function isMytRevertAllowed(bytes4, RevertContext) external view virtual returns (bool) {
         return false;
+    }
+
+    function useAllocatorDeallocateSwap() external view virtual returns (bool) {
+        return _useAllocatorDeallocateSwap();
+    }
+
+    function useAllocatorDeallocateUnwrapAndSwap() external view virtual returns (bool) {
+        return _useAllocatorDeallocateUnwrapAndSwap();
+    }
+
+    function allocatorDeallocateSwapData(uint256 amount) external view virtual returns (bytes memory) {
+        return _allocatorDeallocateSwapData(amount);
+    }
+
+    function allocatorDeallocateMinIntermediateOut(uint256 amount) external view virtual returns (uint256) {
+        return _allocatorDeallocateMinIntermediateOut(amount);
     }
 
     function setUp() public virtual {

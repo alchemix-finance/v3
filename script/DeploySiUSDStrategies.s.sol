@@ -17,6 +17,7 @@ contract DeploySiUSDStrategiesScript is Script {
         address gateway;
         address mintController;
         address redeemController;
+        address iUsdUsdcOracle;
         IMYTStrategy.StrategyParams params;
     }
 
@@ -33,7 +34,8 @@ contract DeploySiUSDStrategiesScript is Script {
             config.siUSD,
             config.gateway,
             config.mintController,
-            config.redeemController
+            config.redeemController,
+            config.iUsdUsdcOracle
         );
         strategyAddr = address(strategy);
 

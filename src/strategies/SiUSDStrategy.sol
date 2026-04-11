@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {MYTStrategy} from "../MYTStrategy.sol";
+import {OraclePricedSwapStrategy} from "./OraclePricedSwapStrategy.sol";
 import {TokenUtils} from "../libraries/TokenUtils.sol";
 
 interface IMintController {
@@ -27,9 +27,12 @@ interface IInfiniFiGateway {
 
 /**
  * @title SiUSDStrategy
- * @notice Allocates USDC into staked InfiniFi siUSD shares and deallocates back to USDC.
+ * @notice Allocates USDC into staked InfiniFi siUSD shares and supports:
+ *         1. direct deallocation via siUSD -> iUSD -> USDC redeem
+ *         2. unwrap-and-swap fallback via siUSD -> iUSD -> USDC swap
  */
-contract SiUSDStrategy is MYTStrategy {
+contract SiUSDStrategy is OraclePricedSwapStrategy {
+    uint256 internal constant DIRECT_PREVIEW_BUFFER = 100;
 
     IERC20 public immutable usdc;
     IERC20 public immutable iUSD;
@@ -46,8 +49,9 @@ contract SiUSDStrategy is MYTStrategy {
         address _siUSD,
         address _gateway,
         address _mintController,
-        address _redeemController
-    ) MYTStrategy(_myt, _params) {
+        address _redeemController,
+        address _pricedTokenEthOracle
+    ) OraclePricedSwapStrategy(_myt, _params, _pricedTokenEthOracle) {
         require(_usdc != address(0), "Zero USDC address");
         require(_iUSD != address(0), "Zero iUSD address");
         require(_siUSD != address(0), "Zero siUSD address");
@@ -59,20 +63,24 @@ contract SiUSDStrategy is MYTStrategy {
         usdc = IERC20(_usdc);
         iUSD = IERC20(_iUSD);
         siUSD = ISIUSD(_siUSD);
-        gateway = IInfiniFiGateway(_gateway);
         mintController = IMintController(_mintController);
         redeemController = IRedeemController(_redeemController);
+        gateway = IInfiniFiGateway(_gateway);
     }
 
     function _allocate(uint256 amount) internal override returns (uint256) {
-        _ensureIdleBalance(address(usdc), amount);
+        _ensureIdleBalance(_asset(), amount);
 
-        TokenUtils.safeApprove(address(usdc), address(gateway), 0);
-        TokenUtils.safeApprove(address(usdc), address(gateway), amount);
+        TokenUtils.safeApprove(_asset(), address(gateway), 0);
+        TokenUtils.safeApprove(_asset(), address(gateway), amount);
         uint256 sharesReceived = gateway.mintAndStake(address(this), amount);
-        TokenUtils.safeApprove(address(usdc), address(gateway), 0);
+        TokenUtils.safeApprove(_asset(), address(gateway), 0);
         require(sharesReceived > 0, "No siUSD received");
         return amount;
+    }
+
+    function _allocate(uint256, bytes memory) internal pure override returns (uint256) {
+        revert ActionNotSupported();
     }
 
     function _deallocate(uint256 amount) internal override returns (uint256) {
@@ -108,41 +116,86 @@ contract SiUSDStrategy is MYTStrategy {
         return amount;
     }
 
-    function _totalValue() internal view override returns (uint256) {
-        uint256 idleUsdc = _idleAssets();
-        uint256 totalReceiptBalance = TokenUtils.safeBalanceOf(address(iUSD), address(this))
-            + siUSD.convertToAssets(siUSD.balanceOf(address(this)));
 
-        if (totalReceiptBalance == 0) return idleUsdc;
-        return idleUsdc + redeemController.receiptToAsset(totalReceiptBalance);
+    function _deallocate(uint256, bytes memory) internal pure override returns (uint256) {
+        revert ActionNotSupported();
     }
 
-    function _idleAssets() internal view override returns (uint256) {
-        return TokenUtils.safeBalanceOf(address(usdc), address(this));
+    function _oracleToken() internal view override returns (address) {
+        return address(iUSD);
+    }
+
+    function _positionBalance() internal view override returns (uint256) {
+        return TokenUtils.safeBalanceOf(address(iUSD), address(this)) + siUSD.convertToAssets(siUSD.balanceOf(address(this)));
+    }
+
+    function _totalValue() internal view override returns (uint256) {
+        uint256 idleUsdc = _idleAssets();
+        uint256 totalReceiptBalance = _positionBalance();
+        if (totalReceiptBalance == 0) return idleUsdc;
+        return idleUsdc + redeemController.receiptToAsset(totalReceiptBalance);
     }
 
     function _previewAdjustedWithdraw(uint256 amount) internal view override returns (uint256) {
         uint256 idleBalance = _idleAssets();
         if (idleBalance >= amount) return amount;
 
+        uint256 availableReceipts = _positionBalance();
+        if (availableReceipts == 0) return idleBalance;
+
         uint256 shortfall = amount - idleBalance;
-        uint256 iUsdNeeded = mintController.assetToReceipt(shortfall);
-        uint256 sharesToUnstake = siUSD.previewWithdraw(iUsdNeeded);
-        uint256 siUsdBalance = siUSD.balanceOf(address(this));
-        if (sharesToUnstake > siUsdBalance) sharesToUnstake = siUsdBalance;
-        if (sharesToUnstake == 0) return idleBalance;
+        uint256 receiptsNeeded = mintController.assetToReceipt(shortfall);
+        uint256 receiptsToRedeem = receiptsNeeded < availableReceipts ? receiptsNeeded : availableReceipts;
+        if (receiptsToRedeem == 0) return idleBalance;
 
-        uint256 iUsdRedeemable =
-            TokenUtils.safeBalanceOf(address(iUSD), address(this)) + siUSD.convertToAssets(sharesToUnstake);
-        uint256 iUsdToRedeem = iUsdNeeded > iUsdRedeemable ? iUsdRedeemable : iUsdNeeded;
-        if (iUsdToRedeem == 0) return idleBalance;
+        uint256 redeemableAssets = _applyDirectPreviewDiscount(redeemController.receiptToAsset(receiptsToRedeem));
+        uint256 totalAvailable = idleBalance + redeemableAssets;
+        uint256 maxPreview = amount > DIRECT_PREVIEW_BUFFER + 1 ? amount - DIRECT_PREVIEW_BUFFER - 1 : idleBalance;
+        return totalAvailable < maxPreview ? totalAvailable : maxPreview;
+    }
 
-        uint256 expectedAssets = redeemController.receiptToAsset(iUsdToRedeem);
-        if (expectedAssets == 0) return idleBalance;
+    function _applyDirectPreviewDiscount(uint256 assetAmount) internal view returns (uint256) {
+        uint256 discounted = assetAmount - (assetAmount * params.slippageBPS / 10_000);
+        if (discounted <= DIRECT_PREVIEW_BUFFER + 1) return 0;
+        return discounted - DIRECT_PREVIEW_BUFFER - 1;
+    }
 
-        uint256 adjustedAssets = expectedAssets - (expectedAssets * params.slippageBPS / 10_000);
-        uint256 total = idleBalance + adjustedAssets;
-        return total > amount ? amount : total;
+    function _prepareOracleTokenForSwap(uint256) internal pure override returns (uint256) {
+        revert ActionNotSupported();
+    }
+
+    function _prepareIntermediateForSwap(uint256 maxOracleTokenIn, uint256 minIntermediateOutAmount)
+        internal
+        override
+        returns (address sellToken, uint256 sellAmount)
+    {
+        if (minIntermediateOutAmount == 0) {
+            sellToken = address(iUSD);
+            return (sellToken, 0);
+        }
+
+        require(minIntermediateOutAmount <= maxOracleTokenIn, "Intermediate exceeds max oracle token in");
+
+        uint256 iUsdBalance = TokenUtils.safeBalanceOf(address(iUSD), address(this));
+        sellAmount = iUsdBalance;
+
+        if (sellAmount < minIntermediateOutAmount) {
+            uint256 missingIUsd = minIntermediateOutAmount - sellAmount;
+            uint256 sharesNeeded = siUSD.previewWithdraw(missingIUsd);
+            uint256 sharesBalance = siUSD.balanceOf(address(this));
+            require(sharesNeeded > 0, "No siUSD to unstake");
+            require(sharesNeeded <= sharesBalance, "Insufficient siUSD balance");
+
+            TokenUtils.safeApprove(address(siUSD), address(gateway), 0);
+            TokenUtils.safeApprove(address(siUSD), address(gateway), sharesNeeded);
+            gateway.unstake(address(this), sharesNeeded);
+            TokenUtils.safeApprove(address(siUSD), address(gateway), 0);
+
+            sellAmount = TokenUtils.safeBalanceOf(address(iUSD), address(this));
+        }
+
+        require(sellAmount >= minIntermediateOutAmount, "Insufficient intermediate out");
+        sellToken = address(iUSD);
     }
 
     function _isProtectedToken(address token) internal view override returns (bool) {
