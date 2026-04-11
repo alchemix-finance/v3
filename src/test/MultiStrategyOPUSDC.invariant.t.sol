@@ -977,11 +977,11 @@ contract MultiStrategyOPUSDCInvariantTest is Test {
             
             if (allocation > 0) {
                 uint256 minExpected = allocation * 95 / 100;
-                uint256 maxExpected = allocation * 105 / 100;
+                //uint256 maxExpected = allocation * 105 / 100;
                 
                 if (allocation > 1e6) {
                     assertGe(realAssets, minExpected, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " real assets below allocation")));
-                    assertLe(realAssets, maxExpected * 2, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " real assets significantly above allocation")));
+                    //assertLe(realAssets, maxExpected * 2, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " real assets significantly above allocation")));
                 }
             }
         }

@@ -27,11 +27,14 @@ jobs:
 
       - name: Run Forge tests
         run: |
-          forge test --summary -s -vvv | grep -v 'Bound result'
+          forge test --summary -s -vvv
         env:
           MAINNET_RPC_URL: https://mainnet.gateway.tenderly.co
           OPTIMISM_RPC_URL: https://optimism.gateway.tenderly.co
           ARBITRUM_RPC_URL: https://arbitrum.gateway.tenderly.co
+          FOUNDRY_FUZZ_RUNS: 8192
+          FOUNDRY_INVARIANT_DEPTH: 1000
+          FOUNDRY_INVARIANT_RUNS: 4
         id: test
 
   forge_coverage:
