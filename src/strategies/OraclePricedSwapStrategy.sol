@@ -10,20 +10,12 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
 
     AggregatorV3Interface public immutable pricedTokenEthOracle;
     uint8 public immutable pricedTokenEthOracleDecimals;
-    uint256 public minAllocationOutBps;
 
-    constructor(
-        address _myt,
-        StrategyParams memory _params,
-        address _pricedTokenEthOracle,
-        uint256 _minAllocationOutBps
-    ) MYTStrategy(_myt, _params) {
+    constructor(address _myt, StrategyParams memory _params, address _pricedTokenEthOracle) MYTStrategy(_myt, _params) {
         require(_pricedTokenEthOracle != address(0), "Zero oracle address");
-        require(_minAllocationOutBps <= 10_000, "Invalid min allocation out bps");
 
         pricedTokenEthOracle = AggregatorV3Interface(_pricedTokenEthOracle);
         pricedTokenEthOracleDecimals = pricedTokenEthOracle.decimals();
-        minAllocationOutBps = _minAllocationOutBps;
     }
 
     function _allocate(uint256 amount, bytes memory callData) internal virtual override returns (uint256) {
@@ -150,24 +142,16 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
         return MYT.asset();
     }
 
-    /// @notice Updates the minimum oracle-token output threshold enforced during swap-based allocations.
-    /// @param newMinAllocationOutBps The minimum output floor, expressed in basis points of the asset amount in.
-    function setMinAllocationOutBps(uint256 newMinAllocationOutBps) public onlyOwner {
-        require(newMinAllocationOutBps <= 10_000, "Invalid min allocation out bps");
-        minAllocationOutBps = newMinAllocationOutBps;
-        emit MinAllocationOutBpsUpdated(newMinAllocationOutBps);
-    }
-
     /// @notice Validates the result of an allocation swap before any post-swap processing occurs.
-    /// @dev Child strategies can override to add stricter checks, but should usually call `super`.
+    /// @dev Override in child strategies to apply strategy-specific post-swap output guards.
     /// @param assetAmountIn The vault asset amount spent in the swap.
+    /// @param minOracleTokenOut The oracle-priced minimum output passed to the swap executor.
     /// @param oracleTokenReceived The amount of oracle token received from the swap.
-    function _allocationSwapGuard(uint256 assetAmountIn, uint256, uint256 oracleTokenReceived) internal view virtual {
-        if (minAllocationOutBps == 0) return;
-
-        uint256 minAllocationOut = (assetAmountIn * minAllocationOutBps) / 10_000;
-        if (oracleTokenReceived < minAllocationOut) revert InvalidAmount(minAllocationOut, oracleTokenReceived);
-    }
+    function _allocationSwapGuard(uint256 assetAmountIn, uint256 minOracleTokenOut, uint256 oracleTokenReceived)
+        internal
+        view
+        virtual
+    {}
 
     /// @notice Optional hook for child strategies to transform or stake the received oracle token after allocation.
     /// @param oracleTokenReceived The oracle token amount returned by the allocation swap.
