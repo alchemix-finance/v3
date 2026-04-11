@@ -888,7 +888,7 @@ contract HardenedInvariantsTest is InvariantsTest {
         // A replayed 8-step counterexample reached ~8.15e15 debt drift with a
         // single live account, so keep a small fixed floor with modest headroom
         // while still scaling for decimal normalization.
-        uint256 debtTol = _max(2e16, cf * _max(active, 1));
+        uint256 debtTol = _max(5e12, cf * _max(active, 1));
         // Collateral drift is structurally larger: lazy sync uses a weighted-
         // average shares/debt ratio across redemptions, diverging from per-
         // redemption exact debits when share prices shift between redemptions.

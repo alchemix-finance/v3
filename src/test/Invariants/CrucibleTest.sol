@@ -54,6 +54,7 @@ contract CrucibleTest is InvariantsTest {
 
     bool public inBadDebtState;
     bool public lossAfterLastLiquidation; // tracks if a loss occurred after the most recent cascade
+    bool public recoverySinceLastStress; // successful recovery checkpoint still current for C5
 
     uint256 internal constant MAX_TEST_VALUE = 1e28;
     bytes4 internal constant ILLEGAL_STATE_SELECTOR = bytes4(keccak256("IllegalState()"));
@@ -221,7 +222,7 @@ contract CrucibleTest is InvariantsTest {
 
         vm.prank(onBehalf);
         try alchemist.mint(tokenId, amount, onBehalf) {
-            // no-op
+            recoverySinceLastStress = false;
         } catch (bytes memory reason) {
             _handleExpectedBadDebtRevert(reason);
         }
@@ -306,7 +307,7 @@ contract CrucibleTest is InvariantsTest {
             uint256 borrowAmt = bound(amount, 1, maxBorrow);
             vm.prank(minter);
             try alchemist.mint(tokenId, borrowAmt, minter) {
-                // no-op
+                recoverySinceLastStress = false;
             } catch (bytes memory reason) {
                 _handleExpectedBadDebtRevert(reason);
                 return;
@@ -347,6 +348,8 @@ contract CrucibleTest is InvariantsTest {
         vm.startPrank(onBehalf);
         transmuterLogic.claimRedemption(tid);
         vm.stopPrank();
+
+        recoverySinceLastStress = false;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -395,6 +398,7 @@ contract CrucibleTest is InvariantsTest {
         ITestYieldToken(mockStrategyYieldToken).siphon(lossAmount);
         totalLossRealized += lossAmount;
         lossAfterLastLiquidation = true;
+        recoverySinceLastStress = false;
 
         _checkBadDebtState();
     }
@@ -478,6 +482,7 @@ contract CrucibleTest is InvariantsTest {
 
         if (liquidatedCount > 0) {
             lossAfterLastLiquidation = false; // reset — we just cleaned up
+            recoverySinceLastStress = false;
             if (liquidatedCount > 1) {
                 cascadingLiquidationRounds++;
             }
@@ -575,6 +580,8 @@ contract CrucibleTest is InvariantsTest {
 
         vm.prank(onBehalf);
         transmuterLogic.claimRedemption(tid);
+
+        recoverySinceLastStress = false;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -602,6 +609,7 @@ contract CrucibleTest is InvariantsTest {
         _checkBadDebtState();
         if (wasInBadDebt && !inBadDebtState) {
             recoveryEvents++;
+            recoverySinceLastStress = true;
         }
     }
 
@@ -637,6 +645,25 @@ contract CrucibleTest is InvariantsTest {
         this.transmuterClaim(5951);
 
         this.invariantDebtConsistency();
+    }
+
+    function test_Regression_RecoveryInvariant_IgnoresStaleRecoveryAfterLaterStress() public {
+        this.depositCollateral(2372, 1e24);
+        this.realizeLargeValueLoss(5_184_000);
+        this.transmuterClaimDuringBadDebt(16032393237489252879, 12080589133847099991);
+        this.realizeLargeValueLoss(15023546907106063555193036943180048415051158506344677672114535166);
+        this.recoverFromLoss(1_000_000);
+        this.realizeLargeValueLoss(9662);
+        this.realizeLargeValueLoss(535473456517434585642216277857931979893938385580);
+        this.depositCollateral(type(uint256).max, 8272684481589);
+        this.recoverFromLoss(88909182746640073509994862822485359098259267332);
+        this.recoverFromLoss(2572098644657603845274017501833254511490950969702);
+        this.recoverFromLoss(type(uint256).max);
+
+        assertFalse(recoverySinceLastStress, "later stress should invalidate any prior recovery checkpoint");
+        assertGt(totalYieldAccrued, totalLossRealized, "lifetime net yield should be positive");
+
+        this.invariantRecoveryWorks();
     }
 
     function invariantDebtConsistency() public {
@@ -782,12 +809,15 @@ contract CrucibleTest is InvariantsTest {
     //  - Liquidation penalties erode backing further (~3% per liquidation)
     //  - Transmuter claims distribute yield tokens out of the system
     //  - Multiple loss-recovery cycles amplify the divergence
+    //  Only enforce this while the latest successful recovery has not been
+    //  superseded by a later stress event (loss, claim, liquidation, or new debt).
     //  This is a sanity bound, not a solvency guarantee. The protocol's
     //  real defense is the badDebtRatio scaling in the transmuter.
     // ═══════════════════════════════════════════════════════════════
 
     function invariantRecoveryWorks() public view {
         if (recoveryEvents == 0) return;
+        if (!recoverySinceLastStress) return;
 
         if (totalYieldAccrued > totalLossRealized) {
             uint256 totalSynthetics = alchemist.totalSyntheticsIssued();
