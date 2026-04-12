@@ -205,10 +205,10 @@ contract MYTStrategyTest is Test {
         // Set up classifier
         classifier = address(new AlchemistStrategyClassifier(admin));
         vm.startPrank(admin);
-        // Set up risk classes with reasonable caps (18 decimals for fakeUnderlyingToken)
-        AlchemistStrategyClassifier(classifier).setRiskClass(0, 10_000_000e18, 5_000_000e18); // LOW risk
-        AlchemistStrategyClassifier(classifier).setRiskClass(1, 7_500_000e18, 3_750_000e18); // MEDIUM risk
-        AlchemistStrategyClassifier(classifier).setRiskClass(2, 5_000_000e18, 2_500_000e18); // HIGH risk
+        // Set up risk classes matching constructor defaults (WAD: 1e18 = 100%)
+        AlchemistStrategyClassifier(classifier).setRiskClass(0, 1e18, 1e18); // LOW: 100%/100%
+        AlchemistStrategyClassifier(classifier).setRiskClass(1, 0.4e18, 0.25e18); // MEDIUM: 40%/25%
+        AlchemistStrategyClassifier(classifier).setRiskClass(2, 0.1e18, 0.1e18); // HIGH: 10%/10%
         vm.stopPrank();
         vm.startPrank(user);
         IERC20(address(fakeUnderlyingToken)).approve(address(vault), 1000e18);

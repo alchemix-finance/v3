@@ -3,8 +3,10 @@ pragma solidity 0.8.28;
 
 import "forge-std/Test.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
+import {IStrategyClassifier} from "../../interfaces/IStrategyClassifier.sol";
 import {RevertContext, IRevertAllowlistProvider} from "./StrategyTypes.sol";
 import {StrategyRevertUtils} from "./StrategyRevertUtils.sol";
 
@@ -18,6 +20,7 @@ contract StrategyHandler is Test, StrategyRevertUtils {
     address public allocator;
     address public asset;
     address public admin;
+    address public classifier;
     uint256 public minAllocateAmount;
 
     // Ghost variables to track cumulative state changes
@@ -36,6 +39,7 @@ contract StrategyHandler is Test, StrategyRevertUtils {
         address _allocator,
         address _admin,
         address _limitProvider,
+        address _classifier,
         uint256 _minAllocateAmount
     ) {
         vault = IVaultV2(_vault);
@@ -43,6 +47,7 @@ contract StrategyHandler is Test, StrategyRevertUtils {
         allocator = _allocator;
         admin = _admin;
         limitProvider = _limitProvider;
+        classifier = _classifier;
         minAllocateAmount = _minAllocateAmount;
         asset = vault.asset();
         ghost_initialVaultAssets = vault.totalAssets();
@@ -79,10 +84,30 @@ contract StrategyHandler is Test, StrategyRevertUtils {
         // The effective limit is the minimum of the two caps
         uint256 effectiveLimit = absoluteRemaining < relativeRemaining ? absoluteRemaining : relativeRemaining;
 
+        // Factor in classifier global risk cap (WAD percentage of totalAssets)
+        if (classifier != address(0)) {
+            uint8 riskLevel = IStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
+            uint256 globalRiskCap = (vaultAssets * IStrategyClassifier(classifier).getGlobalCap(riskLevel)) / 1e18;
+            uint256 currentRiskAllocation = 0;
+            uint256 len = vault.adaptersLength();
+            for (uint256 i = 0; i < len; i++) {
+                address stratAdapter = vault.adapters(i);
+                bytes32 stratId = IMYTStrategy(stratAdapter).adapterId();
+                if (IStrategyClassifier(classifier).getStrategyRiskLevel(uint256(stratId)) == riskLevel) {
+                    currentRiskAllocation += vault.allocation(stratId);
+                }
+            }
+            uint256 globalRiskRemaining = globalRiskCap > currentRiskAllocation ? globalRiskCap - currentRiskAllocation : 0;
+            effectiveLimit = effectiveLimit < globalRiskRemaining ? effectiveLimit : globalRiskRemaining;
+        }
+
         if (effectiveLimit < minAllocateAmount) return;
 
         amount = bound(amount, minAllocateAmount, effectiveLimit);
-        deal(IVaultV2(vault).asset(), address(vault), amount);
+        {
+            uint256 currentIdle = IERC20(vault.asset()).balanceOf(address(vault));
+            deal(vault.asset(), address(vault), currentIdle + amount);
+        }
 
         vm.startPrank(admin);
         try IAllocator(allocator).allocate(address(strategy), amount) {

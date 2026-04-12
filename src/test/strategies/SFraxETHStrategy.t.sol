@@ -57,9 +57,9 @@ contract SFraxETHStrategyTest is Test {
 
         vm.startPrank(admin);
         vault.setCurator(operator);
-        classifier.setRiskClass(0, ABSOLUTE_CAP, ABSOLUTE_CAP);
-        classifier.setRiskClass(1, ABSOLUTE_CAP, ABSOLUTE_CAP);
-        classifier.setRiskClass(2, ABSOLUTE_CAP, ABSOLUTE_CAP);
+        classifier.setRiskClass(0, 1e18, 1e18); // LOW: 100%/100%
+        classifier.setRiskClass(1, 0.4e18, 0.25e18); // MEDIUM: 40%/25%
+        classifier.setRiskClass(2, 0.1e18, 0.1e18); // HIGH: 10%/10%
         allocator = new AlchemistAllocator(address(vault), admin, operator, address(classifier));
 
         IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({

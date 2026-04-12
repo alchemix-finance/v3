@@ -133,12 +133,16 @@ contract AlchemistAllocator is PermissionedProxy, IAllocator {
         // get risk caps
         uint256 strategyId = uint256(id);
         uint8 riskLevel = strategyClassifier.getStrategyRiskLevel(strategyId);
-        uint256 globalRiskCap = strategyClassifier.getGlobalCap(riskLevel);
-        uint256 localRiskCap = strategyClassifier.getIndividualCap(strategyId);
+        uint256 globalRiskCapPct = strategyClassifier.getGlobalCap(riskLevel);
+        uint256 localRiskCapPct = strategyClassifier.getIndividualCap(strategyId);
 
         // Convert relativeCap (WAD) to absolute value (WEI)
         uint256 totalAssets = vault.totalAssets();
         uint256 absoluteValueOfRelativeCap = (totalAssets * relativeCap) / 1e18;
+
+        // Convert risk caps from WAD percentages to absolute values
+        uint256 globalRiskCap = (totalAssets * globalRiskCapPct) / 1e18;
+        uint256 localRiskCap = (totalAssets * localRiskCapPct) / 1e18;
 
         // Calculate limit cap as the minimum of vault caps
         uint256 limit = absoluteCap < absoluteValueOfRelativeCap ? absoluteCap : absoluteValueOfRelativeCap;

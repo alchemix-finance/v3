@@ -13,12 +13,14 @@ contract AlchemistStrategyClassifier is IStrategyClassifier {
     address public pendingAdmin;
 
     /**
-     * @notice globalCap is the maximum allocation (within the MYT) for ALL strategies of this risk type combined.
-     * @notice localCap is the maximum allocation (within the MYT) for a SINGLE strategy in the risk class.
+     * @notice globalCap is the maximum combined allocation for ALL strategies of this risk type, in WAD (1e18 = 100%).
+     * @notice localCap is the maximum allocation for a SINGLE strategy in this risk class, in WAD (1e18 = 100%).
+     * @dev Example: MEDIUM with globalCap=0.4e18 and localCap=0.25e18 means each MEDIUM strategy is capped at 25%
+     *      of totalAssets individually, and all MEDIUM strategies together cannot exceed 40% of totalAssets.
      */
     struct RiskClass {
-        uint256 globalCap; // Max allocation for all strategies in this class combined
-        uint256 localCap; // Max allocation for this single strategy in the class
+        uint256 globalCap; // Max combined allocation for all strategies in this class (WAD)
+        uint256 localCap; // Max allocation for a single strategy in this class (WAD)
     }
 
     /// riskLevel => RiskClass data
@@ -33,9 +35,9 @@ contract AlchemistStrategyClassifier is IStrategyClassifier {
         admin = _admin;
 
         // Initialize defaults (can be updated by admin later)
-        riskClasses[0] = RiskClass(type(uint256).max, type(uint256).max); // Low risk
-        riskClasses[1] = RiskClass(type(uint256).max, type(uint256).max); // Medium risk
-        riskClasses[2] = RiskClass(type(uint256).max, type(uint256).max); // High risk
+        riskClasses[0] = RiskClass(1e18, 1e18); // Low risk
+        riskClasses[1] = RiskClass(4e17, 25e16); // Medium risk
+        riskClasses[2] = RiskClass(1e17, 1e17); // High risk
 
         pendingAdmin = address(0);
     }
@@ -69,13 +71,13 @@ contract AlchemistStrategyClassifier is IStrategyClassifier {
 
     // ===== IStrategyClassifier Interface Implementation =====
 
-    /// @notice Returns the maximum allowed allocation for a single strategy
+    /// @notice Returns the maximum allowed allocation for a single strategy (WAD percentage)
     function getIndividualCap(uint256 strategyId) external view override returns (uint256) {
         uint8 riskLevel = strategyRiskLevel[strategyId];
         return riskClasses[riskLevel].localCap;
     }
 
-    /// @notice Returns the maximum allowed combined allocation for all strategies in a risk class
+    /// @notice Returns the maximum allowed combined allocation for all strategies in a risk class (WAD percentage)
     function getGlobalCap(uint8 riskLevel) external view override returns (uint256) {
         return riskClasses[riskLevel].globalCap;
     }

@@ -43,10 +43,10 @@ contract AlchemistAllocatorTest is Test {
         vault = MYTTestHelper._setupVault(mockVaultCollateral, admin, curator);
         mytStrategy = MYTTestHelper._setupStrategy(address(vault), mockStrategyYieldToken, admin, "MockToken", "MockTokenProtocol", IMYTStrategy.RiskClass.LOW);
         classifier = new AlchemistStrategyClassifier(admin);
-        // Set up risk classes with reasonable caps
-        classifier.setRiskClass(0, 10_000_000 ether, 5_000_000 ether); // LOW risk
-        classifier.setRiskClass(1, 7_500_000 ether, 3_750_000 ether); // MEDIUM risk
-        classifier.setRiskClass(2, 5_000_000 ether, 2_500_000 ether); // HIGH risk
+        // Set up risk classes matching constructor defaults (WAD: 1e18 = 100%)
+        classifier.setRiskClass(0, 1e18, 1e18); // LOW: 100%/100%
+        classifier.setRiskClass(1, 0.4e18, 0.25e18); // MEDIUM: 40%/25%
+        classifier.setRiskClass(2, 0.1e18, 0.1e18); // HIGH: 10%/10%
         // Assign risk level to the mock strategy
         bytes32 strategyId = mytStrategy.adapterId();
         classifier.assignStrategyRiskLevel(uint256(strategyId), uint8(IMYTStrategy.RiskClass.LOW));
@@ -209,15 +209,16 @@ contract AlchemistAllocatorTest is Test {
         _magicDepositToVault(address(vault), user1, 1000 ether);
 
         bytes32 strategyId = mytStrategy.adapterId();
-        uint256 globalCap = 100 ether;
+        uint256 globalCapPct = 0.1e18; // 10% of totalAssets = 100 ether
+        uint256 expectedAbsoluteCap = 100 ether;
 
         vm.startPrank(admin);
-        classifier.setRiskClass(0, globalCap, 5_000_000 ether);
+        classifier.setRiskClass(0, globalCapPct, 1e18);
         vm.stopPrank();
 
         vm.startPrank(admin);
-        vm.expectRevert(abi.encodeWithSelector(IAllocator.EffectiveCap.selector, globalCap + 1, globalCap));
-        allocator.allocate(address(mytStrategy), globalCap + 1);
+        vm.expectRevert(abi.encodeWithSelector(IAllocator.EffectiveCap.selector, expectedAbsoluteCap + 1, expectedAbsoluteCap));
+        allocator.allocate(address(mytStrategy), expectedAbsoluteCap + 1);
         vm.stopPrank();
     }
 
@@ -225,17 +226,17 @@ contract AlchemistAllocatorTest is Test {
         _magicDepositToVault(address(vault), user1, 1000 ether);
         
         bytes32 strategyId = mytStrategy.adapterId();
-        uint256 individualCap = 50 ether;
+        uint256 individualCapPct = 0.05e18; // 5% of totalAssets = 50 ether
+        uint256 expectedAbsoluteCap = 50 ether;
         
         vm.startPrank(admin);
-        // Set individual risk cap for LOW risk class to 50 ether
-        classifier.setRiskClass(0, 10_000_000 ether, individualCap);
+        classifier.setRiskClass(0, 1e18, individualCapPct);
         
         vm.stopPrank();
         vm.startPrank(operator);
 
-        vm.expectRevert(abi.encodeWithSelector(IAllocator.EffectiveCap.selector, individualCap + 1, individualCap));
-        allocator.allocate(address(mytStrategy), individualCap + 1);
+        vm.expectRevert(abi.encodeWithSelector(IAllocator.EffectiveCap.selector, expectedAbsoluteCap + 1, expectedAbsoluteCap));
+        allocator.allocate(address(mytStrategy), expectedAbsoluteCap + 1);
         vm.stopPrank();
     }
 
@@ -245,7 +246,8 @@ contract AlchemistAllocatorTest is Test {
         _magicDepositToVault(address(vault), user1, 1000 ether);
         
         bytes32 strategyId = mytStrategy.adapterId();
-        uint256 individualCap = 100 ether;
+        uint256 riskCapPct = 0.1e18; // 10% of totalAssets = 100 ether
+        uint256 expectedAbsoluteCap = 100 ether;
         
         vm.startPrank(curator);
         // Increase vault caps to ensure only risk caps are the limiting factor
@@ -255,8 +257,8 @@ contract AlchemistAllocatorTest is Test {
         vm.stopPrank();
 
         vm.startPrank(admin);
-        // Set individual risk cap for LOW risk class
-        classifier.setRiskClass(0, 100 ether, individualCap);
+        // Set risk cap for LOW risk class (10% global = 100 ether, 10% local = 100 ether)
+        classifier.setRiskClass(0, riskCapPct, riskCapPct);
         vm.stopPrank();
         
         vm.startPrank(operator);
@@ -299,9 +301,9 @@ contract AlchemistAllocatorTest is Test {
         vault.increaseRelativeCap(idData2, 1e18);
         vm.stopPrank();
 
-        // Set Global Cap for LOW risk to 100 ether
+        // Set Global Cap for LOW risk to 10% (100 ether absolute at 1000 totalAssets)
         vm.startPrank(admin);
-        classifier.setRiskClass(0, 100 ether, 100 ether); // global=100, local=100
+        classifier.setRiskClass(0, 0.1e18, 0.1e18); // global=10%, local=10%
         vm.stopPrank();
 
         vm.startPrank(operator);
@@ -425,6 +427,88 @@ contract AlchemistAllocatorTest is Test {
         assertEq(vault._totalAssets(), 400 ether);
         assertEq(vault.firstTotalAssets(), 400 ether);
         assertApproxEqRel(allocation, expectedRemainingRealAssets, 1e14); // 0.01% rounding headroom
+        vm.stopPrank();
+    }
+
+    function testReclassifyMidLifecycle_StricterCapsApplyToNewAllocations() public {
+        _magicDepositToVault(address(vault), user1, 1000 ether);
+        bytes32 strategyId = mytStrategy.adapterId();
+
+        // Lift vault caps so only risk classifier caps are binding
+        vm.startPrank(curator);
+        bytes memory idData = mytStrategy.getIdData();
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseAbsoluteCap, (idData, 10000 ether)));
+        vault.increaseAbsoluteCap(idData, 10000 ether);
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseRelativeCap, (idData, 1e18)));
+        vault.increaseRelativeCap(idData, 1e18);
+        vm.stopPrank();
+
+        // Phase 1: Strategy is LOW (100%/100%) — allocate 300 ether freely
+        vm.startPrank(admin);
+        assertEq(classifier.getStrategyRiskLevel(uint256(strategyId)), uint8(IMYTStrategy.RiskClass.LOW));
+        allocator.allocate(address(mytStrategy), 300 ether);
+        assertEq(vault.allocation(strategyId), 300 ether, "Phase 1: LOW allocation should succeed");
+        vm.stopPrank();
+
+        // Phase 2: Reclassify to MEDIUM (40% global = 400, 25% local = 250)
+        vm.startPrank(admin);
+        classifier.assignStrategyRiskLevel(uint256(strategyId), uint8(IMYTStrategy.RiskClass.MEDIUM));
+        vm.stopPrank();
+
+        assertEq(classifier.getStrategyRiskLevel(uint256(strategyId)), uint8(IMYTStrategy.RiskClass.MEDIUM));
+
+        // Existing 300 ether allocation is NOT force-liquidated
+        assertEq(vault.allocation(strategyId), 300 ether, "Existing allocation must persist after reclassify");
+
+        // Operator blocked by local cap: check is currentAllocation(300) + amount(1) <= localCap(250)
+        vm.startPrank(operator);
+        vm.expectRevert(abi.encodeWithSelector(IAllocator.EffectiveCap.selector, 1, 250 ether));
+        allocator.allocate(address(mytStrategy), 1);
+        vm.stopPrank();
+
+        // Admin bypasses local cap but constrained by global cap
+        // Remaining global = (1000 * 0.4) - 300 = 100 ether
+        vm.startPrank(admin);
+        vm.expectRevert(abi.encodeWithSelector(IAllocator.EffectiveCap.selector, 101 ether, 100 ether));
+        allocator.allocate(address(mytStrategy), 101 ether);
+        allocator.allocate(address(mytStrategy), 100 ether);
+        assertEq(vault.allocation(strategyId), 400 ether, "Admin should fill remaining global headroom");
+        vm.stopPrank();
+
+        // Phase 3: Reclassify to HIGH (10% global = 100, 10% local = 100)
+        //          Current allocation 400 already exceeds both caps
+        vm.startPrank(admin);
+        classifier.assignStrategyRiskLevel(uint256(strategyId), uint8(IMYTStrategy.RiskClass.HIGH));
+        vm.stopPrank();
+
+        // Neither admin nor operator can allocate (global headroom = 100 - 400 → 0)
+        vm.startPrank(admin);
+        vm.expectRevert(abi.encodeWithSelector(IAllocator.EffectiveCap.selector, 1, 0));
+        allocator.allocate(address(mytStrategy), 1);
+        vm.stopPrank();
+
+        vm.startPrank(operator);
+        vm.expectRevert(abi.encodeWithSelector(IAllocator.EffectiveCap.selector, 1, 0));
+        allocator.allocate(address(mytStrategy), 1);
+        vm.stopPrank();
+
+        // Phase 4: Deallocate below new cap, then verify allocation resumes under HIGH rules
+        vm.startPrank(admin);
+        allocator.deallocate(address(mytStrategy), 350 ether);
+        assertEq(vault.allocation(strategyId), 50 ether, "Deallocate ignores caps");
+        vm.stopPrank();
+
+        // Now HIGH: remaining global = 100 - 50 = 50, local = 100
+        // Operator: limit = min(1000 vault_rel, 100 local) = 100, global headroom = 50
+        vm.startPrank(operator);
+        allocator.allocate(address(mytStrategy), 50 ether);
+        assertEq(vault.allocation(strategyId), 100 ether, "Operator fills remaining global headroom");
+        vm.stopPrank();
+
+        // Saturated — no more room under HIGH global cap
+        vm.startPrank(operator);
+        vm.expectRevert(abi.encodeWithSelector(IAllocator.EffectiveCap.selector, 1, 0));
+        allocator.allocate(address(mytStrategy), 1);
         vm.stopPrank();
     }
 

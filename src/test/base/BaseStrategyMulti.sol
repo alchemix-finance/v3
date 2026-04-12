@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
+import {TokenUtils} from "../../libraries/TokenUtils.sol";
 import {RevertContext} from "./StrategyTypes.sol";
 import {StrategyOps} from "./StrategyOps.sol";
 import "forge-std/console.sol";
@@ -508,7 +509,10 @@ abstract contract BaseStrategyMulti is StrategyOps {
         uint256 allocAmount = vaultTotalAssets / 20;
         allocAmount = allocAmount > effectiveCap ? effectiveCap : allocAmount;
         if (allocAmount == 0) return;
-        deal(IVaultV2(vault).asset(), address(vault), allocAmount);
+        {
+            uint256 currentBalance = TokenUtils.safeBalanceOf(testConfig.vaultAsset, vault);
+            deal(IVaultV2(vault).asset(), address(vault), currentBalance + allocAmount);
+        }
         bool initialAllocOk = _allocateOrSkipWhitelisted(allocAmount, RevertContext.FuzzAllocate);
         if (!initialAllocOk) {
             vm.stopPrank();

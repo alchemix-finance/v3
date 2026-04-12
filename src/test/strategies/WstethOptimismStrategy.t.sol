@@ -100,9 +100,9 @@ contract WstethOptimismStrategyTest is Test {
         vm.startPrank(admin);
         vault = _getVault(WETH);
         classifier = address(new AlchemistStrategyClassifier(admin));
-        AlchemistStrategyClassifier(classifier).setRiskClass(0, 10_000_000e18, 5_000_000e18);
-        AlchemistStrategyClassifier(classifier).setRiskClass(1, 7_500_000e18, 3_750_000e18);
-        AlchemistStrategyClassifier(classifier).setRiskClass(2, 5_000_000e18, 2_500_000e18);
+        AlchemistStrategyClassifier(classifier).setRiskClass(0, 1e18, 1e18); // LOW: 100%/100%
+        AlchemistStrategyClassifier(classifier).setRiskClass(1, 0.4e18, 0.25e18); // MEDIUM: 40%/25%
+        AlchemistStrategyClassifier(classifier).setRiskClass(2, 0.1e18, 0.1e18); // HIGH: 10%/10%
         allocator = address(new AlchemistAllocator{salt: bytes32("allocator")}(address(vault), admin, curator, classifier));
 
         IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({

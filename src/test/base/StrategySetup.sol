@@ -105,7 +105,7 @@ abstract contract StrategySetup is Test, IRevertAllowlistProvider {
         vm.makePersistent(strategy);
 
         // Setup Invariant Handler
-        handler = new StrategyHandler(vault, strategy, allocator, admin, address(this), _getMinAllocateAmount());
+        handler = new StrategyHandler(vault, strategy, allocator, admin, address(this), classifier, _getMinAllocateAmount());
         targetContract(address(handler));
 
         // Target specific functions in the handler for invariant fuzzing
@@ -123,16 +123,10 @@ abstract contract StrategySetup is Test, IRevertAllowlistProvider {
     function _setUpMYT(address _vault, address _mytStrategy, uint256 absoluteCap, uint256 relativeCap) internal {
         vm.startPrank(admin);
         classifier = address(new AlchemistStrategyClassifier(admin));
-        // Set up risk classes with reasonable caps
-        AlchemistStrategyClassifier(classifier).setRiskClass(
-            0, 10_000_000 * 10 ** testConfig.decimals, 5_000_000 * 10 ** testConfig.decimals
-        ); // LOW risk
-        AlchemistStrategyClassifier(classifier).setRiskClass(
-            1, 7_500_000 * 10 ** testConfig.decimals, 3_750_000 * 10 ** testConfig.decimals
-        ); // MEDIUM risk
-        AlchemistStrategyClassifier(classifier).setRiskClass(
-            2, 5_000_000 * 10 ** testConfig.decimals, 2_500_000 * 10 ** testConfig.decimals
-        ); // HIGH risk
+        // Set up risk classes matching constructor defaults (WAD: 1e18 = 100%)
+        AlchemistStrategyClassifier(classifier).setRiskClass(0, 1e18, 1e18); // LOW: 100%/100%
+        AlchemistStrategyClassifier(classifier).setRiskClass(1, 0.4e18, 0.25e18); // MEDIUM: 40%/25%
+        AlchemistStrategyClassifier(classifier).setRiskClass(2, 0.1e18, 0.1e18); // HIGH: 10%/10%
         // Assign risk level to the strategy
         bytes32 strategyId = IMYTStrategy(_mytStrategy).adapterId();
         AlchemistStrategyClassifier(classifier).assignStrategyRiskLevel(uint256(strategyId), uint8(strategyConfig.riskClass));
@@ -226,7 +220,8 @@ abstract contract StrategySetup is Test, IRevertAllowlistProvider {
 
     /// @dev Helper to deal specific amount of assets to the vault.
     function _prepareVaultAssets(uint256 amount) internal {
-        deal(testConfig.vaultAsset, vault, amount);
+        uint256 currentBalance = TokenUtils.safeBalanceOf(testConfig.vaultAsset, vault);
+        deal(testConfig.vaultAsset, vault, currentBalance + amount);
     }
 
     /// @dev Helper to calculate effective cap headroom (matches AlchemistAllocator._validateCaps logic)
@@ -248,7 +243,8 @@ abstract contract StrategySetup is Test, IRevertAllowlistProvider {
         uint256 limit = absoluteRemaining < relativeRemaining ? absoluteRemaining : relativeRemaining;
         uint256 strategyId = uint256(allocationId);
         uint8 riskLevel = AlchemistStrategyClassifier(classifier).getStrategyRiskLevel(strategyId);
-        uint256 globalRiskCap = AlchemistStrategyClassifier(classifier).getGlobalCap(riskLevel);
+        uint256 globalRiskCapPct = AlchemistStrategyClassifier(classifier).getGlobalCap(riskLevel);
+        uint256 globalRiskCap = (totalAssets * globalRiskCapPct) / 1e18;
         uint256 globalRiskRemaining = globalRiskCap > currentAllocation ? globalRiskCap - currentAllocation : 0;
         limit = limit < globalRiskRemaining ? limit : globalRiskRemaining;
 
