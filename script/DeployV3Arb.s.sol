@@ -390,16 +390,16 @@ contract DeployV3ArbScript is Script {
         usdcAlchemist = deployAlchemist(alUSD, usdcARB, address(usdcVault), address(usdcTransmuter), 0);
         ethAlchemist = deployAlchemist(alETH, wethARB, address(ethVault), address(ethTransmuter), 0);
 
-        // Deploy and link strategies
-        deployUSDCStrategies(address(usdcVault));
-        deployETHStrategies(address(ethVault));
-
         // Set allocator on vault
         curator.submitSetAllocator(address(usdcVault), address(usdcAllocator), true);
         usdcVault.setIsAllocator(address(usdcAllocator), true);
 
         curator.submitSetAllocator(address(ethVault), address(ethAllocator), true);
         ethVault.setIsAllocator(address(ethAllocator), true);
+
+        // Deploy and link strategies
+        deployUSDCStrategies(address(usdcVault));
+        deployETHStrategies(address(ethVault));
 
         // set max rate
         usdcAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
@@ -451,6 +451,11 @@ contract DeployV3ArbScript is Script {
         console.log("Curator deployed at:", address(curator));
         console.log("USDC Allocator deployed at:", address(usdcAllocator));
         console.log("ETH Allocator deployed at:", address(ethAllocator));
+
+        console.log("USDC Alchemist NFT deployed at:", usdcAlchemist.alchemistPositionNFT());
+        console.log("USDC Alchemist Fee Vault deployed at:", usdcAlchemist.alchemistFeeVault());
+        console.log("ETH Alchemist NFT deployed at:", ethAlchemist.alchemistPositionNFT());
+        console.log("ETH Alchemist Fee Vault deployed at:", ethAlchemist.alchemistFeeVault());
 
         console.log("----------- IMPORTANT -----------");
         console.log("- Add the new alchemists to the alAsset whitelist!");
