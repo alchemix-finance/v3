@@ -39,8 +39,8 @@ contract DeployV3ArbScript is Script {
     address public protocolFeeReceiver = 0x7e108711771DfdB10743F016D46d75A9379cA043;
 
     // Contract addresses
-    address public vaultAdmin = 0x7e108711771DfdB10743F016D46d75A9379cA043; // FIXME
-    address public newOwner = 0x7e108711771DfdB10743F016D46d75A9379cA043; // FIXME
+    address public vaultAdmin = 0xeE1Aa1C3D0622fCeD823c7720cf9E8079558484b; // FIXME
+    address public newOwner = 0xeE1Aa1C3D0622fCeD823c7720cf9E8079558484b; // FIXME
     // Vault and factory
     VaultV2Factory public vaultFactory;
     VaultV2 public usdcVault;
@@ -101,9 +101,9 @@ contract DeployV3ArbScript is Script {
         owner: deployerAddr,
         name: "Euler WETH Arbitrum",
         protocol: "Euler",
-        riskClass: IMYTStrategy.RiskClass.LOW,
+        riskClass: IMYTStrategy.RiskClass.MEDIUM,
         cap: 0.7 * 1e18,
-        globalCap: 1e18,
+        globalCap: 0.3e18,
         estimatedYield: 600, // 6% annual yield
         additionalIncentives: false,
         slippageBPS: 50
@@ -113,9 +113,9 @@ contract DeployV3ArbScript is Script {
         owner: deployerAddr,
         name: "Euler USDC Arbitrum",
         protocol: "Euler",
-        riskClass: IMYTStrategy.RiskClass.LOW,
+        riskClass: IMYTStrategy.RiskClass.MEDIUM,
         cap: 1000 * 1e6,
-        globalCap: 1e18,
+        globalCap: 0.3e18,
         estimatedYield: 550, // 5.5% annual yield
         additionalIncentives: false,
         slippageBPS: 50
@@ -135,6 +135,12 @@ contract DeployV3ArbScript is Script {
 
     function setUp() public {}
 
+    function _directLiquidityData() internal pure returns (bytes memory) {
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        return abi.encode(params);
+    }
+    
     function deployAaveWETHStrategy(address myt) internal returns (AaveStrategy) {
         AaveStrategy strategy = new AaveStrategy(
             myt,
@@ -155,6 +161,9 @@ contract DeployV3ArbScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), aaveWETHParams.globalCap);
         curator.increaseRelativeCap(address(strategy), aaveWETHParams.globalCap);
 
+        // set as default usdc liquidity adapter
+        ethAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
+        
         strategy.transferOwnership(newOwner);
         return strategy;
     }
@@ -179,6 +188,8 @@ contract DeployV3ArbScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), aaveUSDCParams.globalCap);
         curator.increaseRelativeCap(address(strategy), aaveUSDCParams.globalCap);
 
+        // set as default usdc liquidity adapter
+        usdcAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
         strategy.transferOwnership(newOwner);
         return strategy;
     }
@@ -314,7 +325,7 @@ contract DeployV3ArbScript is Script {
             transmuter: transmuter,
             protocolFee: 25, // 10000 bps -> 0.25%
             protocolFeeReceiver: protocolFeeReceiver,
-            liquidatorFee: 300,
+            liquidatorFee: 150,
             repaymentFee: 0,
             myt: vault
         });
@@ -327,7 +338,7 @@ contract DeployV3ArbScript is Script {
         )));
 
         require(deployedAlchemist.protocolFee() == 25);
-        require(deployedAlchemist.liquidatorFee() == 300);
+        require(deployedAlchemist.liquidatorFee() == 150);
         require(deployedAlchemist.repaymentFee() == 0);
 
         AlchemistV3Position alchemistNFT = new AlchemistV3Position(address(deployedAlchemist), deployerAddr);

@@ -95,9 +95,9 @@ contract DeployV3ETHScript is Script {
         owner: deployerAddr,
         name: "Euler Mainnet USDC",
         protocol: "Euler",
-        riskClass: IMYTStrategy.RiskClass.LOW,
+        riskClass: IMYTStrategy.RiskClass.MEDIUM,
         cap: 1000 * 1e6,
-        globalCap: 1e18,
+        globalCap: 0.3e18,
         estimatedYield: 500, // 5% annual yield
         additionalIncentives: false,
         slippageBPS: 50
@@ -107,9 +107,9 @@ contract DeployV3ETHScript is Script {
         owner: deployerAddr,
         name: "Euler Mainnet WETH",
         protocol: "Euler",
-        riskClass: IMYTStrategy.RiskClass.LOW,
+        riskClass: IMYTStrategy.RiskClass.MEDIUM,
         cap: 0.7 * 1e18,
-        globalCap: 1e18,
+        globalCap: 0.3e18,
         estimatedYield: 600, // 6% annual yield
         additionalIncentives: false,
         slippageBPS: 50
@@ -165,6 +165,13 @@ contract DeployV3ETHScript is Script {
 
     function setUp() public {}
 
+    function _directLiquidityData() internal pure returns (bytes memory) {
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        return abi.encode(params);
+    }
+
+    
     function deployYvUSDCStrategy(address myt) internal returns (ERC4626Strategy) {
         ERC4626Strategy strategy = new ERC4626Strategy(
             myt,
@@ -181,6 +188,9 @@ contract DeployV3ETHScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), yvUSDCParams.globalCap);
         curator.increaseRelativeCap(address(strategy), yvUSDCParams.globalCap);
 
+        // set as default usdc liquidity adapter
+        usdcAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
+        
         strategy.transferOwnership(newOwner);
         return strategy;
     }
@@ -322,6 +332,9 @@ contract DeployV3ETHScript is Script {
         curator.submitIncreaseRelativeCap(address(strategy), aaveV3WethParams.globalCap);
         curator.increaseRelativeCap(address(strategy), aaveV3WethParams.globalCap);
 
+        // set as default usdc liquidity adapter
+        ethAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
+        
         strategy.transferOwnership(newOwner);
         return strategy;
     }
@@ -390,7 +403,7 @@ contract DeployV3ETHScript is Script {
             transmuter: transmuter,
             protocolFee: 25, // 10000 bps -> 0.25%
             protocolFeeReceiver: protocolFeeReceiver,
-            liquidatorFee: 300,
+            liquidatorFee: 150,
             repaymentFee: 0,
             myt: vault
         });
@@ -403,7 +416,7 @@ contract DeployV3ETHScript is Script {
         )));
 
         require(deployedAlchemist.protocolFee() == 25);
-        require(deployedAlchemist.liquidatorFee() == 300);
+        require(deployedAlchemist.liquidatorFee() == 150);
         require(deployedAlchemist.repaymentFee() == 0);
 
         AlchemistV3Position alchemistNFT = new AlchemistV3Position(address(deployedAlchemist), deployerAddr);
