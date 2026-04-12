@@ -21,6 +21,7 @@ import {WstethStrategy} from "../src/strategies/WStethStrategy.sol";
 import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
 import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
 import {AlchemistTokenVault} from "../src/AlchemistTokenVault.sol";
+import {AlchemistRouter} from "../src/router/AlchemistRouter.sol";
 
 // AlAsset
 //import {CrossChainCanonicalAlchemicTokenV2} from "../lib/v2-foundry/src/CrossChainCanonicalAlchemicTokenV2.sol";
@@ -63,6 +64,8 @@ contract DeployV3OptimismScript is Script {
     AlchemistStrategyClassifier public classifier;
     AlchemistAllocator public usdcAllocator;
     AlchemistAllocator public ethAllocator;
+    AlchemistRouter public usdcRouter;
+    AlchemistRouter public ethRouter;
 
     address[] public usdcStrategies;
     address[] public ethStrategies;
@@ -327,6 +330,10 @@ contract DeployV3OptimismScript is Script {
         usdcAlchemist = deployAlchemist(alUSD, USDC, address(usdcVault), address(usdcTransmuter), 0);
         ethAlchemist = deployAlchemist(alETH, wethOP, address(ethVault), address(ethTransmuter), 0);
 
+        // Deploy Routers
+        usdcRouter = new AlchemistRouter(address(usdcAlchemist));
+        ethRouter = new AlchemistRouter(address(ethAlchemist));
+
         // Whitelist alchemist proxy for minting tokens
         // TODO we dont have admin access
         // AlAsset(alUSD).setWhitelist(address(alchemist), true);
@@ -393,6 +400,8 @@ contract DeployV3OptimismScript is Script {
         console.log("Curator deployed at:", address(curator));
         console.log("USDC Allocator deployed at:", address(usdcAllocator));
         console.log("ETH Allocator deployed at:", address(ethAllocator));
+        console.log("USDC Router deployed at:", address(usdcRouter));
+        console.log("ETH Router deployed at:", address(ethRouter));
 
         console.log("USDC Alchemist NFT deployed at:", usdcAlchemist.alchemistPositionNFT());
         console.log("USDC Alchemist Fee Vault deployed at:", usdcAlchemist.alchemistFeeVault());

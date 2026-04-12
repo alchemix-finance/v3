@@ -23,6 +23,7 @@ import {AaveStrategy} from "../src/strategies/AaveStrategy.sol";
 import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
 import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
 import {AlchemistTokenVault} from "../src/AlchemistTokenVault.sol";
+import {AlchemistRouter} from "../src/router/AlchemistRouter.sol";
 
 // AlAsset
 import {CrossChainCanonicalAlchemicTokenV3} from "../src/AlTokenV3.sol";
@@ -58,6 +59,8 @@ contract DeployV3ETHScript is Script {
     AlchemistStrategyClassifier public classifier;
     AlchemistAllocator public usdcAllocator;
     AlchemistAllocator public ethAllocator;
+    AlchemistRouter public usdcRouter;
+    AlchemistRouter public ethRouter;
 
     address[] public usdcStrategies;
     address[] public ethStrategies;
@@ -466,6 +469,10 @@ contract DeployV3ETHScript is Script {
         usdcAlchemist = deployAlchemist(alUSD, USDC, address(usdcVault), address(usdcTransmuter), 0);
         ethAlchemist = deployAlchemist(alETH, wethETH, address(ethVault), address(ethTransmuter), 0);
 
+        // Deploy Routers
+        usdcRouter = new AlchemistRouter(address(usdcAlchemist));
+        ethRouter = new AlchemistRouter(address(ethAlchemist));
+
         // Set allocator on vault
         curator.submitSetAllocator(address(usdcVault), address(usdcAllocator), true);
         usdcVault.setIsAllocator(address(usdcAllocator), true);
@@ -528,6 +535,8 @@ contract DeployV3ETHScript is Script {
         console.log("Curator deployed at:", address(curator));
         console.log("USDC Allocator deployed at:", address(usdcAllocator));
         console.log("ETH Allocator deployed at:", address(ethAllocator));
+        console.log("USDC Router deployed at:", address(usdcRouter));
+        console.log("ETH Router deployed at:", address(ethRouter));
 
         console.log("USDC Alchemist NFT deployed at:", usdcAlchemist.alchemistPositionNFT());
         console.log("USDC Alchemist Fee Vault deployed at:", usdcAlchemist.alchemistFeeVault());
