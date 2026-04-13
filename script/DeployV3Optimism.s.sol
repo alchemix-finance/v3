@@ -33,7 +33,7 @@ interface AlAsset {
 
 contract DeployV3OptimismScript is Script {
     address self = address(this);
-    address deployerAddr = 0x1c9387747baA55C26197732Bda132955E1F56b80;
+    address deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
     // Asset addresses
     address public aUSDC = 0x38d693cE1dF5AaDF7bC62595A37D667aD57922e5;
     address public wethOP = 0x4200000000000000000000000000000000000006;
@@ -298,7 +298,7 @@ contract DeployV3OptimismScript is Script {
     }
 
     function run() public {
-        deployerAddr = 0x1c9387747baA55C26197732Bda132955E1F56b80;
+        deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
         vm.startBroadcast(deployerAddr);
         // ====== MOCK ONLY ======
         // Deploy alAssets

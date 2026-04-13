@@ -28,7 +28,7 @@ import {CrossChainCanonicalAlchemicTokenV3} from "../src/AlTokenV3.sol";
 
 contract DeployV3ArbScript is Script {
     address self = address(this);
-    address deployerAddr = 0x1c9387747baA55C26197732Bda132955E1F56b80;
+    address deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
     // Token addresses
     address public wethARB = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1; // WETH on Arbitrum
     address public usdcARB = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831; // USDC on Arbitrum
@@ -359,7 +359,7 @@ contract DeployV3ArbScript is Script {
     }
 
     function run() public {
-        deployerAddr = 0x1c9387747baA55C26197732Bda132955E1F56b80;
+        deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
         vm.startBroadcast(deployerAddr);
         
         // Deploy alAssets
