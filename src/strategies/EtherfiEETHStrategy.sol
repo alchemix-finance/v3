@@ -162,7 +162,7 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
         return weETH.balanceOf(address(this));
     }
 
-    function _prepareOracleTokenForSwap(uint256 maxOracleTokenIn) internal override returns (uint256) {
+    function _prepareOracleTokenForSwap(uint256 maxOracleTokenIn) internal view override returns (uint256) {
         uint256 weETHBalance = weETH.balanceOf(address(this));
         return maxOracleTokenIn > weETHBalance ? weETHBalance : maxOracleTokenIn;
     }

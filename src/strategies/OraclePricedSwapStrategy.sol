@@ -2,10 +2,11 @@
 pragma solidity 0.8.28;
 
 import {MYTStrategy} from "../MYTStrategy.sol";
+import {IOraclePricedSwapStrategyPreview} from "../interfaces/IOraclePricedSwapStrategyPreview.sol";
 import {TokenUtils} from "../libraries/TokenUtils.sol";
 import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
-abstract contract OraclePricedSwapStrategy is MYTStrategy {
+abstract contract OraclePricedSwapStrategy is MYTStrategy, IOraclePricedSwapStrategyPreview {
     uint256 public constant MAX_ORACLE_STALENESS = 7 days;
 
     AggregatorV3Interface public immutable pricedTokenEthOracle;
@@ -91,6 +92,51 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
         return amount;
     }
 
+    /// @notice Returns the swap input token and amount needed to target a given vault-asset output.
+    /// @dev The returned amount uses oracle pricing plus the strategy slippage buffer, then clamps
+    ///      to the strategy's available oracle-token balance or equivalent limit.
+    function previewSwapInput(uint256 assetAmountOut) external view returns (address sellToken, uint256 sellAmount) {
+        if (assetAmountOut == 0) revert InvalidAmount(1, 0);
+
+        sellToken = _oracleToken();
+
+        uint256 idleBalance = _idleAssets();
+        if (idleBalance >= assetAmountOut) {
+            return (sellToken, 0);
+        }
+
+        uint256 shortfall = assetAmountOut - idleBalance;
+        uint256 maxAssetIn = _roundUpMulDiv(shortfall, 10_000, 10_000 - params.slippageBPS);
+        uint256 maxOracleTokenIn = _assetToOracleTokenUp(maxAssetIn);
+        if (maxOracleTokenIn == 0) maxOracleTokenIn = 1;
+
+        sellAmount = _prepareOracleTokenForSwap(maxOracleTokenIn);
+    }
+
+    /// @notice Returns the intermediate token input and minimum unwrap target needed for unwrap-and-swap deallocations.
+    /// @dev The returned amounts use oracle pricing plus the strategy slippage buffer, then clamp
+    ///      to the strategy's available oracle-token-equivalent balance. `sellAmount` is intended for
+    ///      quote construction and `minIntermediateOut` should be forwarded to the allocator call.
+    function previewUnwrapAndSwapInput(uint256 assetAmountOut)
+        external
+        view
+        returns (address sellToken, uint256 sellAmount, uint256 minIntermediateOut)
+    {
+        if (assetAmountOut == 0) revert InvalidAmount(1, 0);
+
+        uint256 idleBalance = _idleAssets();
+        if (idleBalance >= assetAmountOut) {
+            return (address(0), 0, 0);
+        }
+
+        uint256 shortfall = assetAmountOut - idleBalance;
+        uint256 maxAssetIn = _roundUpMulDiv(shortfall, 10_000, 10_000 - params.slippageBPS);
+        uint256 maxOracleTokenIn = _assetToOracleTokenUp(maxAssetIn);
+        if (maxOracleTokenIn == 0) maxOracleTokenIn = 1;
+
+        return _previewIntermediateForSwap(maxOracleTokenIn);
+    }
+
     function _totalValue() internal view virtual override returns (uint256) {
         return _idleAssets() + _oracleTokenToAsset(_positionBalance());
     }
@@ -166,7 +212,7 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
 
     /// @notice Prepares the oracle token amount that will be sold in a one-hop swap deallocation.
     /// @param maxOracleTokenIn The maximum oracle token amount permitted by oracle and slippage math.
-    function _prepareOracleTokenForSwap(uint256 maxOracleTokenIn) internal virtual returns (uint256);
+    function _prepareOracleTokenForSwap(uint256 maxOracleTokenIn) internal view virtual returns (uint256);
 
     /// @notice Prepares an intermediate token for unwrap-and-swap deallocation flows.
     /// @dev Child strategies should unwrap or redeem into the sell token and return the token plus amount to swap.
@@ -178,6 +224,17 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
         internal
         virtual
         returns (address sellToken, uint256 sellAmount)
+    {
+        revert ActionNotSupported();
+    }
+
+    /// @notice Previews the intermediate token and amounts needed for unwrap-and-swap deallocation flows.
+    /// @dev Child strategies should mirror their unwrap sizing without mutating state.
+    function _previewIntermediateForSwap(uint256 maxOracleTokenIn)
+        internal
+        view
+        virtual
+        returns (address sellToken, uint256 sellAmount, uint256 minIntermediateOut)
     {
         revert ActionNotSupported();
     }

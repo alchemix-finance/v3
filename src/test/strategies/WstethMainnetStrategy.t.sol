@@ -573,6 +573,33 @@ contract WstethStrategyTest is Test {
         assertEq(previewExcess, expectedCapped, "preview should be capped at max capacity minus haircut");
     }
 
+    function test_previewSwapInput_returns_wsteth_sell_amount() public {
+        vm.startPrank(vault);
+        uint256 allocateAmount = 100e18;
+        deal(weth, mytStrategy, allocateAmount);
+
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        IMYTStrategy(mytStrategy).allocate(abi.encode(params), allocateAmount, "", vault);
+        vm.stopPrank();
+
+        uint256 requestedAmount = 50e18;
+        (address sellToken, uint256 sellAmount) = WstethStrategy(payable(mytStrategy)).previewSwapInput(requestedAmount);
+
+        assertEq(sellToken, wstETH, "preview sell token should be wstETH");
+        assertEq(sellAmount, _maxWstEthIn(requestedAmount), "preview sell amount should match oracle sizing");
+    }
+
+    function test_previewSwapInput_returns_zero_when_idle_assets_cover_request() public {
+        uint256 idleBalance = 3e18;
+        deal(weth, mytStrategy, idleBalance);
+
+        (address sellToken, uint256 sellAmount) = WstethStrategy(payable(mytStrategy)).previewSwapInput(2e18);
+
+        assertEq(sellToken, wstETH, "preview sell token should be wstETH");
+        assertEq(sellAmount, 0, "preview should require no swap when idle WETH covers request");
+    }
+
     function test_realAssets_reverts_when_oracle_is_stale() public {
         vm.startPrank(vault);
         uint256 allocateAmount = 10e18;

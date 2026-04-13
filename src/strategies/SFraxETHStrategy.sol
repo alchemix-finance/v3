@@ -118,5 +118,17 @@ contract SFraxETHStrategy is OraclePricedSwapStrategy {
         sellToken = address(frxETH);
     }
 
+    function _previewIntermediateForSwap(uint256 maxOracleTokenIn)
+        internal
+        view
+        override
+        returns (address sellToken, uint256 sellAmount, uint256 minIntermediateOut)
+    {
+        sellToken = address(frxETH);
+        uint256 maxWithdrawable = sfrxETH.convertToAssets(sfrxETH.balanceOf(address(this)));
+        minIntermediateOut = maxOracleTokenIn > maxWithdrawable ? maxWithdrawable : maxOracleTokenIn;
+        sellAmount = minIntermediateOut;
+    }
+
     receive() external payable {}
 }

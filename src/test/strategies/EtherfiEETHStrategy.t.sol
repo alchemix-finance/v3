@@ -420,6 +420,22 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         assertLe(leftoverWeth, maxResidual, "leftover idle WETH should stay within slippage tolerance");
     }
 
+    function test_previewSwapInput_returns_weeth_sell_amount() public {
+        uint256 amountToAllocate = 25e18;
+        _mockFreshWeEthEthOracle(block.timestamp);
+
+        vm.startPrank(admin);
+        IAllocator(allocator).allocate(strategy, amountToAllocate);
+        vm.stopPrank();
+
+        uint256 requestedOut = 10e18;
+        (address sellToken, uint256 sellAmount) =
+            EtherfiEETHMYTStrategy(payable(strategy)).previewSwapInput(requestedOut);
+
+        assertEq(sellToken, WEETH, "preview sell token should be weETH");
+        assertEq(sellAmount, _maxWeEthIn(requestedOut), "preview sell amount should match oracle sizing");
+    }
+
     function test_deallocate_direct_uses_instant_redeem_path_cant_redeem() public {
         uint256 allocateAmount = 1e18;
         uint256 deallocateAmount = 1e16;

@@ -184,6 +184,23 @@ contract SiUSDStrategyTest is BaseStrategyTest {
         );
     }
 
+    function test_previewUnwrapAndSwapInput_returns_iusd_quote_inputs() public {
+        uint256 allocateAmount = 10_000e6;
+        uint256 requestedOut = 4_000e6;
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, allocateAmount);
+
+        uint256 expectedIntermediateOut = _previewUnwrapIntermediateOut(requestedOut);
+
+        (address sellToken, uint256 sellAmount, uint256 minIntermediateOut) =
+            SiUSDStrategy(strategy).previewUnwrapAndSwapInput(requestedOut);
+
+        assertEq(sellToken, IUSD, "preview sell token should be iUSD");
+        assertEq(sellAmount, expectedIntermediateOut, "preview sell amount should match oracle sizing");
+        assertEq(minIntermediateOut, expectedIntermediateOut, "preview min intermediate should match oracle sizing");
+    }
+
     function test_previewAdjustedWithdraw_isPositiveAfterAllocation() public {
         vm.prank(admin);
         IAllocator(allocator).allocate(strategy, 10_000e6);
@@ -223,6 +240,18 @@ contract SiUSDStrategyTest is BaseStrategyTest {
 
         uint256 shortfall = amount - idleUsdc;
         uint256 desiredIUsd = _assetToOracleToken(shortfall);
+        uint256 availableIUsd = IERC20(IUSD).balanceOf(strategy)
+            + ISIUSDView(SIUSD).convertToAssets(ISIUSDView(SIUSD).balanceOf(strategy));
+        return desiredIUsd > availableIUsd ? availableIUsd : desiredIUsd;
+    }
+
+    function _previewUnwrapIntermediateOut(uint256 amount) internal view returns (uint256) {
+        uint256 idleUsdc = IERC20(USDC).balanceOf(strategy);
+        if (idleUsdc >= amount) return 0;
+
+        uint256 shortfall = amount - idleUsdc;
+        uint256 maxUsdcIn = (shortfall * 10_000 + (10_000 - 300) - 1) / (10_000 - 300);
+        uint256 desiredIUsd = _assetToOracleToken(maxUsdcIn);
         uint256 availableIUsd = IERC20(IUSD).balanceOf(strategy)
             + ISIUSDView(SIUSD).convertToAssets(ISIUSDView(SIUSD).balanceOf(strategy));
         return desiredIUsd > availableIUsd ? availableIUsd : desiredIUsd;

@@ -227,6 +227,23 @@ contract SFraxETHStrategyTest is Test {
         );
     }
 
+    function test_previewUnwrapAndSwapInput_returns_frxeth_quote_inputs() public {
+        _mockFreshFrxEthEthOracle();
+
+        vm.prank(admin);
+        IAllocator(address(allocator)).allocate(address(strategy), 10e18);
+
+        uint256 requestedOut = 4e18;
+        uint256 expectedIntermediateOut = (requestedOut * 10_000 + (10_000 - 100) - 1) / (10_000 - 100);
+
+        (address sellToken, uint256 sellAmount, uint256 minIntermediateOut) =
+            strategy.previewUnwrapAndSwapInput(requestedOut);
+
+        assertEq(sellToken, FRXETH, "preview sell token should be frxETH");
+        assertEq(sellAmount, expectedIntermediateOut, "preview sell amount should match oracle sizing");
+        assertEq(minIntermediateOut, expectedIntermediateOut, "preview min intermediate should match oracle sizing");
+    }
+
     function test_allocator_deallocateWithSwap_reverts_useUnwrapPath() public {
         _mockFreshFrxEthEthOracle();
 

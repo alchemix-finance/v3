@@ -198,6 +198,20 @@ contract SiUSDStrategy is OraclePricedSwapStrategy {
         sellToken = address(iUSD);
     }
 
+    function _previewIntermediateForSwap(uint256 maxOracleTokenIn)
+        internal
+        view
+        override
+        returns (address sellToken, uint256 sellAmount, uint256 minIntermediateOut)
+    {
+        sellToken = address(iUSD);
+
+        uint256 availableIUsd = TokenUtils.safeBalanceOf(address(iUSD), address(this))
+            + siUSD.convertToAssets(siUSD.balanceOf(address(this)));
+        minIntermediateOut = maxOracleTokenIn > availableIUsd ? availableIUsd : maxOracleTokenIn;
+        sellAmount = minIntermediateOut;
+    }
+
     function _isProtectedToken(address token) internal view override returns (bool) {
         return token == MYT.asset() || token == address(iUSD) || token == address(siUSD);
     }
