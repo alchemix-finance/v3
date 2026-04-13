@@ -165,7 +165,7 @@ contract DeployV3ArbScript is Script {
         curator.increaseRelativeCap(address(strategy), aaveWETHParams.globalCap);
 
         // set as default usdc liquidity adapter
-        ethAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
+        // ethAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
         
         strategy.transferOwnership(newOwner);
         return strategy;
@@ -192,7 +192,7 @@ contract DeployV3ArbScript is Script {
         curator.increaseRelativeCap(address(strategy), aaveUSDCParams.globalCap);
 
         // set as default usdc liquidity adapter
-        usdcAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
+        // usdcAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
         strategy.transferOwnership(newOwner);
         return strategy;
     }
@@ -299,7 +299,7 @@ contract DeployV3ArbScript is Script {
         ITransmuter.TransmuterInitializationParams memory transmuterParams = ITransmuter.TransmuterInitializationParams({
             syntheticToken: alAsset,
             feeReceiver: protocolFeeReceiver,
-            timeToTransmute: 29_030_400,
+            timeToTransmute: 604_800,
             transmutationFee: 0,
             exitFee: 100,
             graphSize: 365 days
@@ -320,7 +320,7 @@ contract DeployV3ArbScript is Script {
             admin: deployerAddr,
             debtToken: alAsset,
             underlyingToken: underlying,
-            depositCap: cap, // FIXME 1.5 * migratedDeposits
+            depositCap: cap, 
             minimumCollateralization: 1_111_111_111_111_111_111,
             collateralizationLowerBound: 1_052_631_578_950_000_000, // 20/19
             liquidationTargetCollateralization: 1_111_111_111_111_111_111,

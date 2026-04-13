@@ -146,7 +146,7 @@ contract DeployV3OptimismScript is Script {
         curator.increaseRelativeCap(address(aaveUSDCStrategy), aaveUSDCParams.globalCap);
 
         // set as default usdc liquidity adapter
-        usdcAllocator.setLiquidityAdapter(address(aaveUSDCStrategy), _directLiquidityData());
+        // usdcAllocator.setLiquidityAdapter(address(aaveUSDCStrategy), _directLiquidityData());
         
         aaveUSDCStrategy.transferOwnership(newOwner);
         return aaveUSDCStrategy;
@@ -195,7 +195,7 @@ contract DeployV3OptimismScript is Script {
         curator.increaseRelativeCap(address(strategy), aaveV3WethParams.globalCap);
 
         // set as default usdc liquidity adapter
-        ethAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
+        // ethAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
         
         strategy.transferOwnership(newOwner);
         return strategy;

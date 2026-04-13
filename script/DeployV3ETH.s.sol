@@ -192,7 +192,7 @@ contract DeployV3ETHScript is Script {
         curator.increaseRelativeCap(address(strategy), yvUSDCParams.globalCap);
 
         // set as default usdc liquidity adapter
-        usdcAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
+        //usdcAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
         
         strategy.transferOwnership(newOwner);
         return strategy;
@@ -336,7 +336,7 @@ contract DeployV3ETHScript is Script {
         curator.increaseRelativeCap(address(strategy), aaveV3WethParams.globalCap);
 
         // set as default usdc liquidity adapter
-        ethAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
+        // ethAllocator.setLiquidityAdapter(address(strategy), _directLiquidityData());
         
         strategy.transferOwnership(newOwner);
         return strategy;
