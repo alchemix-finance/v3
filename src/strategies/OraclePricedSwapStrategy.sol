@@ -45,16 +45,11 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy, IOraclePricedSwapStra
     }
 
     function _deallocateViaOracleTokenSwap(uint256 amount, bytes memory callData) internal returns (uint256) {
-        uint256 idleBalance = _idleAssets();
-        if (idleBalance >= amount) {
+        (bool coveredByIdle, uint256 shortfall, uint256 maxOracleTokenIn) = _previewSwapSizing(amount);
+        if (coveredByIdle) {
             TokenUtils.safeApprove(_asset(), msg.sender, amount);
             return amount;
         }
-
-        uint256 shortfall = amount - idleBalance;
-        uint256 maxAssetIn = _roundUpMulDiv(shortfall, 10_000, 10_000 - params.slippageBPS);
-        uint256 maxOracleTokenIn = _assetToOracleTokenUp(maxAssetIn);
-        if (maxOracleTokenIn == 0) maxOracleTokenIn = 1;
 
         uint256 oracleTokenToSwap = _prepareOracleTokenForSwap(maxOracleTokenIn);
         require(oracleTokenToSwap > 0, "No oracle token to swap");
@@ -70,16 +65,11 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy, IOraclePricedSwapStra
         internal
         returns (uint256)
     {
-        uint256 idleBalance = _idleAssets();
-        if (idleBalance >= amount) {
+        (bool coveredByIdle, uint256 shortfall, uint256 maxOracleTokenIn) = _previewSwapSizing(amount);
+        if (coveredByIdle) {
             TokenUtils.safeApprove(_asset(), msg.sender, amount);
             return amount;
         }
-
-        uint256 shortfall = amount - idleBalance;
-        uint256 maxAssetIn = _roundUpMulDiv(shortfall, 10_000, 10_000 - params.slippageBPS);
-        uint256 maxOracleTokenIn = _assetToOracleTokenUp(maxAssetIn);
-        if (maxOracleTokenIn == 0) maxOracleTokenIn = 1;
 
         (address sellToken, uint256 sellAmount) = _prepareIntermediateForSwap(maxOracleTokenIn, minIntermediateOutAmount);
         require(sellToken != address(0), "No intermediate token");
@@ -100,15 +90,10 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy, IOraclePricedSwapStra
 
         sellToken = _oracleToken();
 
-        uint256 idleBalance = _idleAssets();
-        if (idleBalance >= assetAmountOut) {
+        (bool coveredByIdle,, uint256 maxOracleTokenIn) = _previewSwapSizing(assetAmountOut);
+        if (coveredByIdle) {
             return (sellToken, 0);
         }
-
-        uint256 shortfall = assetAmountOut - idleBalance;
-        uint256 maxAssetIn = _roundUpMulDiv(shortfall, 10_000, 10_000 - params.slippageBPS);
-        uint256 maxOracleTokenIn = _assetToOracleTokenUp(maxAssetIn);
-        if (maxOracleTokenIn == 0) maxOracleTokenIn = 1;
 
         sellAmount = _prepareOracleTokenForSwap(maxOracleTokenIn);
     }
@@ -124,15 +109,10 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy, IOraclePricedSwapStra
     {
         if (assetAmountOut == 0) revert InvalidAmount(1, 0);
 
-        uint256 idleBalance = _idleAssets();
-        if (idleBalance >= assetAmountOut) {
+        (bool coveredByIdle,, uint256 maxOracleTokenIn) = _previewSwapSizing(assetAmountOut);
+        if (coveredByIdle) {
             return (address(0), 0, 0);
         }
-
-        uint256 shortfall = assetAmountOut - idleBalance;
-        uint256 maxAssetIn = _roundUpMulDiv(shortfall, 10_000, 10_000 - params.slippageBPS);
-        uint256 maxOracleTokenIn = _assetToOracleTokenUp(maxAssetIn);
-        if (maxOracleTokenIn == 0) maxOracleTokenIn = 1;
 
         return _previewIntermediateForSwap(maxOracleTokenIn);
     }
@@ -183,9 +163,30 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy, IOraclePricedSwapStra
         return (x * y + denominator - 1) / denominator;
     }
 
+    /// @dev Shared sizing helper for swap-based deallocation previews and execution.
+    function _previewSwapSizing(uint256 assetAmountOut)
+        internal
+        view
+        returns (bool coveredByIdle, uint256 shortfall, uint256 maxOracleTokenIn)
+    {
+        uint256 idleBalance = _idleAssets();
+        if (idleBalance >= assetAmountOut) {
+            return (true, 0, 0);
+        }
+
+        shortfall = assetAmountOut - idleBalance;
+        uint256 maxAssetIn = _roundUpMulDiv(shortfall, 10_000, 10_000 - params.slippageBPS);
+        maxOracleTokenIn = _assetToOracleTokenUp(maxAssetIn);
+        if (maxOracleTokenIn == 0) maxOracleTokenIn = 1;
+    }
+
     /// @notice Returns the vault asset managed by the parent MYT.
     function _asset() internal view returns (address) {
         return MYT.asset();
+    }
+
+    function positionToken() public view virtual override returns (address) {
+        return _oracleToken();
     }
 
     /// @notice Validates the result of an allocation swap before any post-swap processing occurs.
