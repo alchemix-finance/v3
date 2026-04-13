@@ -300,8 +300,7 @@ contract DeployV3ETHScript is Script {
             wstEthParams,
             wstETH,
             wstEthEthOracle,
-            true,
-            7000
+            true
         );
         strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));

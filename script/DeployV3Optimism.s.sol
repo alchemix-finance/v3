@@ -158,8 +158,7 @@ contract DeployV3OptimismScript is Script {
             wstEthParams,
             wstETH,
             wstEthEthOracle,
-            false,
-            7000
+            false
         );
 
         strategy.setKillSwitch(true);
