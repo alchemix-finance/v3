@@ -120,6 +120,8 @@ abstract contract StrategySetup is Test, IRevertAllowlistProvider {
         return address(MYTTestHelper._setupVault(asset, admin, curator));
     }
 
+    uint256 public constant PERFORMANCE_FEE = 15e16;
+
     function _setUpMYT(address _vault, address _mytStrategy, uint256 absoluteCap, uint256 relativeCap) internal {
         vm.startPrank(admin);
         classifier = address(new AlchemistStrategyClassifier(admin));

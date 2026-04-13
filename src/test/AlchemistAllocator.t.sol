@@ -344,7 +344,6 @@ contract AlchemistAllocatorTest is Test {
         assertEq(performanceFeeShares, 0);
         assertEq(managementFeeShares, 0);
         assertEq(vault._totalAssets(), 150 ether);
-        assertEq(vault.firstTotalAssets(), 150 ether);
         assertEq(vault.allocation(allocationId), 100 ether);
         vm.stopPrank();
     }
@@ -370,7 +369,6 @@ contract AlchemistAllocatorTest is Test {
         assertEq(performanceFeeShares, 0);
         assertEq(managementFeeShares, 0);
         assertEq(vault._totalAssets(), 150 ether);
-        assertEq(vault.firstTotalAssets(), 150 ether);
         assertEq(allocation, 50 ether);
         vm.stopPrank();
     }
@@ -425,7 +423,6 @@ contract AlchemistAllocatorTest is Test {
         assertEq(performanceFeeShares, 0);
         assertEq(managementFeeShares, 0);
         assertEq(vault._totalAssets(), 400 ether);
-        assertEq(vault.firstTotalAssets(), 400 ether);
         assertApproxEqRel(allocation, expectedRemainingRealAssets, 1e14); // 0.01% rounding headroom
         vm.stopPrank();
     }
@@ -530,6 +527,97 @@ contract AlchemistAllocatorTest is Test {
         address yieldWhale = address(0x7777);
 
         // Give whale underlying and have it mint yield shares to itself
+        deal(mockVaultCollateral, yieldWhale, seedUnderlying);
+        vm.startPrank(yieldWhale);
+        TokenUtils.safeApprove(mockVaultCollateral, mockStrategyYieldToken, seedUnderlying);
+        IMockYieldToken(mockStrategyYieldToken).mint(seedUnderlying, yieldWhale);
+        vm.stopPrank();
+    }
+}
+
+contract AlchemistAllocatorPerformanceFeeTest is Test {
+    using MYTTestHelper for *;
+
+    MockAlchemistAllocator public allocator;
+    AlchemistStrategyClassifier public classifier;
+    VaultV2 public vault;
+    address public admin = address(0x2222222222222222222222222222222222222222);
+    address public operator = address(0x3333333333333333333333333333333333333333);
+    address public curator = address(0x8888888888888888888888888888888888888888);
+    address public user1 = address(0x5555555555555555555555555555555555555555);
+    address public mockVaultCollateral = address(new TestERC20(100e18, uint8(18)));
+    address public mockStrategyYieldToken = address(new MockYieldToken(mockVaultCollateral));
+    MockMYTStrategy public mytStrategy;
+
+    function setUp() public {
+        vm.startPrank(admin);
+        vault = MYTTestHelper._setupVault(mockVaultCollateral, admin, curator);
+        mytStrategy = MYTTestHelper._setupStrategy(
+            address(vault), mockStrategyYieldToken, admin, "MockToken", "MockTokenProtocol", IMYTStrategy.RiskClass.LOW
+        );
+        classifier = new AlchemistStrategyClassifier(admin);
+        classifier.setRiskClass(0, 1e18, 1e18);
+        classifier.setRiskClass(1, 0.4e18, 0.25e18);
+        classifier.setRiskClass(2, 0.1e18, 0.1e18);
+        bytes32 strategyId = mytStrategy.adapterId();
+        classifier.assignStrategyRiskLevel(uint256(strategyId), uint8(IMYTStrategy.RiskClass.LOW));
+        allocator = new MockAlchemistAllocator(address(vault), admin, operator, address(classifier));
+        vm.stopPrank();
+
+        vm.startPrank(curator);
+        vault.submit(abi.encodeCall(IVaultV2.setIsAllocator, (address(allocator), true)));
+        vault.setIsAllocator(address(allocator), true);
+        vault.submit(abi.encodeCall(IVaultV2.addAdapter, address(mytStrategy)));
+        vault.addAdapter(address(mytStrategy));
+        bytes memory idData = mytStrategy.getIdData();
+        vault.submit(abi.encodeCall(IVaultV2.increaseAbsoluteCap, (idData, 500 ether)));
+        vault.increaseAbsoluteCap(idData, 500 ether);
+        vault.submit(abi.encodeCall(IVaultV2.increaseRelativeCap, (idData, 1e18)));
+        vault.increaseRelativeCap(idData, 1e18);
+        vm.stopPrank();
+
+        _seedYieldToken(1_000_000 ether);
+        _magicDepositToVault(address(vault), user1, 400 ether);
+        vm.prank(admin);
+        allocator.allocate(address(mytStrategy), 200 ether);
+
+        uint256 supply = IERC20(mockStrategyYieldToken).totalSupply();
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(supply / 2);
+
+        vm.prank(admin);
+        allocator.setMaxRate(200e16 / uint256(365 days));
+        vm.warp(block.timestamp + 365 days);
+    }
+
+    function testPerformanceFeeCollectedOnYield() public {
+        // With --isolate, transient firstTotalAssets resets between setUp and this test function.
+        // The first accrueInterest in this tx will see the yield and collect the 15% fee.
+        uint256 idle = IERC20(mockVaultCollateral).balanceOf(address(vault));
+        uint256 realAssets = mytStrategy.realAssets();
+        uint256 newTotalAssets = idle + realAssets;
+        uint256 interest = newTotalAssets - vault._totalAssets();
+        uint256 expectedFeeAssets = interest * 15e16 / 1e18;
+        uint256 expectedFeeShares = expectedFeeAssets * (vault.totalSupply() + 1) / (newTotalAssets - expectedFeeAssets + 1);
+
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        vault.accrueInterest();
+        assertEq(
+            vault.balanceOf(admin) - adminSharesBefore,
+            expectedFeeShares,
+            "performance fee shares mismatch"
+        );
+    }
+
+    function _magicDepositToVault(address _vault, address depositor, uint256 amount) internal {
+        deal(mockVaultCollateral, depositor, amount);
+        vm.startPrank(depositor);
+        TokenUtils.safeApprove(mockVaultCollateral, _vault, amount);
+        IVaultV2(_vault).deposit(amount, depositor);
+        vm.stopPrank();
+    }
+
+    function _seedYieldToken(uint256 seedUnderlying) internal {
+        address yieldWhale = address(0x7777);
         deal(mockVaultCollateral, yieldWhale, seedUnderlying);
         vm.startPrank(yieldWhale);
         TokenUtils.safeApprove(mockVaultCollateral, mockStrategyYieldToken, seedUnderlying);

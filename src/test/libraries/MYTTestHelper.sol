@@ -7,15 +7,24 @@ import {TokenUtils} from "../../libraries/TokenUtils.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {MockMYTStrategy} from "../mocks/MockMYTStrategy.sol";
 import {MockMYTVault} from "../mocks/MockMYTVault.sol";
+import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
 library MYTTestHelper {
     Vm private constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+    uint256 public constant PERFORMANCE_FEE = 15e16;
 
     function _setupVault(address collateral, address admin, address curator) internal returns (MockMYTVault) {
-        // create vault with collateral
         MockMYTVault vault = new MockMYTVault(admin, collateral);
-        // set curator
         vault.setCurator(curator);
+
+        vm.stopPrank();
+        vm.startPrank(curator);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFeeRecipient, (admin)));
+        vault.setPerformanceFeeRecipient(admin);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFee, (PERFORMANCE_FEE)));
+        vault.setPerformanceFee(PERFORMANCE_FEE);
+        vm.stopPrank();
+        vm.startPrank(admin);
 
         return vault;
     }

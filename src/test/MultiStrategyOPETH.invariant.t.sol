@@ -21,6 +21,7 @@ contract MultiStrategyOPETHHandler is Test {
     address[] public strategies;
     address public allocator;
     address public classifier;
+    address public curatorContract;
     address public admin;
     address public operator;
     address public asset;
@@ -95,6 +96,7 @@ contract MultiStrategyOPETHHandler is Test {
         address[] memory _strategies,
         address _allocator,
         address _classifier,
+        address _curatorContract,
         address _admin,
         address _operator,
         string[] memory _strategyNames
@@ -103,6 +105,7 @@ contract MultiStrategyOPETHHandler is Test {
         strategies = _strategies;
         allocator = _allocator;
         classifier = _classifier;
+        curatorContract = _curatorContract;
         admin = _admin;
         operator = _operator;
         asset = vault.asset();
@@ -694,7 +697,24 @@ contract MultiStrategyOPETHHandler is Test {
     }
 
     // ============ TIME OPERATIONS ============
-    
+
+    function changePerformanceFee(uint256 feeSeed)
+        external
+        countCall(this.changePerformanceFee.selector)
+    {
+        bytes4 selector = this.changePerformanceFee.selector;
+        if (feeSeed % 200 != 0) { _markNoop(selector); return; }
+
+        uint256 newFee = bound(feeSeed / 200, 0, 0.5e18);
+
+        _markAttempt(selector);
+        vm.prank(admin);
+        AlchemistCurator(curatorContract).submitSetPerformanceFee(address(vault), newFee);
+        vm.prank(admin);
+        vault.setPerformanceFee(newFee);
+        _markSuccess(selector);
+    }
+
     function warpTime(uint256 timeDelta) external countCall(this.warpTime.selector) {
         timeDelta = bound(timeDelta, 1 hours, 365 days);
         vm.warp(block.timestamp + timeDelta);
@@ -804,6 +824,7 @@ contract MultiStrategyOPETHHandler is Test {
         console.log("Admin Risk Config Operations:");
         console.log("  reclassifyStrategy calls:", calls[this.reclassifyStrategy.selector]);
         console.log("  modifyRiskClassCaps calls:", calls[this.modifyRiskClassCaps.selector]);
+        console.log("  changePerformanceFee calls:", calls[this.changePerformanceFee.selector]);
         console.log("Time Operations:");
         console.log("  warpTime calls:", calls[this.warpTime.selector]);
         console.log("Ghost Variables:");
@@ -895,6 +916,7 @@ contract MultiStrategyOPETHInvariantTest is Test {
             strategies,
             allocator,
             classifier,
+            curatorContract,
             admin,
             operator,
             strategyNames
@@ -904,7 +926,7 @@ contract MultiStrategyOPETHInvariantTest is Test {
         targetContract(address(handler));
         
         // Target specific functions
-        bytes4[] memory selectors = new bytes4[](11);
+        bytes4[] memory selectors = new bytes4[](12);
         selectors[0] = handler.deposit.selector;
         selectors[1] = handler.withdraw.selector;
         selectors[2] = handler.mint.selector;
@@ -916,6 +938,7 @@ contract MultiStrategyOPETHInvariantTest is Test {
         selectors[8] = handler.warpTime.selector;
         selectors[9] = handler.reclassifyStrategy.selector;
         selectors[10] = handler.modifyRiskClassCaps.selector;
+        selectors[11] = handler.changePerformanceFee.selector;
         
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
@@ -993,7 +1016,16 @@ contract MultiStrategyOPETHInvariantTest is Test {
         
         curatorContract = address(new AlchemistCurator(admin, admin));
         VaultV2(address(vault)).setCurator(curatorContract);
+        _setPerformanceFee(curatorContract);
         allocator = address(new AlchemistAllocator(address(vault), admin, operator, classifier));
+    }
+
+    function _setPerformanceFee(address _curator) internal {
+        AlchemistCurator curator = AlchemistCurator(_curator);
+        curator.submitSetPerformanceFeeRecipient(address(vault), admin);
+        vault.setPerformanceFeeRecipient(admin);
+        curator.submitSetPerformanceFee(address(vault), 15e16);
+        vault.setPerformanceFee(15e16);
     }
     
     function _addStrategiesToVault() internal {

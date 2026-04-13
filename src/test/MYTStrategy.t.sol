@@ -158,6 +158,20 @@ contract MYTStrategyTest is Test {
         transmuterLogic = new Transmuter(transParams);
         AlchemistV3 alchemistLogic = new AlchemistV3();
         vault = IVaultV2(vaultFactory.createVaultV2(address(proxyOwner), address(fakeUnderlyingToken), bytes32("strategy-vault")));
+        vm.stopPrank();
+
+        vm.startPrank(proxyOwner);
+        VaultV2(address(vault)).setCurator(alOwner);
+        vm.stopPrank();
+
+        vm.startPrank(alOwner);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFeeRecipient, (alOwner)));
+        vault.setPerformanceFeeRecipient(alOwner);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFee, (15e16)));
+        vault.setPerformanceFee(15e16);
+        vm.stopPrank();
+
+        vm.startPrank(alOwner);
 
         // AlchemistV3 proxy
         AlchemistInitializationParams memory params = AlchemistInitializationParams({

@@ -237,4 +237,89 @@ contract AlchemistCuratorTest is Test {
         mytCuratorProxy.setStrategy(adapter, myt);
         vm.stopPrank();
     }
+
+    /// remove strategy tests
+
+    function testSubmitRemoveStrategy() public {
+        _submitAndSetStrategy(address(mytStrategy), address(vault));
+        vm.prank(operator);
+        mytCuratorProxy.submitRemoveStrategy(address(mytStrategy), address(vault));
+    }
+
+    function testRemoveStrategy() public {
+        _submitAndSetStrategy(address(mytStrategy), address(vault));
+
+        vm.startPrank(operator);
+        mytCuratorProxy.submitRemoveStrategy(address(mytStrategy), address(vault));
+        _vaultFastForward(abi.encodeCall(IVaultV2.removeAdapter, address(mytStrategy)));
+        mytCuratorProxy.removeStrategy(address(mytStrategy), address(vault));
+        vm.stopPrank();
+
+        assertFalse(vault.isAdapter(address(mytStrategy)), "adapter should be removed");
+        assertEq(mytCuratorProxy.adapterToMYT(address(mytStrategy)), address(0), "adapterToMYT should be cleared");
+    }
+
+    function testSubmitRemoveStrategyRevertsOnInvalidAdapter() public {
+        vm.prank(operator);
+        vm.expectRevert(abi.encode("INVALID_ADDRESS"));
+        mytCuratorProxy.submitRemoveStrategy(address(0), address(vault));
+    }
+
+    function testSubmitRemoveStrategyRevertsOnInvalidMYT() public {
+        vm.startPrank(operator);
+        vm.expectRevert(abi.encode("INVALID_ADDRESS"));
+        mytCuratorProxy.submitRemoveStrategy(address(mytStrategy), address(0));
+        vm.stopPrank();
+    }
+
+    function testRemoveStrategyRevertsOnInvalidAdapter() public {
+        vm.prank(operator);
+        vm.expectRevert(abi.encode("INVALID_ADDRESS"));
+        mytCuratorProxy.removeStrategy(address(0), address(vault));
+    }
+
+    function testRemoveStrategyRevertsOnInvalidMYT() public {
+        vm.startPrank(operator);
+        vm.expectRevert(abi.encode("INVALID_ADDRESS"));
+        mytCuratorProxy.removeStrategy(address(mytStrategy), address(0));
+        vm.stopPrank();
+    }
+
+    function testRemoveStrategyUnauthorizedAccessRevert() public {
+        vm.expectRevert(abi.encode("PD"));
+        mytCuratorProxy.removeStrategy(address(mytStrategy), address(vault));
+    }
+
+    function testSubmitRemoveStrategyUnauthorizedAccessRevert() public {
+        vm.expectRevert(abi.encode("PD"));
+        mytCuratorProxy.submitRemoveStrategy(address(mytStrategy), address(vault));
+    }
+
+    function testRemoveStrategyClearsAdapterMapping() public {
+        _submitAndSetStrategy(address(mytStrategy), address(vault));
+        assertEq(mytCuratorProxy.adapterToMYT(address(mytStrategy)), address(vault));
+
+        bytes32 allocationId = IMYTStrategy(address(mytStrategy)).adapterId();
+        assertEq(vault.isAdapter(address(mytStrategy)), true);
+        assertEq(vault.adaptersLength(), 1);
+
+        // remove
+        vm.startPrank(operator);
+        mytCuratorProxy.submitRemoveStrategy(address(mytStrategy), address(vault));
+        _vaultFastForward(abi.encodeCall(IVaultV2.removeAdapter, address(mytStrategy)));
+        mytCuratorProxy.removeStrategy(address(mytStrategy), address(vault));
+        vm.stopPrank();
+
+        // verify vault no longer recognizes the adapter
+        assertEq(vault.isAdapter(address(mytStrategy)), false, "adapter should be removed from vault");
+        assertEq(vault.adaptersLength(), 0, "adapters length should be 0");
+
+        // verify the removed adapter is not iterated in totalAssets (no realAssets query)
+        // allocation caps remain but the adapter is excluded from adapters array
+        uint256 totalAssets = vault.totalAssets();
+        assertEq(totalAssets, TestERC20(mockVaultCollateral).balanceOf(address(vault)), "totalAssets should only reflect idle balance");
+
+        // verify curator mapping cleared
+        assertEq(mytCuratorProxy.adapterToMYT(address(mytStrategy)), address(0), "adapterToMYT should be cleared");
+    }
 }

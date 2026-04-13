@@ -30,4 +30,10 @@ interface IAlchemistCurator {
 
     function submitSetForceDeallocatePenalty(address adapter, address myt, uint256 penalty) external;
     event SubmitSetForceDeallocatePenalty(address indexed adapter, address indexed myt, uint256 penalty);
+
+    function submitSetPerformanceFeeRecipient(address myt, address recipient) external;
+    event SubmitSetPerformanceFeeRecipient(address indexed myt, address indexed recipient);
+
+    function submitSetPerformanceFee(address myt, uint256 fee) external;
+    event SubmitSetPerformanceFee(address indexed myt, uint256 fee);
 }

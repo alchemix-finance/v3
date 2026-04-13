@@ -129,6 +129,14 @@ contract WstethOptimismStrategyTest is Test {
     function _getVault(address asset) internal returns (address) {
         MockMYTVault v = new MockMYTVault{salt: bytes32("vault")}(admin, asset);
         v.setCurator(curator);
+        vm.stopPrank();
+        vm.startPrank(curator);
+        v.submit(abi.encodeCall(IVaultV2.setPerformanceFeeRecipient, (admin)));
+        v.setPerformanceFeeRecipient(admin);
+        v.submit(abi.encodeCall(IVaultV2.setPerformanceFee, (15e16)));
+        v.setPerformanceFee(15e16);
+        vm.stopPrank();
+        vm.startPrank(admin);
         return address(v);
     }
 

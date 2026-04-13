@@ -62,6 +62,15 @@ contract SFraxETHStrategyTest is Test {
         classifier.setRiskClass(2, 0.1e18, 0.1e18); // HIGH: 10%/10%
         allocator = new AlchemistAllocator(address(vault), admin, operator, address(classifier));
 
+        vm.stopPrank();
+        vm.startPrank(operator);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFeeRecipient, (admin)));
+        vault.setPerformanceFeeRecipient(admin);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFee, (15e16)));
+        vault.setPerformanceFee(15e16);
+        vm.stopPrank();
+        vm.startPrank(admin);
+
         IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({
             owner: admin,
             name: "sfrxETH",

@@ -153,6 +153,18 @@ contract AlchemistCurator is IAlchemistCurator, PermissionedProxy {
         emit SubmitSetForceDeallocatePenalty(adapter, myt, penalty);
     }
 
+    function submitSetPerformanceFeeRecipient(address myt, address recipient) external onlyAdmin {
+        bytes memory data = abi.encodeCall(IVaultV2.setPerformanceFeeRecipient, (recipient));
+        IVaultV2(myt).submit(data);
+        emit SubmitSetPerformanceFeeRecipient(myt, recipient);
+    }
+
+    function submitSetPerformanceFee(address myt, uint256 fee) external onlyAdmin {
+        bytes memory data = abi.encodeCall(IVaultV2.setPerformanceFee, (fee));
+        IVaultV2(myt).submit(data);
+        emit SubmitSetPerformanceFee(myt, fee);
+    }
+
     function _vaultSubmit(address adapter, bytes memory data) internal {
         IVaultV2 vault = _vault(adapter);
         vault.submit(data);
