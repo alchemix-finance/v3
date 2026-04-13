@@ -37,7 +37,7 @@ contract DeployV3OptimismScript is Script {
     // Asset addresses
     address public aUSDC = 0x38d693cE1dF5AaDF7bC62595A37D667aD57922e5;
     address public wethOP = 0x4200000000000000000000000000000000000006;
-    address public alUSD = 0xb2c22A9fb4FC02eb9D1d337655Ce079a04a526C7;
+    address public alUSD = 0xCB8FA9a76b8e203D8C3797bF438d8FB81Ea3326A;
     address public alETH = 0x3E29D3A9316dAB217754d13b28646B76607c5f04;
     address public USDC = 0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85;
 
