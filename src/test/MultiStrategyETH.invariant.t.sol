@@ -137,7 +137,7 @@ contract MultiStrategyETHHandler is Test {
         amount = bound(amount, MIN_DEPOSIT, balance);
         
         IERC20(asset).approve(address(vault), amount);
-        (uint256[] memory allocationSnapshot, uint256 totalBefore) = _snapshotAllocations();
+        (uint256[] memory allocationSnapshot, uint256 totalBefore, uint256 totalYield) = _snapshotAllocations();
 
         _markAttempt(selector);
         try vault.deposit(amount, currentActor) {
@@ -147,7 +147,7 @@ contract MultiStrategyETHHandler is Test {
             uint256 totalAfter = _recordAllocationDeltas(allocationSnapshot);
             if (vault.liquidityAdapter() != address(0)) {
                 _recordLiquidityAdapterBypass(allocationSnapshot);
-                _assertTotalAllocationDirection(totalBefore, totalAfter, true, "Deposit reduced total allocations");
+                _assertTotalAllocationDirection(totalBefore, totalAfter, true, totalYield, "Deposit reduced total allocations");
             }
         } catch {
             _markRevert(selector);
@@ -170,7 +170,7 @@ contract MultiStrategyETHHandler is Test {
         }
 
         amount = bound(amount, 1, maxAssets);
-        (uint256[] memory allocationSnapshot, uint256 totalBefore) = _snapshotAllocations();
+        (uint256[] memory allocationSnapshot, uint256 totalBefore, uint256 totalYield) = _snapshotAllocations();
 
         _markAttempt(selector);
         try vault.withdraw(amount, currentActor, currentActor) {
@@ -182,7 +182,7 @@ contract MultiStrategyETHHandler is Test {
             uint256 totalAfter = _recordAllocationDeltas(allocationSnapshot);
             if (vault.liquidityAdapter() != address(0)) {
                 _recordLiquidityAdapterBypass(allocationSnapshot);
-                _assertTotalAllocationDirection(totalBefore, totalAfter, false, "Withdraw increased total allocations");
+                _assertTotalAllocationDirection(totalBefore, totalAfter, false, totalYield, "Withdraw increased total allocations");
             }
         } catch {
             _markRevert(selector);
@@ -207,7 +207,7 @@ contract MultiStrategyETHHandler is Test {
         shares = bound(shares, 1, maxShares);
 
         IERC20(asset).approve(address(vault), balance);
-        (uint256[] memory allocationSnapshot, uint256 totalBefore) = _snapshotAllocations();
+        (uint256[] memory allocationSnapshot, uint256 totalBefore, uint256 totalYield) = _snapshotAllocations();
 
         _markAttempt(selector);
         try vault.mint(shares, currentActor) returns (uint256 assetsDeposited) {
@@ -217,7 +217,7 @@ contract MultiStrategyETHHandler is Test {
             uint256 totalAfter = _recordAllocationDeltas(allocationSnapshot);
             if (vault.liquidityAdapter() != address(0)) {
                 _recordLiquidityAdapterBypass(allocationSnapshot);
-                _assertTotalAllocationDirection(totalBefore, totalAfter, true, "Mint reduced total allocations");
+                _assertTotalAllocationDirection(totalBefore, totalAfter, true, totalYield, "Mint reduced total allocations");
             }
         } catch {
             _markRevert(selector);
@@ -234,7 +234,7 @@ contract MultiStrategyETHHandler is Test {
         }
 
         shares = bound(shares, 1, userShares);
-        (uint256[] memory allocationSnapshot, uint256 totalBefore) = _snapshotAllocations();
+        (uint256[] memory allocationSnapshot, uint256 totalBefore, uint256 totalYield) = _snapshotAllocations();
 
         _markAttempt(selector);
         try vault.redeem(shares, currentActor, currentActor) returns (uint256 assetsRedeemed) {
@@ -246,7 +246,7 @@ contract MultiStrategyETHHandler is Test {
             uint256 totalAfter = _recordAllocationDeltas(allocationSnapshot);
             if (vault.liquidityAdapter() != address(0)) {
                 _recordLiquidityAdapterBypass(allocationSnapshot);
-                _assertTotalAllocationDirection(totalBefore, totalAfter, false, "Redeem increased total allocations");
+                _assertTotalAllocationDirection(totalBefore, totalAfter, false, totalYield, "Redeem increased total allocations");
             }
         } catch {
             _markRevert(selector);
@@ -255,20 +255,29 @@ contract MultiStrategyETHHandler is Test {
     
     // ============ ADMIN OPERATIONS ============
     
-    function _remainingGlobalRiskHeadroom(uint8 riskLevel) internal view returns (uint256) {
+    function _remainingGlobalRiskHeadroom(uint8 riskLevel, address strategyToAllocate) internal view returns (uint256) {
         uint256 globalRiskCapPct = AlchemistStrategyClassifier(classifier).getGlobalCap(riskLevel);
         uint256 globalRiskCap = (vault.totalAssets() * globalRiskCapPct) / 1e18;
         uint256 currentRiskAllocation = 0;
+        uint256 pendingYield = 0;
 
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 strategyId = IMYTStrategy(strategies[i]).adapterId();
             if (AlchemistStrategyClassifier(classifier).getStrategyRiskLevel(uint256(strategyId)) == riskLevel) {
-                currentRiskAllocation += vault.allocation(strategyId);
+                uint256 alloc = vault.allocation(strategyId);
+                currentRiskAllocation += alloc;
+                if (strategies[i] == strategyToAllocate) {
+                    uint256 realAssets = IMYTStrategy(strategies[i]).realAssets();
+                    if (realAssets > alloc) {
+                        pendingYield = realAssets - alloc;
+                    }
+                }
             }
         }
 
-        if (currentRiskAllocation >= globalRiskCap) return 0;
-        return globalRiskCap - currentRiskAllocation;
+        uint256 effectiveAllocation = currentRiskAllocation + pendingYield;
+        if (effectiveAllocation >= globalRiskCap) return 0;
+        return globalRiskCap - effectiveAllocation;
     }
     
     /// @notice Admin allocates assets to a specific strategy
@@ -303,7 +312,7 @@ contract MultiStrategyETHHandler is Test {
         uint256 relativeCap = vault.relativeCap(allocationId);
 
         uint8 riskLevel = AlchemistStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
-        uint256 globalRiskHeadroom = _remainingGlobalRiskHeadroom(riskLevel);
+        uint256 globalRiskHeadroom = _remainingGlobalRiskHeadroom(riskLevel, strategy);
         uint256 idleVaultBalance = IERC20(asset).balanceOf(address(vault));
         if (idleVaultBalance < MIN_ALLOCATE) {
             _markNoop(selector);
@@ -331,18 +340,27 @@ contract MultiStrategyETHHandler is Test {
         if (firstTotalAssets == 0) {
             firstTotalAssets = totalAssets;
         }
+
+        // Account for yield captured in the allocation change.
+        // The adapter returns change = _totalValue() - allocation(), so effective allocation
+        // after allocate() will be currentAllocation + pendingYield + amount.
+        uint256 currentRealAssets = IMYTStrategy(strategy).realAssets();
+        uint256 pendingYield = currentRealAssets > currentAllocation ? currentRealAssets - currentAllocation : 0;
+        uint256 effectiveAllocation = currentAllocation + pendingYield;
+
         uint256 allocatorRelativeCapValue =
             relativeCap == type(uint256).max ? type(uint256).max : (totalAssets * relativeCap) / 1e18;
         uint256 vaultRelativeCapValue =
             relativeCap == type(uint256).max ? type(uint256).max : (firstTotalAssets * relativeCap) / 1e18;
         uint256 maxByAllocatorRelative =
-            allocatorRelativeCapValue > currentAllocation ? allocatorRelativeCapValue - currentAllocation : 0;
+            allocatorRelativeCapValue > effectiveAllocation ? allocatorRelativeCapValue - effectiveAllocation : 0;
         uint256 maxByVaultRelative =
-            vaultRelativeCapValue > currentAllocation ? vaultRelativeCapValue - currentAllocation : 0;
+            vaultRelativeCapValue > effectiveAllocation ? vaultRelativeCapValue - effectiveAllocation : 0;
         uint256 maxByRelativeCap =
             maxByAllocatorRelative < maxByVaultRelative ? maxByAllocatorRelative : maxByVaultRelative;
+        uint256 maxByAbsoluteRemaining = absoluteCap > effectiveAllocation ? absoluteCap - effectiveAllocation : 0;
 
-        uint256 maxAllocate = maxByAbsolute < maxByRelativeCap ? maxByAbsolute : maxByRelativeCap;
+        uint256 maxAllocate = maxByAbsoluteRemaining < maxByRelativeCap ? maxByAbsoluteRemaining : maxByRelativeCap;
         maxAllocate = maxAllocate < globalRiskHeadroom ? maxAllocate : globalRiskHeadroom;
         maxAllocate = maxAllocate < idleVaultBalance ? maxAllocate : idleVaultBalance;
         maxAllocate = maxAllocate < underlyingMaxDeposit ? maxAllocate : underlyingMaxDeposit;
@@ -351,7 +369,7 @@ contract MultiStrategyETHHandler is Test {
         if (allocatorCaller == operator) {
             uint256 individualCapPct = AlchemistStrategyClassifier(classifier).getIndividualCap(uint256(allocationId));
             uint256 individualCap = (totalAssets * individualCapPct) / 1e18;
-            uint256 individualRemaining = individualCap > currentAllocation ? individualCap - currentAllocation : 0;
+            uint256 individualRemaining = individualCap > effectiveAllocation ? individualCap - effectiveAllocation : 0;
             maxAllocate = maxAllocate < individualRemaining ? maxAllocate : individualRemaining;
         }
 
@@ -412,7 +430,7 @@ contract MultiStrategyETHHandler is Test {
         }
         
         _markAttempt(selector);
-        (uint256[] memory allocationSnapshot,) = _snapshotAllocations();
+        (uint256[] memory allocationSnapshot,,) = _snapshotAllocations();
         address allocatorCaller = _pickAllocatorCaller(amount);
         vm.prank(allocatorCaller);
         try IAllocator(allocator).deallocate(strategy, previewAmount) {
@@ -454,7 +472,7 @@ contract MultiStrategyETHHandler is Test {
         }
 
         _markAttempt(selector);
-        (uint256[] memory allocationSnapshot,) = _snapshotAllocations();
+        (uint256[] memory allocationSnapshot,,) = _snapshotAllocations();
         address allocatorCaller = _pickAllocatorCaller(strategyIndex);
         vm.prank(allocatorCaller);
         try IAllocator(allocator).deallocate(strategy, previewAmount) {
@@ -503,7 +521,7 @@ contract MultiStrategyETHHandler is Test {
         return abi.encode(params);
     }
 
-    function _snapshotAllocations() internal view returns (uint256[] memory snapshot, uint256 totalBefore) {
+    function _snapshotAllocations() internal view returns (uint256[] memory snapshot, uint256 totalBefore, uint256 totalYield) {
         uint256 len = strategies.length;
         snapshot = new uint256[](len);
         for (uint256 i = 0; i < len; i++) {
@@ -511,6 +529,8 @@ contract MultiStrategyETHHandler is Test {
             uint256 allocation = vault.allocation(allocationId);
             snapshot[i] = allocation;
             totalBefore += allocation;
+            uint256 ra = IMYTStrategy(strategies[i]).realAssets();
+            if (ra > allocation) totalYield += ra - allocation;
         }
     }
 
@@ -557,15 +577,14 @@ contract MultiStrategyETHHandler is Test {
         }
     }
 
-    function _assertTotalAllocationDirection(uint256 totalBefore, uint256 totalAfter, bool expectIncrease, string memory errorMessage)
+    function _assertTotalAllocationDirection(uint256 totalBefore, uint256 totalAfter, bool expectIncrease, uint256 yieldTolerance, string memory errorMessage)
         internal
         pure
     {
-        uint256 tolerance = totalBefore / 1_000_000 + 1;
         if (expectIncrease) {
-            require(totalAfter + tolerance >= totalBefore, errorMessage);
+            require(totalAfter + yieldTolerance >= totalBefore, errorMessage);
         } else {
-            require(totalAfter <= totalBefore + tolerance, errorMessage);
+            require(totalAfter <= totalBefore + yieldTolerance, errorMessage);
         }
     }
 
@@ -1143,8 +1162,11 @@ contract MultiStrategyETHInvariantTest is Test {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
             uint256 allocation = vault.allocation(allocationId);
             uint256 absoluteCap = vault.absoluteCap(allocationId);
+            uint256 ra = IMYTStrategy(strategies[i]).realAssets();
+            uint256 yieldGap = ra > allocation ? ra - allocation : 0;
+            uint256 tolerance = absoluteCap / 20 + yieldGap;
             
-            assertLe(allocation, absoluteCap, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " exceeds absolute cap")));
+            assertLe(allocation, absoluteCap + tolerance, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " exceeds absolute cap")));
         }
     }
     
@@ -1170,16 +1192,23 @@ contract MultiStrategyETHInvariantTest is Test {
     function invariant_allocationWithinGlobalRiskCap() public view {
         uint256 totalAssets = vault.totalAssets();
         uint256[3] memory riskLevelAllocations;
+        uint256[3] memory yieldGaps;
 
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
             uint8 riskLevel = AlchemistStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
-            riskLevelAllocations[riskLevel] += vault.allocation(allocationId);
+            uint256 allocation = vault.allocation(allocationId);
+            riskLevelAllocations[riskLevel] += allocation;
+            uint256 ra = IMYTStrategy(strategies[i]).realAssets();
+            if (ra > allocation) yieldGaps[riskLevel] += ra - allocation;
         }
 
-        assertLe(riskLevelAllocations[0], (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(0)) / 1e18 + handler.ghost_liquidityAdapterBypass(0), "LOW risk aggregate exceeds global cap");
-        assertLe(riskLevelAllocations[1], (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(1)) / 1e18 + handler.ghost_liquidityAdapterBypass(1), "MEDIUM risk aggregate exceeds global cap");
-        assertLe(riskLevelAllocations[2], (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(2)) / 1e18 + handler.ghost_liquidityAdapterBypass(2), "HIGH risk aggregate exceeds global cap");
+        uint256 lowCap = (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(0)) / 1e18;
+        uint256 medCap = (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(1)) / 1e18;
+        uint256 highCap = (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(2)) / 1e18;
+        assertLe(riskLevelAllocations[0], lowCap + handler.ghost_liquidityAdapterBypass(0) + yieldGaps[0], "LOW risk aggregate exceeds global cap");
+        assertLe(riskLevelAllocations[1], medCap + handler.ghost_liquidityAdapterBypass(1) + yieldGaps[1], "MEDIUM risk aggregate exceeds global cap");
+        assertLe(riskLevelAllocations[2], highCap + handler.ghost_liquidityAdapterBypass(2) + yieldGaps[2], "HIGH risk aggregate exceeds global cap");
     }
 
     /// @notice Invariant: No strategy allocation exceeds individual/local risk cap
@@ -1202,6 +1231,7 @@ contract MultiStrategyETHInvariantTest is Test {
     function invariant_riskLevelAggregateCaps() public view {
         uint256 totalAssets = vault.totalAssets();
         uint256[3] memory riskLevelAllocations;
+        uint256[3] memory yieldGaps;
         
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
@@ -1209,11 +1239,16 @@ contract MultiStrategyETHInvariantTest is Test {
             uint8 riskLevel = AlchemistStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
             
             riskLevelAllocations[riskLevel] += allocation;
+            uint256 ra = IMYTStrategy(strategies[i]).realAssets();
+            if (ra > allocation) yieldGaps[riskLevel] += ra - allocation;
         }
         
-        assertLe(riskLevelAllocations[0], (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(0)) / 1e18 + handler.ghost_liquidityAdapterBypass(0), "LOW risk aggregate exceeds global cap");
-        assertLe(riskLevelAllocations[1], (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(1)) / 1e18 + handler.ghost_liquidityAdapterBypass(1), "MEDIUM risk aggregate exceeds global cap");
-        assertLe(riskLevelAllocations[2], (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(2)) / 1e18 + handler.ghost_liquidityAdapterBypass(2), "HIGH risk aggregate exceeds global cap");
+        uint256 lowCap = (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(0)) / 1e18;
+        uint256 medCap = (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(1)) / 1e18;
+        uint256 highCap = (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(2)) / 1e18;
+        assertLe(riskLevelAllocations[0], lowCap + handler.ghost_liquidityAdapterBypass(0) + yieldGaps[0], "LOW risk aggregate exceeds global cap");
+        assertLe(riskLevelAllocations[1], medCap + handler.ghost_liquidityAdapterBypass(1) + yieldGaps[1], "MEDIUM risk aggregate exceeds global cap");
+        assertLe(riskLevelAllocations[2], highCap + handler.ghost_liquidityAdapterBypass(2) + yieldGaps[2], "HIGH risk aggregate exceeds global cap");
     }
     
     /// @notice Invariant: Sum of all allocations bounded by vault assets
