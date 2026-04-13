@@ -240,6 +240,18 @@ contract MYTStrategy is IMYTStrategy, Ownable {
         return params.globalCap;
     }
 
+    /// @notice Returns the primary token the strategy holds as its deployed position.
+    /// @dev Child strategies should override this when they hold receipt, share, or staking tokens.
+    function positionToken() public view virtual returns (address) {
+        return address(0);
+    }
+
+    /// @notice Returns the token produced before a DEX swap in unwrap-and-swap deallocation flows.
+    /// @dev Child strategies should override this when they redeem or unwrap into an intermediate token.
+    function intermediateToken() public view virtual returns (address) {
+        return address(0);
+    }
+
     function ids() public view returns (bytes32[] memory) {
         bytes32[] memory ids_ = new bytes32[](1);
         ids_[0] = adapterId;

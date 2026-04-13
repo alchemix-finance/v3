@@ -84,6 +84,10 @@ contract AaveStrategy is MYTStrategy {
         return amount - (amount * params.slippageBPS / 10_000);
     }
 
+    function positionToken() public view virtual override returns (address) {
+        return address(aToken);
+    }
+
     function _totalValue() internal view virtual override returns (uint256) {
         // aToken balance reflects principal + interest in underlying units.
         return aToken.balanceOf(address(this)) + _idleAssets();

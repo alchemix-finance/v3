@@ -134,6 +134,10 @@ contract TokeAutoStrategy is MYTStrategy {
         TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
         return amount;
     }
+
+    function positionToken() public view virtual override returns (address) {
+        return address(autoVault);
+    }
         
     function _totalValue() internal view virtual override returns (uint256) {
         uint256 shares = rewarder.balanceOf(address(this)) + autoVault.balanceOf(address(this));

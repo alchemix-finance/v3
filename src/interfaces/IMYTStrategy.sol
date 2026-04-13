@@ -117,6 +117,8 @@ interface IMYTStrategy {
     function getCap() external view returns (uint256);
     function getGlobalCap() external view returns (uint256);
     function realAssets() external view returns (uint256);
+    function positionToken() external view returns (address);
+    function intermediateToken() external view returns (address);
     function getIdData() external view returns (bytes memory);
     function ids() external view returns (bytes32[] memory);
     function adapterId() external view returns (bytes32);

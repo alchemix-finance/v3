@@ -90,6 +90,10 @@ contract MoonwellStrategy is MYTStrategy {
         }
     }
 
+    function positionToken() public view virtual override returns (address) {
+        return address(mToken);
+    }
+
     function _rate() internal view returns (uint256) {
         return mToken.exchangeRateStored();
     }

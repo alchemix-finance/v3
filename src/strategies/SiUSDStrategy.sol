@@ -121,6 +121,14 @@ contract SiUSDStrategy is OraclePricedSwapStrategy {
         revert ActionNotSupported();
     }
 
+    function positionToken() public view override returns (address) {
+        return address(siUSD);
+    }
+
+    function intermediateToken() public view override returns (address) {
+        return address(iUSD);
+    }
+
     function _oracleToken() internal view override returns (address) {
         return address(iUSD);
     }

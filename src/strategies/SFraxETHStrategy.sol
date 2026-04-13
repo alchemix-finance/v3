@@ -93,6 +93,14 @@ contract SFraxETHStrategy is OraclePricedSwapStrategy {
         if (oracleTokenReceived < minFrxEthOut) revert InvalidAmount(minFrxEthOut, oracleTokenReceived);
     }
 
+    function positionToken() public view override returns (address) {
+        return address(sfrxETH);
+    }
+
+    function intermediateToken() public view override returns (address) {
+        return address(frxETH);
+    }
+
     function _prepareOracleTokenForSwap(uint256) internal pure override returns (uint256) {
         revert ActionNotSupported();
     }

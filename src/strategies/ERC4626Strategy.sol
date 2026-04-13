@@ -43,6 +43,10 @@ contract ERC4626Strategy is MYTStrategy {
         return amount;
     }
 
+    function positionToken() public view virtual override returns (address) {
+        return address(vault);
+    }
+
     function _totalValue() internal view virtual override returns (uint256) {
         uint256 shares = vault.balanceOf(address(this));
         if (shares == 0) return _idleAssets();
