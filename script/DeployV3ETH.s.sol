@@ -18,7 +18,7 @@ import {VaultV2, IVaultV2} from "../lib/vault-v2/src/VaultV2.sol";
 
 import {ERC4626Strategy} from "../src/strategies/ERC4626Strategy.sol";
 import {TokeAutoStrategy} from "../src/strategies/TokeAutoStrategy.sol";
-import {WstethStrategy} from "../src/strategies/WStethStrategy.sol";
+import {WstETHEthereumStrategy} from "../src/strategies/WstETHEthereumStrategy.sol";
 import {AaveStrategy} from "../src/strategies/AaveStrategy.sol";
 import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
 import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
@@ -294,13 +294,12 @@ contract DeployV3ETHScript is Script {
         console.log("TokeAutoUSD Mainnet Strategy deployed at:", address(tokeAutoUSDStrategy));
     }
 
-    function deployWstEthStrategy(address myt) internal returns (WstethStrategy) {
-        WstethStrategy strategy = new WstethStrategy(
+    function deployWstEthStrategy(address myt) internal returns (WstETHEthereumStrategy) {
+        WstETHEthereumStrategy strategy = new WstETHEthereumStrategy(
             myt,
             wstEthParams,
             wstETH,
-            wstEthEthOracle,
-            true
+            wstEthEthOracle
         );
         strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
@@ -344,7 +343,7 @@ contract DeployV3ETHScript is Script {
     function deployETHStrategies(address myt) public {
         ERC4626Strategy eulerWETHStrategy = deployEulerWETHStrategy(myt);
         TokeAutoStrategy tokeAutoEthStrategy = deployTokeAutoEthStrategy(myt);
-        WstethStrategy wstEthStrategy = deployWstEthStrategy(myt);
+        WstETHEthereumStrategy wstEthStrategy = deployWstEthStrategy(myt);
         AaveStrategy aaveV3WethStrategy = deployAaveV3WethStrategy(myt);
         ethStrategies.push(address(eulerWETHStrategy));
         ethStrategies.push(address(tokeAutoEthStrategy));

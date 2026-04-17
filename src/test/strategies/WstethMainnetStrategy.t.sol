@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import "forge-std/Test.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {TokenUtils} from "../../libraries/TokenUtils.sol";
-import {WstethStrategy} from "../../strategies/WStethStrategy.sol";
+import {WstETHEthereumStrategy} from "../../strategies/WstETHEthereumStrategy.sol";
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
@@ -15,6 +15,8 @@ import {MockMYTVault} from "../mocks/MockMYTVault.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 interface IWstETH {
     function balanceOf(address account) external view returns (uint256);
+    function getStETHByWstETH(uint256 _wstETHAmount) external view returns (uint256);
+    function getWstETHByStETH(uint256 _stETHAmount) external view returns (uint256);
 }
 
 /// @notice Simple allowanceHolder mock that simulates swap output by
@@ -57,14 +59,14 @@ contract MockSwapExecutorDynamic {
     }
 }
 
-contract MockWstethStrategy is WstethStrategy {
+contract MockWstethStrategy is WstETHEthereumStrategy {
     constructor(
         address _myt,
         StrategyParams memory _params,
         address _wstETH,
         address _wstEthEthOracle
     )
-        WstethStrategy(_myt, _params, _wstETH, _wstEthEthOracle, true)
+        WstETHEthereumStrategy(_myt, _params, _wstETH, _wstEthEthOracle)
     {}
 }
 
@@ -161,8 +163,8 @@ contract WstethStrategyTest is Test {
         uint256 maxWethIn = (wethAmount * 10_000 + (10_000 - STRATEGY_SLIPPAGE_BPS) - 1) / (10_000 - STRATEGY_SLIPPAGE_BPS);
         uint256 scale = 10 ** AggregatorV3Interface(wstEthEthOracle).decimals();
         uint256 answer = _wstEthOracleAnswer();
-        uint256 wstEthAmount = (maxWethIn * scale + answer - 1) / answer;
-        return wstEthAmount == 0 ? 1 : wstEthAmount;
+        uint256 stEthAmount = (maxWethIn * scale + answer - 1) / answer;
+        return IWstETH(wstETH).getWstETHByStETH(stEthAmount);
     }
 
     function _quoteScaledWethOut(uint256 wstEthAmountIn) internal pure returns (uint256) {
@@ -330,6 +332,24 @@ contract WstethStrategyTest is Test {
         assertEq(strategyIds[0], IMYTStrategy(mytStrategy).adapterId(), "adapter id not in strategyIds");
         assertEq(IWstETH(wstETH).balanceOf(mytStrategy), expectedWstethOut, "strategy should receive expected wstETH from swap");
         assertGt(change, 0, "allocation change should be positive");
+    }
+
+    function test_realAssets_prices_wsteth_in_steth_units() public {
+        vm.startPrank(vault);
+        uint256 allocateAmount = 10e18;
+        deal(weth, mytStrategy, allocateAmount);
+
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        IMYTStrategy(mytStrategy).allocate(abi.encode(params), allocateAmount, "", vault);
+        vm.stopPrank();
+
+        uint256 wstETHBalance = IWstETH(wstETH).balanceOf(mytStrategy);
+        uint256 stETHEquivalent = IWstETH(wstETH).getStETHByWstETH(wstETHBalance);
+        uint256 scale = 10 ** AggregatorV3Interface(wstEthEthOracle).decimals();
+        uint256 expectedRealAssets = stETHEquivalent * _wstEthOracleAnswer() / scale;
+
+        assertEq(IMYTStrategy(mytStrategy).realAssets(), expectedRealAssets, "realAssets should value wstETH via stETH equivalent");
     }
 
     function test_realAssets_includes_idle_weth_leftover() public {
