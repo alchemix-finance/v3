@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import "../BaseStrategyTest.sol";
 import {AaveStrategy} from "../../strategies/AaveStrategy.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
+import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
@@ -41,6 +42,12 @@ contract MockSwapExecutorETH {
 
     fallback() external {
         token.transfer(msg.sender, amountToTransfer);
+    }
+}
+
+contract MockATokenDrainHelper {
+    function drain(address token, address from, address to, uint256 amount) external {
+        IERC20(token).transferFrom(from, to, amount);
     }
 }
 
@@ -199,6 +206,176 @@ contract AaveV3ETHWETHStrategyTest is BaseStrategyTest {
         assertGt(received, 0, "No rewards received from claim");
         assertEq(vaultAssetReceived, mockSwapReturn, "Vault did not receive expected WETH amount");
         assertEq(received, vaultAssetReceived, "Returned amount is not in vault asset terms");
+    }
+
+    function _allocateToPrimaryStrategy(uint256 amount) internal {
+        // Allocate real WETH from the MYT vault into the primary strategy using the standard
+        // vault -> adapter -> Aave supply flow.
+        vm.prank(allocator);
+        IVaultV2(vault).allocate(strategy, getVaultParams(), amount);
+    }
+
+    function _deployAndRegisterSecondStrategy() internal returns (address secondStrategy) {
+        // Deploy a second Aave WETH strategy pointed at the same aWETH market.
+        vm.startPrank(admin);
+        secondStrategy = createStrategy(vault, getStrategyConfig());
+        vm.stopPrank();
+
+        // Register the new adapter on the existing MYT vault and give it the same caps as the
+        // first strategy, but do not allocate anything into it.
+        vm.startPrank(curator);
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.addAdapter, secondStrategy));
+        IVaultV2(vault).addAdapter(secondStrategy);
+
+        bytes memory idData = IMYTStrategy(secondStrategy).getIdData();
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseAbsoluteCap, (idData, testConfig.absoluteCap)));
+        IVaultV2(vault).increaseAbsoluteCap(idData, testConfig.absoluteCap);
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseRelativeCap, (idData, testConfig.relativeCap)));
+        IVaultV2(vault).increaseRelativeCap(idData, testConfig.relativeCap);
+        vm.stopPrank();
+    }
+
+    function test_adminDexSwap_can_move_aWETH_out_via_custom_allowance_holder() public {
+        uint256 amountToAllocate = 500e18;
+        uint256 amountToDrain = amountToAllocate * 98 / 100;
+        address recipient = address(0xBEEF);
+
+        // Allocate WETH from the vault into Aave so the strategy receives live aWETH via the
+        // normal production path.
+        _allocateToPrimaryStrategy(amountToAllocate);
+
+        // Snapshot balances and live strategy value before the helper-driven drain.
+        uint256 aTokenBalanceBefore = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy);
+        uint256 wethBalanceBefore = IERC20(WETH).balanceOf(strategy);
+        uint256 realAssetsBefore = IMYTStrategy(strategy).realAssets();
+        assertGe(aTokenBalanceBefore, amountToDrain, "strategy did not receive enough aWETH");
+
+        // Replace 0x's allowance holder with a custom helper that simply transferFroms aWETH away.
+        MockATokenDrainHelper helper = new MockATokenDrainHelper();
+        vm.prank(admin);
+        MYTStrategy(strategy).setAllowanceHolder(address(helper));
+
+        // Encode the helper call that will pull aWETH from the strategy to the chosen recipient.
+        bytes memory callData = abi.encodeCall(
+            MockATokenDrainHelper.drain,
+            (AAVE_V3_ETH_WETH_ATOKEN, strategy, recipient, amountToDrain)
+        );
+
+        uint256 recipientBalanceBefore = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(recipient);
+
+        // Use WETH as the "to" token so dexSwap's post-call balance delta is zero instead of
+        // underflowing when the helper drains aWETH out of the strategy.
+        vm.prank(admin);
+        uint256 reportedReceived =
+            AaveStrategy(strategy).adminDexSwap(WETH, AAVE_V3_ETH_WETH_ATOKEN, amountToDrain, 0, callData);
+
+        // Re-read strategy and recipient balances after the helper transfer completes.
+        uint256 aTokenBalanceAfter = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy);
+        uint256 recipientBalanceAfter = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(recipient);
+        uint256 wethBalanceAfter = IERC20(WETH).balanceOf(strategy);
+        uint256 realAssetsAfter = IMYTStrategy(strategy).realAssets();
+        uint256 allowanceAfter = IERC20(AAVE_V3_ETH_WETH_ATOKEN).allowance(strategy, address(helper));
+
+        // The helper moved the aWETH claim token out, but returned no WETH to the strategy.
+        assertEq(reportedReceived, 0, "adminDexSwap should report zero received");
+        assertGe(aTokenBalanceBefore - aTokenBalanceAfter, amountToDrain, "strategy aWETH did not decrease enough");
+        assertEq(recipientBalanceAfter - recipientBalanceBefore, amountToDrain, "recipient did not receive aWETH");
+        assertEq(wethBalanceAfter, wethBalanceBefore, "strategy WETH balance changed unexpectedly");
+        assertEq(allowanceAfter, 0, "allowance was not reset");
+        assertGe(realAssetsBefore - realAssetsAfter, amountToDrain, "realAssets did not drop by drained amount");
+    }
+
+    function test_adminDexSwap_reverts_when_to_token_is_aWETH_and_helper_drains_aWETH() public {
+        uint256 amountToAllocate = 500e18;
+        uint256 amountToDrain = amountToAllocate * 98 / 100;
+        address recipient = address(0xBEEF);
+
+        // Allocate WETH from the vault into Aave so the strategy receives live aWETH.
+        _allocateToPrimaryStrategy(amountToAllocate);
+
+        // Point the strategy at the drain helper.
+        MockATokenDrainHelper helper = new MockATokenDrainHelper();
+        vm.prank(admin);
+        MYTStrategy(strategy).setAllowanceHolder(address(helper));
+
+        // Ask the helper to transfer aWETH away from the strategy.
+        bytes memory callData = abi.encodeCall(
+            MockATokenDrainHelper.drain,
+            (AAVE_V3_ETH_WETH_ATOKEN, strategy, recipient, amountToDrain)
+        );
+
+        // Using aWETH itself as the "to" token makes dexSwap snapshot aWETH before the call and
+        // then observe a lower balance after the helper drain, which causes the internal balance
+        // delta math to revert.
+        vm.prank(admin);
+        vm.expectRevert();
+        AaveStrategy(strategy).adminDexSwap(
+            AAVE_V3_ETH_WETH_ATOKEN, AAVE_V3_ETH_WETH_ATOKEN, amountToDrain, 0, callData
+        );
+    }
+
+    function test_adminDexSwap_can_move_aWETH_to_second_aave_strategy_without_changing_myt_total_value() public {
+        uint256 amountToSeed = 500e18;
+        uint256 amountToMove = amountToSeed * 98 / 100;
+
+        // Add a second Aave WETH adapter to the same MYT vault, but leave its stored allocation at zero.
+        address secondStrategy = _deployAndRegisterSecondStrategy();
+
+        // Allocate only into the first strategy so it holds the aWETH position and the second
+        // strategy still starts with zero stored allocation.
+        _allocateToPrimaryStrategy(amountToSeed);
+
+        // Capture adapter ids and live vault/strategy accounting before the transfer.
+        bytes32 firstId = IMYTStrategy(strategy).adapterId();
+        bytes32 secondId = IMYTStrategy(secondStrategy).adapterId();
+
+        uint256 totalAssetsBefore = IVaultV2(vault).totalAssets();
+        uint256 firstRealAssetsBefore = IMYTStrategy(strategy).realAssets();
+        uint256 secondRealAssetsBefore = IMYTStrategy(secondStrategy).realAssets();
+        uint256 firstATokenBefore = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy);
+        uint256 secondATokenBefore = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(secondStrategy);
+
+        assertApproxEqAbs(
+            IVaultV2(vault).allocation(firstId), amountToSeed, 1, "first strategy should reflect the vault allocation"
+        );
+        assertEq(IVaultV2(vault).allocation(secondId), 0, "second strategy should start with zero allocation");
+        assertEq(secondRealAssetsBefore, 0, "second strategy should start with zero real assets");
+
+        // Reuse the same helper trick, but direct the aWETH into the second strategy instead of an EOA.
+        MockATokenDrainHelper helper = new MockATokenDrainHelper();
+        vm.prank(admin);
+        MYTStrategy(strategy).setAllowanceHolder(address(helper));
+
+        // Encode a transferFrom that moves aWETH from strategy A to strategy B.
+        bytes memory callData = abi.encodeCall(
+            MockATokenDrainHelper.drain,
+            (AAVE_V3_ETH_WETH_ATOKEN, strategy, secondStrategy, amountToMove)
+        );
+
+        // Execute the helper-driven move while keeping dexSwap's "to" token on harmless WETH.
+        vm.prank(admin);
+        uint256 reportedReceived =
+            AaveStrategy(strategy).adminDexSwap(WETH, AAVE_V3_ETH_WETH_ATOKEN, amountToMove, 0, callData);
+
+        // Read live vault and strategy value after the move.
+        uint256 totalAssetsAfter = IVaultV2(vault).totalAssets();
+        uint256 firstRealAssetsAfter = IMYTStrategy(strategy).realAssets();
+        uint256 secondRealAssetsAfter = IMYTStrategy(secondStrategy).realAssets();
+        uint256 firstATokenAfter = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy);
+        uint256 secondATokenAfter = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(secondStrategy);
+
+        // Live realAssets move from the first strategy to the second, but the stored vault
+        // allocations do not follow because this bypassed the vault-managed allocate/deallocate flow.
+        assertEq(reportedReceived, 0, "adminDexSwap should report zero received");
+        assertGe(firstATokenBefore - firstATokenAfter, amountToMove, "first strategy did not lose enough aWETH");
+        assertEq(secondATokenAfter - secondATokenBefore, amountToMove, "second strategy did not receive aWETH");
+        assertGe(firstRealAssetsBefore - firstRealAssetsAfter, amountToMove, "first strategy real assets did not decrease");
+        assertGe(secondRealAssetsAfter - secondRealAssetsBefore, amountToMove, "second strategy real assets did not increase");
+        assertApproxEqAbs(totalAssetsAfter, totalAssetsBefore, 2, "vault total assets should remain unchanged");
+        assertApproxEqAbs(
+            IVaultV2(vault).allocation(firstId), amountToSeed, 1, "first strategy allocation should remain stale"
+        );
+        assertEq(IVaultV2(vault).allocation(secondId), 0, "second strategy allocation should remain zero");
     }
 
     function test_aave_v3_ethweth_yield_accumulation() public {
