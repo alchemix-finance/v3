@@ -64,16 +64,16 @@ contract MockWstethStrategy is WstETHEthereumStrategy {
         address _myt,
         StrategyParams memory _params,
         address _wstETH,
-        address _wstEthEthOracle
+        address _stEthEthOracle
     )
-        WstETHEthereumStrategy(_myt, _params, _wstETH, _wstEthEthOracle)
+        WstETHEthereumStrategy(_myt, _params, _wstETH, _stEthEthOracle)
     {}
 }
 
 contract WstethStrategyTest is Test {
     uint256 public constant STRATEGY_SLIPPAGE_BPS = 200;
     uint256 public constant TEST_RESIDUAL_TOLERANCE_BPS = 100;
-    uint256 public constant ASSUMED_WSTETH_ETH_ORACLE_ANSWER = 1.23e18;
+    uint256 public constant ASSUMED_STETH_ETH_ORACLE_ANSWER = 1.23e18;
     uint256 public constant QUOTED_WSTETH_SELL_AMOUNT = 1_000_000_000_000;
     uint256 public constant QUOTED_WETH_BUY_AMOUNT = 1_222_732_076_605;
 
@@ -83,7 +83,7 @@ contract WstethStrategyTest is Test {
     address public classifier;
     address public weth = address(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
     address public wstETH = address(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
-    address public wstEthEthOracle = address(0x86392dC19c0b719886221c78AB11eb8Cf5c52812);
+    address public stEthEthOracle = address(0x86392dC19c0b719886221c78AB11eb8Cf5c52812);
     address public admin = address(0x1111111111111111111111111111111111111111);
     address public curator = address(0x2222222222222222222222222222222222222222);
     address public constant MAINNET_PERMIT2 = 0x000000000022d473030f1dF7Fa9381e04776c7c5;
@@ -127,7 +127,7 @@ contract WstethStrategyTest is Test {
         _setUpMYT(vault, mytStrategy, 2_000_000e18, 1e18);
         _magicDepositToVault(vault, admin, 1_000_000e18);
         require(IVaultV2(vault).totalAssets() == 1_000_000e18, "vault total assets mismatch");
-        _mockFreshWstEthEthOracle();
+        _mockFreshStEthEthOracle();
         vm.stopPrank();
     }
 
@@ -148,21 +148,21 @@ contract WstethStrategyTest is Test {
     function _createStrategy(address _vault, IMYTStrategy.StrategyParams memory params) internal returns (address) {
         return address(
             new MockWstethStrategy{salt: bytes32("wsteth_strategy")}(
-                _vault, params, wstETH, wstEthEthOracle
+                _vault, params, wstETH, stEthEthOracle
             )
         );
     }
 
-    function _wstEthOracleAnswer() internal view returns (uint256) {
-        (, int256 answer,, uint256 updatedAt,) = AggregatorV3Interface(wstEthEthOracle).latestRoundData();
+    function _stEthOracleAnswer() internal view returns (uint256) {
+        (, int256 answer,, uint256 updatedAt,) = AggregatorV3Interface(stEthEthOracle).latestRoundData();
         require(answer > 0 && updatedAt != 0, "invalid oracle answer");
         return uint256(answer);
     }
 
     function _maxWstEthIn(uint256 wethAmount) internal view returns (uint256) {
         uint256 maxWethIn = (wethAmount * 10_000 + (10_000 - STRATEGY_SLIPPAGE_BPS) - 1) / (10_000 - STRATEGY_SLIPPAGE_BPS);
-        uint256 scale = 10 ** AggregatorV3Interface(wstEthEthOracle).decimals();
-        uint256 answer = _wstEthOracleAnswer();
+        uint256 scale = 10 ** AggregatorV3Interface(stEthEthOracle).decimals();
+        uint256 answer = _stEthOracleAnswer();
         uint256 stEthAmount = (maxWethIn * scale + answer - 1) / answer;
         return IWstETH(wstETH).getWstETHByStETH(stEthAmount);
     }
@@ -346,8 +346,8 @@ contract WstethStrategyTest is Test {
 
         uint256 wstETHBalance = IWstETH(wstETH).balanceOf(mytStrategy);
         uint256 stETHEquivalent = IWstETH(wstETH).getStETHByWstETH(wstETHBalance);
-        uint256 scale = 10 ** AggregatorV3Interface(wstEthEthOracle).decimals();
-        uint256 expectedRealAssets = stETHEquivalent * _wstEthOracleAnswer() / scale;
+        uint256 scale = 10 ** AggregatorV3Interface(stEthEthOracle).decimals();
+        uint256 expectedRealAssets = stETHEquivalent * _stEthOracleAnswer() / scale;
 
         assertEq(IMYTStrategy(mytStrategy).realAssets(), expectedRealAssets, "realAssets should value wstETH via stETH equivalent");
     }
@@ -441,15 +441,15 @@ contract WstethStrategyTest is Test {
         return 0;
     }
 
-    function _mockFreshWstEthEthOracle() internal {
-        _mockWstEthEthOracleAnswer(ASSUMED_WSTETH_ETH_ORACLE_ANSWER);
+    function _mockFreshStEthEthOracle() internal {
+        _mockStEthEthOracleAnswer(ASSUMED_STETH_ETH_ORACLE_ANSWER);
     }
 
-    function _mockWstEthEthOracleAnswer(uint256 answerToMock) internal {
+    function _mockStEthEthOracleAnswer(uint256 answerToMock) internal {
         (uint80 roundId, int256 answer, uint256 startedAt,, uint80 answeredInRound) =
-            AggregatorV3Interface(wstEthEthOracle).latestRoundData();
+            AggregatorV3Interface(stEthEthOracle).latestRoundData();
         vm.mockCall(
-            wstEthEthOracle,
+            stEthEthOracle,
             abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
             abi.encode(roundId, int256(answerToMock), startedAt, block.timestamp, answeredInRound)
         );
@@ -604,9 +604,9 @@ contract WstethStrategyTest is Test {
         vm.stopPrank();
 
         (uint80 roundId, int256 answer, uint256 startedAt,, uint80 answeredInRound) =
-            AggregatorV3Interface(wstEthEthOracle).latestRoundData();
+            AggregatorV3Interface(stEthEthOracle).latestRoundData();
         vm.mockCall(
-            wstEthEthOracle,
+            stEthEthOracle,
             abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
             abi.encode(roundId, answer, startedAt, block.timestamp - 8 days, answeredInRound)
         );
@@ -637,7 +637,7 @@ contract WstethStrategyTest is Test {
         bytes memory data = abi.encode(params);
         IVaultV2(vault).allocate(mytStrategy, data, allocAmount);
         
-        _mockFreshWstEthEthOracle();
+        _mockFreshStEthEthOracle();
         uint256 initialRealAssets = IMYTStrategy(mytStrategy).realAssets();
         assertGt(initialRealAssets, 0, "Should have real assets after allocation");
         
@@ -646,7 +646,7 @@ contract WstethStrategyTest is Test {
         for (uint256 i = 0; i < 3; i++) {
             // Warp forward 30 days
             vm.warp(block.timestamp + 30 days);
-            _mockFreshWstEthEthOracle();
+            _mockFreshStEthEthOracle();
             
             // Real assets should not decrease significantly over time
             // (wstETH exchange rate typically increases with staking rewards)

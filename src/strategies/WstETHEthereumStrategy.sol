@@ -52,6 +52,7 @@ contract WstETHEthereumStrategy is OraclePricedSwapStrategy {
     }
 
     function _positionBalance() internal view override returns (uint256) {
+        // Mainnet pricing uses a stETH/ETH oracle, so holdings are valued in stETH-equivalent units.
         return wsteth.getStETHByWstETH(wsteth.balanceOf(address(this)));
     }
 
