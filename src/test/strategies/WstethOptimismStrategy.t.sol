@@ -248,6 +248,21 @@ contract WstethOptimismStrategyTest is Test {
         vm.stopPrank();
     }
 
+    function test_realAssets_prices_wsteth_in_oracle_units() public {
+        uint256 mockedWstethOut = 10e18;
+        _allocateWithMockedSwap(10e18, mockedWstethOut);
+
+        uint256 wstETHBalance = IWstETH(WSTETH).balanceOf(mytStrategy);
+        uint256 scale = 10 ** AggregatorV3Interface(WSTETH_ETH_ORACLE).decimals();
+        uint256 expectedRealAssets = wstETHBalance * _wstEthOracleAnswer() / scale;
+
+        assertEq(
+            IMYTStrategy(mytStrategy).realAssets(),
+            expectedRealAssets,
+            "realAssets should value raw wstETH balance via the wstETH/ETH oracle"
+        );
+    }
+
     function test_realAssets_includes_idle_weth_leftover() public {
         assertEq(IWstETH(WSTETH).balanceOf(mytStrategy), 0, "strategy should start without wstETH");
 
