@@ -17,7 +17,7 @@ import {VaultV2Factory} from "../lib/vault-v2/src/VaultV2Factory.sol";
 import {VaultV2, IVaultV2} from "../lib/vault-v2/src/VaultV2.sol";
 
 import {AaveStrategy} from "../src/strategies/AaveStrategy.sol";
-import {WstethStrategy} from "../src/strategies/WStethStrategy.sol";
+import {WstETHL2Strategy} from "../src/strategies/WstETHL2Strategy.sol";
 import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
 import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
 import {AlchemistTokenVault} from "../src/AlchemistTokenVault.sol";
@@ -152,13 +152,12 @@ contract DeployV3OptimismScript is Script {
         return aaveUSDCStrategy;
     }
 
-    function deployWstEthStrategy(address myt) internal returns (WstethStrategy) {
-        WstethStrategy strategy = new WstethStrategy(
+    function deployWstEthStrategy(address myt) internal returns (WstETHL2Strategy) {
+        WstETHL2Strategy strategy = new WstETHL2Strategy(
             myt,
             wstEthParams,
             wstETH,
-            wstEthEthOracle,
-            false
+            wstEthEthOracle
         );
 
         strategy.setKillSwitch(true);
@@ -208,7 +207,7 @@ contract DeployV3OptimismScript is Script {
     }
 
     function deployETHStrategies(address myt) public {
-        WstethStrategy wstEthStrategy = deployWstEthStrategy(myt);
+        WstETHL2Strategy wstEthStrategy = deployWstEthStrategy(myt);
         AaveStrategy aaveV3WethStrategy = deployAaveV3OPWETHStrategy(myt);
         ethStrategies.push(address(wstEthStrategy));
         ethStrategies.push(address(aaveV3WethStrategy));

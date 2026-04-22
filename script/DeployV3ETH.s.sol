@@ -18,7 +18,7 @@ import {VaultV2, IVaultV2} from "../lib/vault-v2/src/VaultV2.sol";
 
 import {ERC4626Strategy} from "../src/strategies/ERC4626Strategy.sol";
 import {TokeAutoStrategy} from "../src/strategies/TokeAutoStrategy.sol";
-import {WstethStrategy} from "../src/strategies/WStethStrategy.sol";
+import {WstETHEthereumStrategy} from "../src/strategies/WstETHEthereumStrategy.sol";
 import {AaveStrategy} from "../src/strategies/AaveStrategy.sol";
 import {AlchemistV3Position} from "../src/AlchemistV3Position.sol";
 import {AlchemistV3PositionRenderer} from "../src/AlchemistV3PositionRenderer.sol";
@@ -75,7 +75,7 @@ contract DeployV3ETHScript is Script {
     address public tokeAutoUsd = 0xa7569A44f348d3D70d8ad5889e50F78E33d80D35;
     address public tokeAutoUsdRewarder = 0x726104CfBd7ece2d1f5b3654a19109A9e2b6c27B;
     address public wstETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
-    address public wstEthEthOracle = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
+    address public stEthEthOracle = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
     address public aaveV3WethAToken = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
     address public aaveV3PoolAddressProvider = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
     address public aaveRewardsController = 0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb;
@@ -294,13 +294,12 @@ contract DeployV3ETHScript is Script {
         console.log("TokeAutoUSD Mainnet Strategy deployed at:", address(tokeAutoUSDStrategy));
     }
 
-    function deployWstEthStrategy(address myt) internal returns (WstethStrategy) {
-        WstethStrategy strategy = new WstethStrategy(
+    function deployWstEthStrategy(address myt) internal returns (WstETHEthereumStrategy) {
+        WstETHEthereumStrategy strategy = new WstETHEthereumStrategy(
             myt,
             wstEthParams,
             wstETH,
-            wstEthEthOracle,
-            true
+            stEthEthOracle
         );
         strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
@@ -344,7 +343,7 @@ contract DeployV3ETHScript is Script {
     function deployETHStrategies(address myt) public {
         ERC4626Strategy eulerWETHStrategy = deployEulerWETHStrategy(myt);
         TokeAutoStrategy tokeAutoEthStrategy = deployTokeAutoEthStrategy(myt);
-        WstethStrategy wstEthStrategy = deployWstEthStrategy(myt);
+        WstETHEthereumStrategy wstEthStrategy = deployWstEthStrategy(myt);
         AaveStrategy aaveV3WethStrategy = deployAaveV3WethStrategy(myt);
         ethStrategies.push(address(eulerWETHStrategy));
         ethStrategies.push(address(tokeAutoEthStrategy));
