@@ -8,10 +8,11 @@ import {AlchemistV3Position} from "../../AlchemistV3Position.sol";
 import {AlchemistV3PositionRenderer} from "../../AlchemistV3PositionRenderer.sol";
 import {Transmuter} from "../../Transmuter.sol";
 import {AaveStrategy} from "../../strategies/AaveStrategy.sol";
-import {WstethStrategy} from "../../strategies/WStethStrategy.sol";
+import {WstETHEthereumStrategy} from "../../strategies/WstETHEthereumStrategy.sol";
 import {MYTTokenSwapper, IFluidATokenSwap} from "../../MYTTokenSwapper.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
+import {IWstETHLike} from "../../interfaces/IWstETHLike.sol";
 import {IAlchemistV3Errors, AlchemistInitializationParams} from "../../interfaces/IAlchemistV3.sol";
 import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {ITransmuter} from "../../interfaces/ITransmuter.sol";
@@ -164,10 +165,10 @@ contract MYTTokenSwapperTest is StrategySetup {
         params.name = "WstethTarget";
         params.protocol = "WstethTarget";
 
-        // Deploy a WstethStrategy that only needs to accept transferred raw wstETH and report its
+        // Deploy a mainnet WstETH strategy that only needs to accept transferred raw wstETH and report its
         // value in WETH terms.
         vm.startPrank(admin);
-        targetStrategy = address(new WstethStrategy(vault, params, WSTETH, WSTETH_ETH_ORACLE, false));
+        targetStrategy = address(new WstETHEthereumStrategy(vault, params, WSTETH, WSTETH_ETH_ORACLE));
         vm.stopPrank();
 
         // Register the target adapter on the same MYT vault with the same caps as the source.
@@ -180,6 +181,30 @@ contract MYTTokenSwapperTest is StrategySetup {
         IVaultV2(vault).increaseAbsoluteCap(idData, testConfig.absoluteCap);
         _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseRelativeCap, (idData, testConfig.relativeCap)));
         IVaultV2(vault).increaseRelativeCap(idData, testConfig.relativeCap);
+        vm.stopPrank();
+    }
+
+    function _deployAndRegisterWstethEthereumStrategy(uint256 absoluteCap, uint256 relativeCap)
+        internal
+        returns (address targetStrategy)
+    {
+        IMYTStrategy.StrategyParams memory params = getStrategyConfig();
+        params.name = "WstETHEthereumTarget";
+        params.protocol = "WstETHEthereumTarget";
+
+        vm.startPrank(admin);
+        targetStrategy = address(new WstETHEthereumStrategy(vault, params, WSTETH, WSTETH_ETH_ORACLE));
+        vm.stopPrank();
+
+        vm.startPrank(curator);
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.addAdapter, targetStrategy));
+        IVaultV2(vault).addAdapter(targetStrategy);
+
+        bytes memory idData = IMYTStrategy(targetStrategy).getIdData();
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseAbsoluteCap, (idData, absoluteCap)));
+        IVaultV2(vault).increaseAbsoluteCap(idData, absoluteCap);
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseRelativeCap, (idData, relativeCap)));
+        IVaultV2(vault).increaseRelativeCap(idData, relativeCap);
         vm.stopPrank();
     }
 
@@ -202,10 +227,10 @@ contract MYTTokenSwapperTest is StrategySetup {
 
     function _installSwapperAndMigrate(uint256 amountToMove, uint256 minAethwstEthOut, address targetStrategy)
         internal
-        returns (uint256 reportedReceived)
+        returns (uint256 reportedReceived, address helper)
     {
         // Install the migration helper as the source strategy's temporary allowance holder.
-        MYTTokenSwapper helper = new MYTTokenSwapper(
+        MYTTokenSwapper swapper = new MYTTokenSwapper(
             admin,
             AAVE_V3_ETH_WETH_ATOKEN,
             AAVE_V3_ETH_WSTETH_ATOKEN,
@@ -213,8 +238,9 @@ contract MYTTokenSwapperTest is StrategySetup {
             FLUID_A_TOKEN_SWAP,
             AAVE_V3_ETH_POOL_ADDRESS_PROVIDER
         );
+        helper = address(swapper);
         vm.prank(admin);
-        MYTStrategy(strategy).setAllowanceHolder(address(helper));
+        MYTStrategy(strategy).setAllowanceHolder(helper);
 
         // Keep dexSwap's "to" token on harmless WETH while the helper forwards raw wstETH to the
         // destination strategy.
@@ -236,7 +262,8 @@ contract MYTTokenSwapperTest is StrategySetup {
 
     function _wstethToWethValue(uint256 wstethAmount) internal view returns (uint256) {
         (uint256 answer, uint256 scale) = _wstEthOracleAnswer();
-        return wstethAmount * answer / scale;
+        uint256 stEthAmount = IWstETHLike(WSTETH).getStETHByWstETH(wstethAmount);
+        return stEthAmount * answer / scale;
     }
 
     function test_swapper_can_route_aWETH_to_target_wsteth_strategy_via_fluid() public {
@@ -261,7 +288,7 @@ contract MYTTokenSwapperTest is StrategySetup {
         assertEq(IMYTStrategy(targetStrategy).realAssets(), 0, "target strategy should start empty");
         assertEq(IERC20(WSTETH).balanceOf(targetStrategy), 0, "target strategy should start without wstETH");
 
-        uint256 reportedReceived = _installSwapperAndMigrate(amountToMove, minAethwstEthOut, targetStrategy);
+        (uint256 reportedReceived,) = _installSwapperAndMigrate(amountToMove, minAethwstEthOut, targetStrategy);
 
         // Re-read live strategy balances and vault accounting after the Fluid + Aave migration leg.
         uint256 totalAssetsAfter = IVaultV2(vault).totalAssets();
@@ -428,5 +455,116 @@ contract MYTTokenSwapperTest is StrategySetup {
         vm.prank(liquidator);
         vm.expectRevert(IAlchemistV3Errors.LiquidationError.selector);
         stack.alchemist.liquidate(tokenId);
+    }
+
+    function test_guardrailed_migration_keeps_both_adapters_live_and_syncs_target_allocation() public {
+        uint256 amountToAllocate = 500e18;
+        uint256 syncAllocateAmount = 1e9;
+
+        _allocateToPrimaryStrategy(amountToAllocate);
+
+        address targetStrategy = _deployAndRegisterWstethEthereumStrategy(testConfig.absoluteCap, testConfig.relativeCap);
+        bytes32 sourceId = IMYTStrategy(strategy).adapterId();
+        bytes32 targetId = IMYTStrategy(targetStrategy).adapterId();
+        address originalAllowanceHolder = MYTStrategy(strategy).allowanceHolder();
+
+        assertEq(IVaultV2(vault).adaptersLength(), 2, "migration should keep both adapters registered");
+        assertTrue(IVaultV2(vault).isAdapter(strategy), "source adapter should remain active");
+        assertTrue(IVaultV2(vault).isAdapter(targetStrategy), "target adapter should be active before migration");
+        assertEq(IVaultV2(vault).allocation(targetId), 0, "target allocation should start at zero");
+
+        bytes memory sourceIdData = IMYTStrategy(strategy).getIdData();
+        vm.prank(curator);
+        IVaultV2(vault).decreaseAbsoluteCap(sourceIdData, 0);
+        assertEq(IVaultV2(vault).absoluteCap(sourceId), 0, "source strategy cap should be frozen before migration");
+
+        vm.prank(admin);
+        vm.expectRevert();
+        IAllocator(allocator).allocate(strategy, 1e18);
+
+        (uint256 amountToMove,, uint256 minAethwstEthOut) = _quoteFluidMigration(amountToAllocate * 98 / 100);
+        uint256 sourceAllocationBeforeMigration = IVaultV2(vault).allocation(sourceId);
+        uint256 sourceATokenBeforeMigration = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy);
+
+        (uint256 reportedReceived, address helper) =
+            _installSwapperAndMigrate(amountToMove, minAethwstEthOut, targetStrategy);
+
+        uint256 targetRealAssetsBeforeSync = IMYTStrategy(targetStrategy).realAssets();
+        assertEq(reportedReceived, 0, "migration helper should not report WETH received on the source strategy");
+        assertEq(MYTStrategy(strategy).allowanceHolder(), helper, "source strategy should point at the helper during migration");
+        assertGe(
+            sourceATokenBeforeMigration - IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy),
+            amountToMove,
+            "source strategy should lose the migrated aWETH"
+        );
+        assertGt(targetRealAssetsBeforeSync, 0, "target strategy should receive migrated wstETH");
+        assertEq(IVaultV2(vault).allocation(targetId), 0, "target allocation stays stale until a post-migration sync");
+        assertGe(
+            IVaultV2(vault).absoluteCap(targetId),
+            targetRealAssetsBeforeSync,
+            "target cap should already cover the migrated position before syncing"
+        );
+        assertTrue(IVaultV2(vault).isAdapter(strategy), "source adapter should stay registered throughout migration");
+        assertTrue(IVaultV2(vault).isAdapter(targetStrategy), "target adapter should stay registered throughout migration");
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(targetStrategy, syncAllocateAmount);
+
+        uint256 targetAllocationAfterSync = IVaultV2(vault).allocation(targetId);
+        uint256 targetRealAssetsAfterSync = IMYTStrategy(targetStrategy).realAssets();
+        assertGt(
+            targetAllocationAfterSync,
+            syncAllocateAmount,
+            "post-migration sync should book the full migrated position, not just the dust allocation"
+        );
+        assertApproxEqAbs(
+            targetAllocationAfterSync,
+            targetRealAssetsAfterSync,
+            3,
+            "target allocation should track live real assets after the sync allocate"
+        );
+        assertApproxEqAbs(
+            IVaultV2(vault).allocation(sourceId),
+            sourceAllocationBeforeMigration,
+            1,
+            "source allocation should remain stale until it is explicitly unwound"
+        );
+
+        vm.prank(admin);
+        MYTStrategy(strategy).setAllowanceHolder(originalAllowanceHolder);
+        assertEq(
+            MYTStrategy(strategy).allowanceHolder(),
+            originalAllowanceHolder,
+            "migration should restore the source strategy allowance holder"
+        );
+    }
+
+    function test_guardrailed_migration_sync_allocate_reverts_when_target_cap_is_too_low() public {
+        uint256 amountToAllocate = 500e18;
+        uint256 syncAllocateAmount = 1e9;
+
+        _allocateToPrimaryStrategy(amountToAllocate);
+
+        address targetStrategy = _deployAndRegisterWstethEthereumStrategy(1e18, testConfig.relativeCap);
+        bytes32 sourceId = IMYTStrategy(strategy).adapterId();
+        bytes32 targetId = IMYTStrategy(targetStrategy).adapterId();
+
+        bytes memory sourceIdData = IMYTStrategy(strategy).getIdData();
+        vm.prank(curator);
+        IVaultV2(vault).decreaseAbsoluteCap(sourceIdData, 0);
+        assertEq(IVaultV2(vault).absoluteCap(sourceId), 0, "source strategy cap should be frozen before migration");
+
+        (uint256 amountToMove,, uint256 minAethwstEthOut) = _quoteFluidMigration(amountToAllocate * 98 / 100);
+        _installSwapperAndMigrate(amountToMove, minAethwstEthOut, targetStrategy);
+
+        assertGt(
+            IMYTStrategy(targetStrategy).realAssets(),
+            IVaultV2(vault).absoluteCap(targetId),
+            "test setup should preload more value than the target cap allows"
+        );
+
+        vm.prank(admin);
+        vm.expectRevert();
+        IAllocator(allocator).allocate(targetStrategy, syncAllocateAmount);
     }
 }
