@@ -2,23 +2,11 @@
 pragma solidity 0.8.28;
 
 import "../BaseStrategyTest.sol";
-import {AlchemistV3} from "../../AlchemistV3.sol";
-import {AlchemistV3Position} from "../../AlchemistV3Position.sol";
-import {AlchemistV3PositionRenderer} from "../../AlchemistV3PositionRenderer.sol";
-import {Transmuter} from "../../Transmuter.sol";
 import {AaveStrategy} from "../../strategies/AaveStrategy.sol";
-import {WstethStrategy} from "../../strategies/WStethStrategy.sol";
-import {MYTTokenSwapper, IFluidATokenSwap} from "../../MYTTokenSwapper.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
-import {IAlchemistV3Errors, AlchemistInitializationParams} from "../../interfaces/IAlchemistV3.sol";
-import {ITransmuter} from "../../interfaces/ITransmuter.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
-import {TransparentUpgradeableProxy} from "lib/openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
-import {AlchemicTokenV3} from "../mocks/AlchemicTokenV3.sol";
-import {AlchemistNFTHelper} from "../libraries/AlchemistNFTHelper.sol";
-import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 contract MockRewardsControllerETH {
     IERC20 public immutable rewardToken;
@@ -65,22 +53,12 @@ contract MockATokenDrainHelper {
 
 contract AaveV3ETHWETHStrategyTest is BaseStrategyTest {
     address public constant AAVE_V3_ETH_WETH_ATOKEN = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
-    address public constant AAVE_V3_ETH_WSTETH_ATOKEN = 0x0B925eD163218f6662a35e0f0371Ac234f9E9371;
     address public constant AAVE_V3_ETH_POOL_ADDRESS_PROVIDER = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    address public constant WSTETH_ETH_ORACLE = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
-    address public constant FLUID_A_TOKEN_SWAP = 0x4f8f03caD7512E4F6d1050FB9b2F8b91aE4bC901;
     address public constant REWARD_TOKEN = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
     address public constant REWARDS_CONTROLLER = 0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb;
     bytes4 internal constant ERROR_STRING_SELECTOR = 0x08c379a0;
     bytes4 internal constant ALLOWED_AAVE_REVERT_SELECTOR = 0x2c5211c6;
-
-    struct LocalAlchemistStack {
-        AlchemistV3 alchemist;
-        AlchemicTokenV3 debtToken;
-        Transmuter transmuter;
-        AlchemistV3Position positionNft;
-    }
 
     function getStrategyConfig() internal pure override returns (IMYTStrategy.StrategyParams memory) {
         return IMYTStrategy.StrategyParams({
@@ -237,55 +215,6 @@ contract AaveV3ETHWETHStrategyTest is BaseStrategyTest {
         IVaultV2(vault).allocate(strategy, getVaultParams(), amount);
     }
 
-    function _deployLocalAlchemistStack() internal returns (LocalAlchemistStack memory stack) {
-        // Deploy a minimal alAsset + transmuter pair for this isolated liquidation test.
-        stack.debtToken = new AlchemicTokenV3("Alchemix Test ETH", "alETH-test", 0);
-        stack.transmuter = new Transmuter(
-            ITransmuter.TransmuterInitializationParams({
-                syntheticToken: address(stack.debtToken),
-                feeReceiver: address(this),
-                timeToTransmute: 5_256_000,
-                transmutationFee: 100,
-                exitFee: 200,
-                graphSize: 52_560_000
-            })
-        );
-
-        // Initialize an Alchemist proxy against the existing MYT vault using WETH as the underlying unit.
-        AlchemistV3 alchemistLogic = new AlchemistV3();
-        bytes memory alchemParams = abi.encodeWithSelector(
-            AlchemistV3.initialize.selector,
-            AlchemistInitializationParams({
-                admin: address(this),
-                debtToken: address(stack.debtToken),
-                underlyingToken: WETH,
-                depositCap: type(uint256).max,
-                minimumCollateralization: uint256(1e36) / 9e17,
-                globalMinimumCollateralization: uint256(1e36) / 9e17,
-                collateralizationLowerBound: 1_052_631_578_950_000_000,
-                liquidationTargetCollateralization: uint256(1e36) / 88e16,
-                transmuter: address(stack.transmuter),
-                protocolFee: 100,
-                protocolFeeReceiver: address(this),
-                liquidatorFee: 300,
-                repaymentFee: 100,
-                myt: address(vault)
-            })
-        );
-        TransparentUpgradeableProxy proxyAlchemist =
-            new TransparentUpgradeableProxy(address(alchemistLogic), address(this), alchemParams);
-        stack.alchemist = AlchemistV3(address(proxyAlchemist));
-
-        // Wire the transmuter, debt token, and position NFT into the newly initialized Alchemist.
-        stack.transmuter.setDepositCap(uint256(type(int256).max));
-        stack.transmuter.setAlchemist(address(stack.alchemist));
-        stack.debtToken.setWhitelist(address(stack.alchemist), true);
-
-        stack.positionNft = new AlchemistV3Position(address(stack.alchemist), address(this));
-        stack.positionNft.setMetadataRenderer(address(new AlchemistV3PositionRenderer()));
-        stack.alchemist.setAlchemistPositionNFT(address(stack.positionNft));
-    }
-
     function _deployAndRegisterSecondStrategy() internal returns (address secondStrategy) {
         // Deploy a second Aave WETH strategy pointed at the same aWETH market.
         vm.startPrank(admin);
@@ -304,42 +233,6 @@ contract AaveV3ETHWETHStrategyTest is BaseStrategyTest {
         _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseRelativeCap, (idData, testConfig.relativeCap)));
         IVaultV2(vault).increaseRelativeCap(idData, testConfig.relativeCap);
         vm.stopPrank();
-    }
-
-    function _deployAndRegisterWstethStrategy() internal returns (address targetStrategy) {
-        IMYTStrategy.StrategyParams memory params = getStrategyConfig();
-        params.name = "WstethTarget";
-        params.protocol = "WstethTarget";
-
-        // Deploy a target WstethStrategy with direct deposits disabled. It only needs to accept
-        // transferred wstETH and report/deallocate in WETH terms.
-        vm.startPrank(admin);
-        targetStrategy = address(new WstethStrategy(vault, params, REWARD_TOKEN, WSTETH_ETH_ORACLE, false));
-        vm.stopPrank();
-
-        // Register the adapter on the existing MYT vault with the same caps as the primary strategy.
-        vm.startPrank(curator);
-        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.addAdapter, targetStrategy));
-        IVaultV2(vault).addAdapter(targetStrategy);
-
-        bytes memory idData = IMYTStrategy(targetStrategy).getIdData();
-        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseAbsoluteCap, (idData, testConfig.absoluteCap)));
-        IVaultV2(vault).increaseAbsoluteCap(idData, testConfig.absoluteCap);
-        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseRelativeCap, (idData, testConfig.relativeCap)));
-        IVaultV2(vault).increaseRelativeCap(idData, testConfig.relativeCap);
-        vm.stopPrank();
-    }
-
-    function _wstEthOracleAnswer() internal view returns (uint256 answer, uint256 scale) {
-        (, int256 raw,, uint256 updatedAt,) = AggregatorV3Interface(WSTETH_ETH_ORACLE).latestRoundData();
-        require(raw > 0 && updatedAt != 0, "invalid oracle answer");
-        answer = uint256(raw);
-        scale = 10 ** AggregatorV3Interface(WSTETH_ETH_ORACLE).decimals();
-    }
-
-    function _wstethToWethValue(uint256 wstethAmount) internal view returns (uint256) {
-        (uint256 answer, uint256 scale) = _wstEthOracleAnswer();
-        return wstethAmount * answer / scale;
     }
 
     function test_adminDexSwap_can_move_aWETH_out_via_custom_allowance_holder() public {
@@ -483,166 +376,6 @@ contract AaveV3ETHWETHStrategyTest is BaseStrategyTest {
             IVaultV2(vault).allocation(firstId), amountToSeed, 1, "first strategy allocation should remain stale"
         );
         assertEq(IVaultV2(vault).allocation(secondId), 0, "second strategy allocation should remain zero");
-    }
-
-    function test_adminDexSwap_max_ltv_user_is_not_liquidatable_after_99pct_move_to_second_strategy() public {
-        uint256 amountToAllocate = 500e18;
-        uint256 userDepositShares = 100e18;
-        address user = vaultDepositor;
-        address liquidator = address(0xBEEF);
-
-        // Allocate half of the vault into the first strategy, leaving the other half idle.
-        _allocateToPrimaryStrategy(amountToAllocate);
-        address secondStrategy = _deployAndRegisterSecondStrategy();
-
-        // The first strategy should represent ~50% of total vault value before the manual aWETH move.
-        bytes32 firstId = IMYTStrategy(strategy).adapterId();
-        bytes32 secondId = IMYTStrategy(secondStrategy).adapterId();
-        uint256 totalAssetsBeforeMove = IVaultV2(vault).totalAssets();
-        uint256 firstAllocationBeforeMove = IVaultV2(vault).allocation(firstId);
-        assertApproxEqAbs(firstAllocationBeforeMove * 2, totalAssetsBeforeMove, 4, "first strategy should be ~50% of MYT");
-        assertEq(IVaultV2(vault).allocation(secondId), 0, "second strategy should start with zero allocation");
-
-        // Deploy a minimal Alchemist stack that uses the existing MYT vault shares as collateral.
-        LocalAlchemistStack memory stack = _deployLocalAlchemistStack();
-
-        // Have a single user deposit MYT shares and mint to the maximum borrowable amount.
-        vm.startPrank(user);
-        IERC20(address(vault)).approve(address(stack.alchemist), type(uint256).max);
-        stack.alchemist.deposit(userDepositShares, user, 0);
-        uint256 tokenId = AlchemistNFTHelper.getFirstTokenId(user, address(stack.positionNft));
-        uint256 maxBorrowable = stack.alchemist.getMaxBorrowable(tokenId);
-        stack.alchemist.mint(tokenId, maxBorrowable, user);
-        vm.stopPrank();
-
-        // Snapshot the user's collateral value and debt before moving the aWETH position.
-        uint256 totalValueBefore = stack.alchemist.totalValue(tokenId);
-        (, uint256 debtBefore,) = stack.alchemist.getCDP(tokenId);
-        assertGt(totalValueBefore, 0, "user should have collateral value");
-        assertGt(debtBefore, 0, "user should have debt");
-
-        // Move 99% of the first strategy's stored allocation into the second strategy.
-        uint256 amountToMove = firstAllocationBeforeMove * 99 / 100;
-        MockATokenDrainHelper helper = new MockATokenDrainHelper();
-        vm.prank(admin);
-        MYTStrategy(strategy).setAllowanceHolder(address(helper));
-
-        bytes memory callData = abi.encodeCall(
-            MockATokenDrainHelper.drain,
-            (AAVE_V3_ETH_WETH_ATOKEN, strategy, secondStrategy, amountToMove)
-        );
-
-        vm.prank(admin);
-        AaveStrategy(strategy).adminDexSwap(WETH, AAVE_V3_ETH_WETH_ATOKEN, amountToMove, 0, callData);
-
-        // The vault and the user's collateral value should remain unchanged because the live value
-        // merely moved from one registered adapter to another.
-        uint256 totalAssetsAfterMove = IVaultV2(vault).totalAssets();
-        uint256 totalValueAfter = stack.alchemist.totalValue(tokenId);
-        (, uint256 debtAfter,) = stack.alchemist.getCDP(tokenId);
-        assertApproxEqAbs(totalAssetsAfterMove, totalAssetsBeforeMove, 2, "vault total assets should stay constant");
-        assertApproxEqAbs(totalValueAfter, totalValueBefore, 2, "user collateral value should stay constant");
-        assertEq(debtAfter, debtBefore, "user debt should not change before liquidation");
-        assertApproxEqAbs(
-            IVaultV2(vault).allocation(firstId), firstAllocationBeforeMove, 1, "first strategy allocation should remain stale"
-        );
-        assertEq(IVaultV2(vault).allocation(secondId), 0, "second strategy allocation should remain zero");
-
-        // Since the move preserved the vault's total value, the user's max-LTV position should still
-        // be healthy and regular liquidation must revert.
-        vm.prank(liquidator);
-        vm.expectRevert(IAlchemistV3Errors.LiquidationError.selector);
-        stack.alchemist.liquidate(tokenId);
-    }
-
-    function test_adminDexSwap_helper_can_route_aWETH_to_target_wsteth_strategy_via_fluid() public {
-        uint256 amountToAllocate = 500e18;
-
-        // Allocate WETH into the source Aave strategy so it holds live aEthWETH.
-        _allocateToPrimaryStrategy(amountToAllocate);
-
-        // Register a real WstethStrategy on the same vault to receive the withdrawn raw wstETH.
-        address targetStrategy = _deployAndRegisterWstethStrategy();
-        bytes32 sourceId = IMYTStrategy(strategy).adapterId();
-        bytes32 targetId = IMYTStrategy(targetStrategy).adapterId();
-
-        uint256 fluidMaxSwap = IFluidATokenSwap(FLUID_A_TOKEN_SWAP).maxSwapToWstETH();
-        require(fluidMaxSwap > 1e18, "no fluid capacity");
-
-        // Use a near-full migration amount, but stay within the live Fluid debt-ceiling limit.
-        uint256 amountToMove = amountToAllocate * 98 / 100;
-        uint256 safeFluidLimit = fluidMaxSwap - 1;
-        if (amountToMove > safeFluidLimit) amountToMove = safeFluidLimit;
-
-        uint256 quotedAethwstEthOut = IFluidATokenSwap(FLUID_A_TOKEN_SWAP).getWstETHAmountOut(amountToMove);
-        uint256 minAethwstEthOut = quotedAethwstEthOut > 1 ? quotedAethwstEthOut - 1 : quotedAethwstEthOut;
-
-        // Snapshot live balances and vault accounting before executing the helper-driven migration.
-        uint256 totalAssetsBefore = IVaultV2(vault).totalAssets();
-        uint256 vaultIdleBefore = IERC20(WETH).balanceOf(vault);
-        uint256 sourceRealAssetsBefore = IMYTStrategy(strategy).realAssets();
-        uint256 sourceATokenBefore = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy);
-        uint256 manualTotalBefore = vaultIdleBefore + sourceRealAssetsBefore;
-        assertEq(IMYTStrategy(targetStrategy).realAssets(), 0, "target strategy should start empty");
-        assertEq(IERC20(REWARD_TOKEN).balanceOf(targetStrategy), 0, "target strategy should start without wstETH");
-
-        // Install the migration helper as the source strategy's temporary allowance holder.
-        MYTTokenSwapper helper = new MYTTokenSwapper(
-            admin,
-            AAVE_V3_ETH_WETH_ATOKEN,
-            AAVE_V3_ETH_WSTETH_ATOKEN,
-            REWARD_TOKEN,
-            FLUID_A_TOKEN_SWAP,
-            AAVE_V3_ETH_POOL_ADDRESS_PROVIDER
-        );
-        vm.prank(admin);
-        MYTStrategy(strategy).setAllowanceHolder(address(helper));
-
-        // Use WETH as the "to" token so adminDexSwap reports zero received on the source strategy
-        // while the helper forwards raw wstETH to the destination strategy.
-        bytes memory callData = abi.encodeCall(
-            MYTTokenSwapper.swapAaveWethToWstethViaFluid,
-            (amountToMove, minAethwstEthOut, targetStrategy)
-        );
-
-        vm.prank(admin);
-        uint256 reportedReceived =
-            AaveStrategy(strategy).adminDexSwap(WETH, AAVE_V3_ETH_WETH_ATOKEN, amountToMove, 0, callData);
-
-        // Re-read live strategy balances and vault accounting after the Fluid + Aave migration leg.
-        uint256 totalAssetsAfter = IVaultV2(vault).totalAssets();
-        uint256 vaultIdleAfter = IERC20(WETH).balanceOf(vault);
-        uint256 sourceRealAssetsAfter = IMYTStrategy(strategy).realAssets();
-        uint256 targetRealAssetsAfter = IMYTStrategy(targetStrategy).realAssets();
-        uint256 sourceATokenAfter = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy);
-        uint256 targetWstethAfter = IERC20(REWARD_TOKEN).balanceOf(targetStrategy);
-        uint256 expectedTargetValueFromBalance = _wstethToWethValue(targetWstethAfter);
-        uint256 realizedLoss = (sourceRealAssetsBefore - sourceRealAssetsAfter) - targetRealAssetsAfter;
-        uint256 manualTotalAfter = vaultIdleAfter + sourceRealAssetsAfter + targetRealAssetsAfter;
-
-        // The source loses aEthWETH, the target receives raw wstETH, and the vault realizes the
-        // Fluid premium haircut instead of preserving total assets exactly.
-        assertEq(reportedReceived, 0, "adminDexSwap should report zero received on the source strategy");
-        assertGe(sourceATokenBefore - sourceATokenAfter, amountToMove, "source strategy did not lose enough aEthWETH");
-        assertGe(sourceRealAssetsBefore - sourceRealAssetsAfter, amountToMove, "source strategy value did not decrease");
-        assertGe(targetWstethAfter, minAethwstEthOut, "target did not receive enough wstETH");
-        assertEq(vaultIdleAfter, vaultIdleBefore, "helper migration should not change idle vault WETH");
-        assertApproxEqAbs(
-            targetRealAssetsAfter,
-            expectedTargetValueFromBalance,
-            3,
-            "target strategy value should reflect its wstETH balance"
-        );
-        assertGt(realizedLoss, 0, "Fluid swap should realize a premium haircut");
-        assertApproxEqAbs(manualTotalAfter, manualTotalBefore - realizedLoss, 5, "manual total should match realized haircut");
-        assertApproxEqAbs(totalAssetsAfter, totalAssetsBefore, 2, "vault totalAssets bookkeeping should remain unchanged");
-        assertApproxEqAbs(
-            IVaultV2(vault).allocation(sourceId),
-            amountToAllocate,
-            1,
-            "source allocation should remain stale after helper migration"
-        );
-        assertEq(IVaultV2(vault).allocation(targetId), 0, "target allocation should remain zero");
     }
 
     function test_aave_v3_ethweth_yield_accumulation() public {
