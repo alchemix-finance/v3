@@ -136,6 +136,8 @@ contract SimMigrateToWstethStrategy is Script, StdCheats {
         );
 
         vm.startPrank(ETH_MSIG);
+        helper.setWhitelistedSource(address(oldStrategy), true);
+        helper.setWhitelistedDestination(address(newStrategy), true);
         oldStrategy.setAllowanceHolder(address(helper));
         vm.stopPrank();
 

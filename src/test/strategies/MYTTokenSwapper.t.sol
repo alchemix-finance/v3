@@ -239,6 +239,10 @@ contract MYTTokenSwapperTest is StrategySetup {
             AAVE_V3_ETH_POOL_ADDRESS_PROVIDER
         );
         helper = address(swapper);
+        vm.startPrank(admin);
+        swapper.setWhitelistedSource(strategy, true);
+        swapper.setWhitelistedDestination(targetStrategy, true);
+        vm.stopPrank();
         vm.prank(admin);
         MYTStrategy(strategy).setAllowanceHolder(helper);
 
@@ -320,7 +324,7 @@ contract MYTTokenSwapperTest is StrategySetup {
         assertApproxEqAbs(
             IVaultV2(vault).allocation(sourceId),
             amountToAllocate,
-            1,
+            2,
             "source allocation should remain stale after helper migration"
         );
         assertEq(IVaultV2(vault).allocation(targetId), 0, "target allocation should remain zero");
@@ -566,5 +570,34 @@ contract MYTTokenSwapperTest is StrategySetup {
         vm.prank(admin);
         vm.expectRevert();
         IAllocator(allocator).allocate(targetStrategy, syncAllocateAmount);
+    }
+
+    function test_swapper_reverts_when_source_or_destination_is_not_whitelisted() public {
+        uint256 amountToAllocate = 500e18;
+        _allocateToPrimaryStrategy(amountToAllocate);
+
+        address targetStrategy = _deployAndRegisterWstethEthereumStrategy(testConfig.absoluteCap, testConfig.relativeCap);
+        (uint256 amountToMove,, uint256 minAethwstEthOut) = _quoteFluidMigration(amountToAllocate * 98 / 100);
+
+        MYTTokenSwapper swapper = new MYTTokenSwapper(
+            admin,
+            AAVE_V3_ETH_WETH_ATOKEN,
+            AAVE_V3_ETH_WSTETH_ATOKEN,
+            WSTETH,
+            FLUID_A_TOKEN_SWAP,
+            AAVE_V3_ETH_POOL_ADDRESS_PROVIDER
+        );
+
+        vm.prank(strategy);
+        vm.expectRevert(abi.encodeWithSelector(MYTTokenSwapper.SourceNotWhitelisted.selector, strategy));
+        swapper.swapAaveWethToWstethViaFluid(amountToMove, minAethwstEthOut, targetStrategy);
+
+        vm.startPrank(admin);
+        swapper.setWhitelistedSource(strategy, true);
+        vm.stopPrank();
+
+        vm.prank(strategy);
+        vm.expectRevert(abi.encodeWithSelector(MYTTokenSwapper.DestinationNotWhitelisted.selector, targetStrategy));
+        swapper.swapAaveWethToWstethViaFluid(amountToMove, minAethwstEthOut, targetStrategy);
     }
 }

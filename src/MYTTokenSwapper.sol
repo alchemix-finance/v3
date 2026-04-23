@@ -31,6 +31,8 @@ contract MYTTokenSwapper is Ownable {
     address public immutable wstETH;
     IFluidATokenSwap public immutable fluidATokenSwap;
     IPoolAddressProvider public immutable poolProvider;
+    mapping(address => bool) public whitelistedSource;
+    mapping(address => bool) public whitelistedDestination;
     bool public paused;
 
     event SwappedToWstethStrategy(
@@ -41,6 +43,8 @@ contract MYTTokenSwapper is Ownable {
         uint256 wstETHOut
     );
     event HelperPauseUpdated(bool paused);
+    event WhitelistedSourceUpdated(address indexed source, bool allowed);
+    event WhitelistedDestinationUpdated(address indexed destination, bool allowed);
 
     error InvalidAddress();
     error InvalidAmount();
@@ -50,6 +54,8 @@ contract MYTTokenSwapper is Ownable {
     error QuotedAmountTooLow(uint256 quotedAmountOut, uint256 minAmountOut);
     error AaveWithdrawTooLow(uint256 amountOut, uint256 minAmountOut);
     error DestinationEqualsSource();
+    error SourceNotWhitelisted(address source);
+    error DestinationNotWhitelisted(address destination);
 
     constructor(
         address _owner,
@@ -92,6 +98,8 @@ contract MYTTokenSwapper is Ownable {
         if (paused) revert HelperPaused();
         if (amountIn == 0 || minAethwstETHOut == 0) revert InvalidAmount();
         if (destinationStrategy == address(0)) revert InvalidAddress();
+        if (!whitelistedSource[sourceStrategy]) revert SourceNotWhitelisted(sourceStrategy);
+        if (!whitelistedDestination[destinationStrategy]) revert DestinationNotWhitelisted(destinationStrategy);
         if (destinationStrategy == sourceStrategy) revert DestinationEqualsSource();
         if (fluidATokenSwap.paused()) revert FluidPaused();
 
@@ -130,6 +138,18 @@ contract MYTTokenSwapper is Ownable {
     function setPaused(bool _paused) external onlyOwner {
         paused = _paused;
         emit HelperPauseUpdated(_paused);
+    }
+
+    function setWhitelistedSource(address source, bool allowed) external onlyOwner {
+        if (source == address(0)) revert InvalidAddress();
+        whitelistedSource[source] = allowed;
+        emit WhitelistedSourceUpdated(source, allowed);
+    }
+
+    function setWhitelistedDestination(address destination, bool allowed) external onlyOwner {
+        if (destination == address(0)) revert InvalidAddress();
+        whitelistedDestination[destination] = allowed;
+        emit WhitelistedDestinationUpdated(destination, allowed);
     }
 
     /// @notice Rescue non-core tokens that end up on this helper.
