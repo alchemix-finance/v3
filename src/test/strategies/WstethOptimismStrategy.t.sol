@@ -263,34 +263,6 @@ contract WstethOptimismStrategyTest is Test {
         assertEq(totalRealAssets, allocatedValue + leftover, "realAssets should include allocation plus idle WETH leftover");
     }
 
-    function test_realAssets_uses_minOracleAnswer_when_oracle_price_is_too_low() public {
-        _allocateWithMockedSwap(10e18, 10e18);
-
-        uint256 oracleFloor = _wstEthOracleAnswer();
-        uint256 lowOracleAnswer = oracleFloor / 2;
-        uint256 wstETHBalance = IWstETH(WSTETH).balanceOf(mytStrategy);
-        uint256 scale = 10 ** AggregatorV3Interface(WSTETH_ETH_ORACLE).decimals();
-
-        vm.prank(admin);
-        MockWstethOptimismStrategy(mytStrategy).setMinOracleAnswer(oracleFloor);
-
-        (uint80 roundId,, uint256 startedAt,, uint80 answeredInRound) =
-            AggregatorV3Interface(WSTETH_ETH_ORACLE).latestRoundData();
-        vm.mockCall(
-            WSTETH_ETH_ORACLE,
-            abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
-            abi.encode(roundId, int256(lowOracleAnswer), startedAt, block.timestamp, answeredInRound)
-        );
-
-        uint256 expectedRealAssets = wstETHBalance * oracleFloor / scale;
-
-        assertEq(
-            IMYTStrategy(mytStrategy).realAssets(),
-            expectedRealAssets,
-            "realAssets should use the configured oracle floor when the live oracle price is lower"
-        );
-    }
-
     function test_previewAdjustedWithdraw() public {
         uint256 previewEmpty = IMYTStrategy(mytStrategy).previewAdjustedWithdraw(100e18);
         assertEq(previewEmpty, 0, "should return 0 when no wstETH balance");

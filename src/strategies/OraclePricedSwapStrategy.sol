@@ -7,11 +7,9 @@ import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/s
 
 abstract contract OraclePricedSwapStrategy is MYTStrategy {
     uint256 public constant MAX_ORACLE_STALENESS = 7 days;
-    event MinOracleAnswerUpdated(uint256 indexed newMinOracleAnswer);
 
     AggregatorV3Interface public immutable pricedTokenEthOracle;
     uint8 public immutable pricedTokenEthOracleDecimals;
-    uint256 public minOracleAnswer;
 
     constructor(address _myt, StrategyParams memory _params, address _pricedTokenEthOracle) MYTStrategy(_myt, _params) {
         require(_pricedTokenEthOracle != address(0), "Zero oracle address");
@@ -115,11 +113,7 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
     }
 
     function _oracleTokenToAsset(uint256 oracleTokenAmount) internal view returns (uint256) {
-        uint256 answer = _oracleAnswer();
-        if (answer < minOracleAnswer) {
-            answer = minOracleAnswer;
-        }
-        return oracleTokenAmount * answer / (10 ** pricedTokenEthOracleDecimals);
+        return oracleTokenAmount * _oracleAnswer() / (10 ** pricedTokenEthOracleDecimals);
     }
 
     function _assetToOracleTokenDown(uint256 assetAmount) internal view returns (uint256) {
@@ -137,11 +131,6 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
         require(raw > 0 && updatedAt != 0, "Invalid oracle answer");
         require(updatedAt <= block.timestamp && block.timestamp - updatedAt <= MAX_ORACLE_STALENESS, "Stale oracle answer");
         answer = uint256(raw);
-    }
-
-    function setMinOracleAnswer(uint256 newMinOracleAnswer) public onlyOwner {
-        minOracleAnswer = newMinOracleAnswer;
-        emit MinOracleAnswerUpdated(newMinOracleAnswer);
     }
 
     function _roundUpMulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256) {

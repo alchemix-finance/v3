@@ -34,7 +34,6 @@ interface AlAsset {
 contract DeployV3OptimismScript is Script {
     address self = address(this);
     address deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
-    uint256 public constant WSTETH_MIN_ORACLE_ANSWER_OP = 1.18e18;
     // Asset addresses
     address public aUSDC = 0x38d693cE1dF5AaDF7bC62595A37D667aD57922e5;
     address public wethOP = 0x4200000000000000000000000000000000000006;
@@ -169,7 +168,6 @@ contract DeployV3OptimismScript is Script {
         curator.increaseAbsoluteCap(address(strategy), wstEthParams.cap);
         curator.submitIncreaseRelativeCap(address(strategy), wstEthParams.globalCap);
         curator.increaseRelativeCap(address(strategy), wstEthParams.globalCap);
-        strategy.setMinOracleAnswer(WSTETH_MIN_ORACLE_ANSWER_OP);
 
         strategy.transferOwnership(newOwner);
         return strategy;
