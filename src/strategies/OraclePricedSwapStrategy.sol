@@ -6,16 +6,16 @@ import {TokenUtils} from "../libraries/TokenUtils.sol";
 import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 abstract contract OraclePricedSwapStrategy is MYTStrategy {
-    uint256 public constant MAX_ORACLE_STALENESS = 7 days;
+    uint256 public MAX_ORACLE_STALENESS = 7 days;
 
-    AggregatorV3Interface public immutable pricedTokenEthOracle;
-    uint8 public immutable pricedTokenEthOracleDecimals;
+    AggregatorV3Interface public pricedTokenEthOracle;
+    uint8 public pricedTokenEthOracleDecimals;
+
+    event PricedTokenEthOracleUpdated(address indexed pricedTokenEthOracle, uint8 decimals);
+    event MaxOracleStalenessUpdated(uint256 maxOracleStaleness);
 
     constructor(address _myt, StrategyParams memory _params, address _pricedTokenEthOracle) MYTStrategy(_myt, _params) {
-        require(_pricedTokenEthOracle != address(0), "Zero oracle address");
-
-        pricedTokenEthOracle = AggregatorV3Interface(_pricedTokenEthOracle);
-        pricedTokenEthOracleDecimals = pricedTokenEthOracle.decimals();
+        _setPricedTokenEthOracle(_pricedTokenEthOracle);
     }
 
     function _allocate(uint256 amount, bytes memory callData) internal virtual override returns (uint256) {
@@ -135,6 +135,27 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
 
     function _roundUpMulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256) {
         return (x * y + denominator - 1) / denominator;
+    }
+
+    function setPricedTokenEthOracle(address _pricedTokenEthOracle) external onlyOwner {
+        _setPricedTokenEthOracle(_pricedTokenEthOracle);
+    }
+
+    function setMaxOracleStaleness(uint256 maxOracleStaleness) external onlyOwner {
+        require(maxOracleStaleness > 0, "Zero oracle staleness");
+        MAX_ORACLE_STALENESS = maxOracleStaleness;
+        emit MaxOracleStalenessUpdated(maxOracleStaleness);
+    }
+
+    function _setPricedTokenEthOracle(address _pricedTokenEthOracle) internal {
+        require(_pricedTokenEthOracle != address(0), "Zero oracle address");
+
+        AggregatorV3Interface newOracle = AggregatorV3Interface(_pricedTokenEthOracle);
+        uint8 newDecimals = newOracle.decimals();
+
+        pricedTokenEthOracle = newOracle;
+        pricedTokenEthOracleDecimals = newDecimals;
+        emit PricedTokenEthOracleUpdated(_pricedTokenEthOracle, newDecimals);
     }
 
     /// @notice Returns the vault asset managed by the parent MYT.

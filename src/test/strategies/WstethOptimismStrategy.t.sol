@@ -326,6 +326,63 @@ contract WstethOptimismStrategyTest is Test {
         IMYTStrategy(mytStrategy).realAssets();
     }
 
+    function test_owner_can_set_priced_token_eth_oracle() public {
+        address newOracle = address(0x1234567890123456789012345678901234567890);
+        uint8 newDecimals = 18;
+        int256 newAnswer = 2e18;
+
+        vm.mockCall(
+            newOracle,
+            abi.encodeWithSelector(AggregatorV3Interface.decimals.selector),
+            abi.encode(newDecimals)
+        );
+        vm.mockCall(
+            newOracle,
+            abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
+            abi.encode(uint80(1), newAnswer, block.timestamp, block.timestamp, uint80(1))
+        );
+
+        vm.prank(admin);
+        WstETHL2Strategy(mytStrategy).setPricedTokenEthOracle(newOracle);
+
+        assertEq(address(WstETHL2Strategy(mytStrategy).pricedTokenEthOracle()), newOracle, "oracle should update");
+        assertEq(WstETHL2Strategy(mytStrategy).pricedTokenEthOracleDecimals(), newDecimals, "decimals should update");
+
+        uint256 wstETHBalance = 3e18;
+        deal(WSTETH, mytStrategy, wstETHBalance);
+
+        assertEq(
+            IMYTStrategy(mytStrategy).realAssets(),
+            wstETHBalance * uint256(newAnswer) / (10 ** newDecimals),
+            "realAssets should use the replacement oracle"
+        );
+    }
+
+    function test_owner_can_set_max_oracle_staleness() public {
+        uint256 newMaxOracleStaleness = 8 days;
+
+        vm.prank(admin);
+        WstETHL2Strategy(mytStrategy).setMaxOracleStaleness(newMaxOracleStaleness);
+
+        assertEq(
+            WstETHL2Strategy(mytStrategy).MAX_ORACLE_STALENESS(),
+            newMaxOracleStaleness,
+            "max oracle staleness should update"
+        );
+
+        _allocateWithMockedSwap(10e18, 10e18);
+
+        (uint80 roundId, int256 answer, uint256 startedAt,, uint80 answeredInRound) =
+            AggregatorV3Interface(WSTETH_ETH_ORACLE).latestRoundData();
+        vm.mockCall(
+            WSTETH_ETH_ORACLE,
+            abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
+            abi.encode(roundId, answer, startedAt, block.timestamp - newMaxOracleStaleness, answeredInRound)
+        );
+
+        assertGt(IMYTStrategy(mytStrategy).realAssets(), 0, "updated staleness window should be honored");
+    }
+
     function test_allocator_allocate_with_mocked_swap() public {
         uint256 amountToAllocate = 100e18;
         MockSwapExecutor mockSwap = new MockSwapExecutor(WETH, WSTETH, amountToAllocate);
