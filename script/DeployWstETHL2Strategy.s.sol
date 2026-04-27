@@ -17,6 +17,7 @@ contract DeployWstETHL2StrategyScript is Script {
     // Strategy-specific addresses.
     address public wstETHOptimism = 0x1F32b1c2345538c0c6f582fCB022739c4A194Ebb;
     address public wstEthEthOracleOptimism = 0x524299Ab0987a7c4B3c8022a35669DdcdC715a10;
+    uint256 public maxOracleStaleness = 1 hours;
 
     IMYTStrategy.StrategyParams public wstEthParams = IMYTStrategy.StrategyParams({
         owner: deployerAddr,
@@ -32,7 +33,7 @@ contract DeployWstETHL2StrategyScript is Script {
 
     function deployWstEthOptimismStrategy(address _myt) public returns (WstETHL2Strategy) {
         return deployWstEthOptimismStrategy(
-            _myt, curator, newOwner, wstETHOptimism, wstEthEthOracleOptimism, wstEthParams
+            _myt, curator, newOwner, wstETHOptimism, wstEthEthOracleOptimism, maxOracleStaleness, wstEthParams
         );
     }
 
@@ -42,12 +43,14 @@ contract DeployWstETHL2StrategyScript is Script {
         address _newOwner,
         address _wstETH,
         address _wstEthEthOracle,
+        uint256 _maxOracleStaleness,
         IMYTStrategy.StrategyParams memory _params
     )
         public
         returns (WstETHL2Strategy)
     {
-        WstETHL2Strategy strategy = new WstETHL2Strategy(_myt, _params, _wstETH, _wstEthEthOracle);
+        WstETHL2Strategy strategy =
+            new WstETHL2Strategy(_myt, _params, _wstETH, _wstEthEthOracle, _maxOracleStaleness);
 
         strategy.setKillSwitch(true);
         _curator.submitSetStrategy(address(strategy), address(_myt));

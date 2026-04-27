@@ -16,6 +16,7 @@ contract DeploySFraxETHStrategyScript is Script {
         address sfrxETH;
         address pricedTokenEthOracle;
         uint256 minFrxEthOutBps;
+        uint256 maxOracleStaleness;
         IMYTStrategy.StrategyParams params;
     }
 
@@ -31,7 +32,8 @@ contract DeploySFraxETHStrategyScript is Script {
             config.frxETH,
             config.sfrxETH,
             config.pricedTokenEthOracle,
-            config.minFrxEthOutBps
+            config.minFrxEthOutBps,
+            config.maxOracleStaleness
         );
         strategyAddr = address(strategy);
 

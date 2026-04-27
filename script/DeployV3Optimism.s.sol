@@ -80,6 +80,7 @@ contract DeployV3OptimismScript is Script {
     // wstETH
     address public wstETH = 0x1F32b1c2345538c0c6f582fCB022739c4A194Ebb;
     address public wstEthEthOracle = 0x524299Ab0987a7c4B3c8022a35669DdcdC715a10;
+    uint256 public wstEthEthOracleMaxStaleness = 1 hours;
 
     // Strategy parameters
     IMYTStrategy.StrategyParams public aaveUSDCParams = IMYTStrategy.StrategyParams({
@@ -157,7 +158,8 @@ contract DeployV3OptimismScript is Script {
             myt,
             wstEthParams,
             wstETH,
-            wstEthEthOracle
+            wstEthEthOracle,
+            wstEthEthOracleMaxStaleness
         );
 
         strategy.setKillSwitch(true);

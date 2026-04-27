@@ -8,8 +8,13 @@ import {IWstETHLike} from "../interfaces/IWstETHLike.sol";
 contract WstETHL2Strategy is OraclePricedSwapStrategy {
     IWstETHLike public immutable wsteth;
 
-    constructor(address _myt, StrategyParams memory _params, address _wstETH, address _wstEthEthOracle)
-        OraclePricedSwapStrategy(_myt, _params, _wstEthEthOracle)
+    constructor(
+        address _myt,
+        StrategyParams memory _params,
+        address _wstETH,
+        address _wstEthEthOracle,
+        uint256 _maxOracleStaleness
+    ) OraclePricedSwapStrategy(_myt, _params, _wstEthEthOracle, _maxOracleStaleness)
     {
         wsteth = IWstETHLike(_wstETH);
     }

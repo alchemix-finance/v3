@@ -18,6 +18,7 @@ contract DeploySiUSDStrategiesScript is Script {
         address mintController;
         address redeemController;
         address iUsdUsdcOracle;
+        uint256 maxOracleStaleness;
         IMYTStrategy.StrategyParams params;
     }
 
@@ -35,7 +36,8 @@ contract DeploySiUSDStrategiesScript is Script {
             config.gateway,
             config.mintController,
             config.redeemController,
-            config.iUsdUsdcOracle
+            config.iUsdUsdcOracle,
+            config.maxOracleStaleness
         );
         strategyAddr = address(strategy);
 

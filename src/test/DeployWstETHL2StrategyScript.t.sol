@@ -27,6 +27,8 @@ contract MockMYTForWstETHL2DeployTest {
 }
 
 contract DeployWstETHL2StrategyScriptTest is Test {
+    uint256 internal constant MAX_ORACLE_STALENESS = 1 hours;
+
     DeployWstETHL2StrategyScript internal deployScript;
     AlchemistCurator internal curator;
     TestERC20 internal assetToken;
@@ -51,7 +53,13 @@ contract DeployWstETHL2StrategyScriptTest is Test {
     function test_deployWstETHL2Strategy_setsCoreAddressesAndConfig() public {
         address strategyAddr = address(
             deployScript.deployWstEthOptimismStrategy(
-                address(myt), curator, newOwner, wstETH, address(oracle), _buildParams("WstETH Optimism", "WstETH")
+                address(myt),
+                curator,
+                newOwner,
+                wstETH,
+                address(oracle),
+                MAX_ORACLE_STALENESS,
+                _buildParams("WstETH Optimism", "WstETH")
             )
         );
         WstETHL2Strategy strategy = WstETHL2Strategy(strategyAddr);
@@ -59,6 +67,7 @@ contract DeployWstETHL2StrategyScriptTest is Test {
         assertEq(address(strategy.MYT()), address(myt), "unexpected MYT address");
         assertEq(address(strategy.wsteth()), wstETH, "unexpected wstETH");
         assertEq(address(strategy.pricedTokenEthOracle()), address(oracle), "unexpected oracle");
+        assertEq(strategy.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS, "unexpected max oracle staleness");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled");
         assertEq(curator.adapterToMYT(strategyAddr), address(myt), "unexpected curator adapter mapping");

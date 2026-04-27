@@ -6,7 +6,7 @@ import {TokenUtils} from "../libraries/TokenUtils.sol";
 import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 abstract contract OraclePricedSwapStrategy is MYTStrategy {
-    uint256 public MAX_ORACLE_STALENESS = 7 days;
+    uint256 public MAX_ORACLE_STALENESS;
 
     AggregatorV3Interface public pricedTokenEthOracle;
     uint8 public pricedTokenEthOracleDecimals;
@@ -14,8 +14,14 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
     event PricedTokenEthOracleUpdated(address indexed pricedTokenEthOracle, uint8 decimals);
     event MaxOracleStalenessUpdated(uint256 maxOracleStaleness);
 
-    constructor(address _myt, StrategyParams memory _params, address _pricedTokenEthOracle) MYTStrategy(_myt, _params) {
+    constructor(
+        address _myt,
+        StrategyParams memory _params,
+        address _pricedTokenEthOracle,
+        uint256 _maxOracleStaleness
+    ) MYTStrategy(_myt, _params) {
         _setPricedTokenEthOracle(_pricedTokenEthOracle);
+        _setMaxOracleStaleness(_maxOracleStaleness);
     }
 
     function _allocate(uint256 amount, bytes memory callData) internal virtual override returns (uint256) {
@@ -142,9 +148,7 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
     }
 
     function setMaxOracleStaleness(uint256 maxOracleStaleness) external onlyOwner {
-        require(maxOracleStaleness > 0, "Zero oracle staleness");
-        MAX_ORACLE_STALENESS = maxOracleStaleness;
-        emit MaxOracleStalenessUpdated(maxOracleStaleness);
+        _setMaxOracleStaleness(maxOracleStaleness);
     }
 
     function _setPricedTokenEthOracle(address _pricedTokenEthOracle) internal {
@@ -156,6 +160,12 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
         pricedTokenEthOracle = newOracle;
         pricedTokenEthOracleDecimals = newDecimals;
         emit PricedTokenEthOracleUpdated(_pricedTokenEthOracle, newDecimals);
+    }
+
+    function _setMaxOracleStaleness(uint256 maxOracleStaleness) internal {
+        require(maxOracleStaleness > 0, "Zero oracle staleness");
+        MAX_ORACLE_STALENESS = maxOracleStaleness;
+        emit MaxOracleStalenessUpdated(maxOracleStaleness);
     }
 
     /// @notice Returns the vault asset managed by the parent MYT.

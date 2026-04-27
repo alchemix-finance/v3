@@ -64,15 +64,17 @@ contract MockWstethStrategy is WstETHEthereumStrategy {
         address _myt,
         StrategyParams memory _params,
         address _wstETH,
-        address _stEthEthOracle
+        address _stEthEthOracle,
+        uint256 _maxOracleStaleness
     )
-        WstETHEthereumStrategy(_myt, _params, _wstETH, _stEthEthOracle)
+        WstETHEthereumStrategy(_myt, _params, _wstETH, _stEthEthOracle, _maxOracleStaleness)
     {}
 }
 
 contract WstethStrategyTest is Test {
     uint256 public constant STRATEGY_SLIPPAGE_BPS = 200;
     uint256 public constant TEST_RESIDUAL_TOLERANCE_BPS = 100;
+    uint256 public constant MAX_ORACLE_STALENESS = 24 hours;
     uint256 public constant ASSUMED_STETH_ETH_ORACLE_ANSWER = 1.23e18;
     uint256 public constant QUOTED_WSTETH_SELL_AMOUNT = 1_000_000_000_000;
     uint256 public constant QUOTED_WETH_BUY_AMOUNT = 1_222_732_076_605;
@@ -148,8 +150,16 @@ contract WstethStrategyTest is Test {
     function _createStrategy(address _vault, IMYTStrategy.StrategyParams memory params) internal returns (address) {
         return address(
             new MockWstethStrategy{salt: bytes32("wsteth_strategy")}(
-                _vault, params, wstETH, stEthEthOracle
+                _vault, params, wstETH, stEthEthOracle, MAX_ORACLE_STALENESS
             )
+        );
+    }
+
+    function test_constructor_sets_max_oracle_staleness() public view {
+        assertEq(
+            WstETHEthereumStrategy(payable(mytStrategy)).MAX_ORACLE_STALENESS(),
+            MAX_ORACLE_STALENESS,
+            "unexpected initial max oracle staleness"
         );
     }
 
@@ -608,7 +618,7 @@ contract WstethStrategyTest is Test {
         vm.mockCall(
             stEthEthOracle,
             abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
-            abi.encode(roundId, answer, startedAt, block.timestamp - 8 days, answeredInRound)
+            abi.encode(roundId, answer, startedAt, block.timestamp - MAX_ORACLE_STALENESS - 1, answeredInRound)
         );
 
         vm.expectRevert(bytes("Stale oracle answer"));
