@@ -36,11 +36,7 @@ contract MYTTokenSwapper is Ownable {
     bool public paused;
 
     event SwappedToWstethStrategy(
-        address indexed sourceStrategy,
-        address indexed destinationStrategy,
-        uint256 amountIn,
-        uint256 aEthwstETHOut,
-        uint256 wstETHOut
+        address indexed sourceStrategy, address indexed destinationStrategy, uint256 amountIn, uint256 aEthwstETHOut, uint256 wstETHOut
     );
     event HelperPauseUpdated(bool paused);
     event WhitelistedSourceUpdated(address indexed source, bool allowed);
@@ -56,21 +52,11 @@ contract MYTTokenSwapper is Ownable {
     error DestinationEqualsSource();
     error SourceNotWhitelisted(address source);
     error DestinationNotWhitelisted(address destination);
+    error DeadlineExpired(uint256 deadline, uint256 timestamp);
 
-    constructor(
-        address _owner,
-        address _aEthWETH,
-        address _aEthwstETH,
-        address _wstETH,
-        address _fluidATokenSwap,
-        address _poolProvider
-    ) Ownable(_owner) {
+    constructor(address _owner, address _aEthWETH, address _aEthwstETH, address _wstETH, address _fluidATokenSwap, address _poolProvider) Ownable(_owner) {
         if (
-            _owner == address(0)
-                || _aEthWETH == address(0)
-                || _aEthwstETH == address(0)
-                || _wstETH == address(0)
-                || _fluidATokenSwap == address(0)
+            _owner == address(0) || _aEthWETH == address(0) || _aEthwstETH == address(0) || _wstETH == address(0) || _fluidATokenSwap == address(0)
                 || _poolProvider == address(0)
         ) {
             revert InvalidAddress();
@@ -89,13 +75,14 @@ contract MYTTokenSwapper is Ownable {
     /// @param amountIn The `aEthWETH` amount to migrate.
     /// @param minAethwstETHOut The minimum acceptable `aEthwstETH` output from Fluid.
     /// @param destinationStrategy The strategy that should receive the withdrawn `wstETH`.
-    function swapAaveWethToWstethViaFluid(
-        uint256 amountIn,
-        uint256 minAethwstETHOut,
-        address destinationStrategy
-    ) external returns (uint256 wstETHOut) {
+    /// @param deadline The latest timestamp at which this quoted migration may execute.
+    function swapAaveWethToWstethViaFluid(uint256 amountIn, uint256 minAethwstETHOut, address destinationStrategy, uint256 deadline)
+        external
+        returns (uint256 wstETHOut)
+    {
         address sourceStrategy = msg.sender;
         if (paused) revert HelperPaused();
+        if (block.timestamp > deadline) revert DeadlineExpired(deadline, block.timestamp);
         if (amountIn == 0 || minAethwstETHOut == 0) revert InvalidAmount();
         if (destinationStrategy == address(0)) revert InvalidAddress();
         if (!whitelistedSource[sourceStrategy]) revert SourceNotWhitelisted(sourceStrategy);

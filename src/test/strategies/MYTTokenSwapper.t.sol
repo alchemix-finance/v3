@@ -81,11 +81,7 @@ contract MYTTokenSwapperTest is StrategySetup {
     }
 
     function createStrategy(address _vault, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
-        return address(
-            new AaveStrategy(
-                _vault, params, WETH, AAVE_V3_ETH_WETH_ATOKEN, AAVE_V3_ETH_POOL_ADDRESS_PROVIDER, REWARDS_CONTROLLER, WSTETH
-            )
-        );
+        return address(new AaveStrategy(_vault, params, WETH, AAVE_V3_ETH_WETH_ATOKEN, AAVE_V3_ETH_POOL_ADDRESS_PROVIDER, REWARDS_CONTROLLER, WSTETH));
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {
@@ -97,8 +93,8 @@ contract MYTTokenSwapperTest is StrategySetup {
     }
 
     function isProtocolRevertAllowed(bytes4 selector, RevertContext context) external pure override returns (bool) {
-        bool isFuzzOrHandler = context == RevertContext.HandlerAllocate || context == RevertContext.HandlerDeallocate
-            || context == RevertContext.FuzzAllocate || context == RevertContext.FuzzDeallocate;
+        bool isFuzzOrHandler = context == RevertContext.HandlerAllocate || context == RevertContext.HandlerDeallocate || context == RevertContext.FuzzAllocate
+            || context == RevertContext.FuzzDeallocate;
 
         if (!isFuzzOrHandler) return false;
         return selector == ALLOWED_AAVE_REVERT_SELECTOR || selector == ERROR_STRING_SELECTOR;
@@ -146,8 +142,7 @@ contract MYTTokenSwapperTest is StrategySetup {
                 myt: address(vault)
             })
         );
-        TransparentUpgradeableProxy proxyAlchemist =
-            new TransparentUpgradeableProxy(address(alchemistLogic), address(this), alchemParams);
+        TransparentUpgradeableProxy proxyAlchemist = new TransparentUpgradeableProxy(address(alchemistLogic), address(this), alchemParams);
         stack.alchemist = AlchemistV3(address(proxyAlchemist));
 
         // Wire the transmuter, debt token, and position NFT into the new Alchemist.
@@ -184,10 +179,7 @@ contract MYTTokenSwapperTest is StrategySetup {
         vm.stopPrank();
     }
 
-    function _deployAndRegisterWstethEthereumStrategy(uint256 absoluteCap, uint256 relativeCap)
-        internal
-        returns (address targetStrategy)
-    {
+    function _deployAndRegisterWstethEthereumStrategy(uint256 absoluteCap, uint256 relativeCap) internal returns (address targetStrategy) {
         IMYTStrategy.StrategyParams memory params = getStrategyConfig();
         params.name = "WstETHEthereumTarget";
         params.protocol = "WstETHEthereumTarget";
@@ -208,11 +200,7 @@ contract MYTTokenSwapperTest is StrategySetup {
         vm.stopPrank();
     }
 
-    function _quoteFluidMigration(uint256 requestedAmount)
-        internal
-        view
-        returns (uint256 amountToMove, uint256 quotedAethwstEthOut, uint256 minAethwstEthOut)
-    {
+    function _quoteFluidMigration(uint256 requestedAmount) internal view returns (uint256 amountToMove, uint256 quotedAethwstEthOut, uint256 minAethwstEthOut) {
         // Stay below Fluid's live max-swap ceiling so the mainnet fork test remains deterministic.
         uint256 fluidMaxSwap = IFluidATokenSwap(FLUID_A_TOKEN_SWAP).maxSwapToWstETH();
         require(fluidMaxSwap > 1e18, "no fluid capacity");
@@ -230,14 +218,8 @@ contract MYTTokenSwapperTest is StrategySetup {
         returns (uint256 reportedReceived, address helper)
     {
         // Install the migration helper as the source strategy's temporary allowance holder.
-        MYTTokenSwapper swapper = new MYTTokenSwapper(
-            admin,
-            AAVE_V3_ETH_WETH_ATOKEN,
-            AAVE_V3_ETH_WSTETH_ATOKEN,
-            WSTETH,
-            FLUID_A_TOKEN_SWAP,
-            AAVE_V3_ETH_POOL_ADDRESS_PROVIDER
-        );
+        MYTTokenSwapper swapper =
+            new MYTTokenSwapper(admin, AAVE_V3_ETH_WETH_ATOKEN, AAVE_V3_ETH_WSTETH_ATOKEN, WSTETH, FLUID_A_TOKEN_SWAP, AAVE_V3_ETH_POOL_ADDRESS_PROVIDER);
         helper = address(swapper);
         vm.startPrank(admin);
         swapper.setWhitelistedSource(strategy, true);
@@ -248,10 +230,8 @@ contract MYTTokenSwapperTest is StrategySetup {
 
         // Keep dexSwap's "to" token on harmless WETH while the helper forwards raw wstETH to the
         // destination strategy.
-        bytes memory callData = abi.encodeCall(
-            MYTTokenSwapper.swapAaveWethToWstethViaFluid,
-            (amountToMove, minAethwstEthOut, targetStrategy)
-        );
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes memory callData = abi.encodeCall(MYTTokenSwapper.swapAaveWethToWstethViaFluid, (amountToMove, minAethwstEthOut, targetStrategy, deadline));
 
         vm.prank(admin);
         reportedReceived = AaveStrategy(strategy).adminDexSwap(WETH, AAVE_V3_ETH_WETH_ATOKEN, amountToMove, 0, callData);
@@ -312,21 +292,11 @@ contract MYTTokenSwapperTest is StrategySetup {
         assertGe(sourceRealAssetsBefore - sourceRealAssetsAfter, amountToMove, "source strategy value did not decrease");
         assertGe(targetWstethAfter, minAethwstEthOut, "target did not receive enough wstETH");
         assertEq(vaultIdleAfter, vaultIdleBefore, "helper migration should not change idle vault WETH");
-        assertApproxEqAbs(
-            targetRealAssetsAfter,
-            expectedTargetValueFromBalance,
-            3,
-            "target strategy value should reflect its wstETH balance"
-        );
+        assertApproxEqAbs(targetRealAssetsAfter, expectedTargetValueFromBalance, 3, "target strategy value should reflect its wstETH balance");
         assertGt(realizedLoss, 0, "Fluid swap should realize a premium haircut");
         assertApproxEqAbs(manualTotalAfter, manualTotalBefore - realizedLoss, 5, "manual total should match realized haircut");
         assertApproxEqAbs(totalAssetsAfter, totalAssetsBefore, 2, "vault totalAssets bookkeeping should remain unchanged");
-        assertApproxEqAbs(
-            IVaultV2(vault).allocation(sourceId),
-            amountToAllocate,
-            2,
-            "source allocation should remain stale after helper migration"
-        );
+        assertApproxEqAbs(IVaultV2(vault).allocation(sourceId), amountToAllocate, 2, "source allocation should remain stale after helper migration");
         assertEq(IVaultV2(vault).allocation(targetId), 0, "target allocation should remain zero");
 
         // Seed a small allocator-managed allocation on the target strategy so the vault records a
@@ -365,21 +335,9 @@ contract MYTTokenSwapperTest is StrategySetup {
         uint256 targetRealAssetsAfterAllocatorDeallocate = IMYTStrategy(targetStrategy).realAssets();
         uint256 vaultIdleAfterAllocatorDeallocate = IERC20(WETH).balanceOf(vault);
 
-        assertLt(
-            targetAllocationAfterAllocatorDeallocate,
-            targetAllocationAfterManagedAllocate,
-            "allocator deallocation should reduce target allocation"
-        );
-        assertLt(
-            targetWstethAfterAllocatorDeallocate,
-            targetWstethBeforeAllocatorDeallocate,
-            "allocator deallocation should reduce target wstETH"
-        );
-        assertLt(
-            targetRealAssetsAfterAllocatorDeallocate,
-            targetRealAssetsBeforeAllocatorDeallocate,
-            "allocator deallocation should reduce target real assets"
-        );
+        assertLt(targetAllocationAfterAllocatorDeallocate, targetAllocationAfterManagedAllocate, "allocator deallocation should reduce target allocation");
+        assertLt(targetWstethAfterAllocatorDeallocate, targetWstethBeforeAllocatorDeallocate, "allocator deallocation should reduce target wstETH");
+        assertLt(targetRealAssetsAfterAllocatorDeallocate, targetRealAssetsBeforeAllocatorDeallocate, "allocator deallocation should reduce target real assets");
         assertGe(
             vaultIdleAfterAllocatorDeallocate - vaultIdleBeforeAllocatorDeallocate,
             previewedTargetDeallocate,
@@ -446,12 +404,7 @@ contract MYTTokenSwapperTest is StrategySetup {
         assertApproxEqAbs(totalAssetsAfterMove, totalAssetsBeforeMove, 2, "vault total assets should stay stale in this harness");
         assertApproxEqAbs(totalValueAfter, totalValueBefore, 2, "user collateral value should stay unchanged in this harness");
         assertEq(debtAfter, debtBefore, "user debt should not change before liquidation");
-        assertApproxEqAbs(
-            IVaultV2(vault).allocation(sourceId),
-            sourceAllocationBeforeMove,
-            1,
-            "source strategy allocation should remain stale"
-        );
+        assertApproxEqAbs(IVaultV2(vault).allocation(sourceId), sourceAllocationBeforeMove, 1, "source strategy allocation should remain stale");
         assertEq(IVaultV2(vault).allocation(targetId), 0, "target strategy allocation should remain zero");
 
         // Because the vault's share-price bookkeeping does not move with the manual migration in
@@ -490,24 +443,17 @@ contract MYTTokenSwapperTest is StrategySetup {
         uint256 sourceAllocationBeforeMigration = IVaultV2(vault).allocation(sourceId);
         uint256 sourceATokenBeforeMigration = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy);
 
-        (uint256 reportedReceived, address helper) =
-            _installSwapperAndMigrate(amountToMove, minAethwstEthOut, targetStrategy);
+        (uint256 reportedReceived, address helper) = _installSwapperAndMigrate(amountToMove, minAethwstEthOut, targetStrategy);
 
         uint256 targetRealAssetsBeforeSync = IMYTStrategy(targetStrategy).realAssets();
         assertEq(reportedReceived, 0, "migration helper should not report WETH received on the source strategy");
         assertEq(MYTStrategy(strategy).allowanceHolder(), helper, "source strategy should point at the helper during migration");
         assertGe(
-            sourceATokenBeforeMigration - IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy),
-            amountToMove,
-            "source strategy should lose the migrated aWETH"
+            sourceATokenBeforeMigration - IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy), amountToMove, "source strategy should lose the migrated aWETH"
         );
         assertGt(targetRealAssetsBeforeSync, 0, "target strategy should receive migrated wstETH");
         assertEq(IVaultV2(vault).allocation(targetId), 0, "target allocation stays stale until a post-migration sync");
-        assertGe(
-            IVaultV2(vault).absoluteCap(targetId),
-            targetRealAssetsBeforeSync,
-            "target cap should already cover the migrated position before syncing"
-        );
+        assertGe(IVaultV2(vault).absoluteCap(targetId), targetRealAssetsBeforeSync, "target cap should already cover the migrated position before syncing");
         assertTrue(IVaultV2(vault).isAdapter(strategy), "source adapter should stay registered throughout migration");
         assertTrue(IVaultV2(vault).isAdapter(targetStrategy), "target adapter should stay registered throughout migration");
 
@@ -516,31 +462,15 @@ contract MYTTokenSwapperTest is StrategySetup {
 
         uint256 targetAllocationAfterSync = IVaultV2(vault).allocation(targetId);
         uint256 targetRealAssetsAfterSync = IMYTStrategy(targetStrategy).realAssets();
-        assertGt(
-            targetAllocationAfterSync,
-            syncAllocateAmount,
-            "post-migration sync should book the full migrated position, not just the dust allocation"
-        );
+        assertGt(targetAllocationAfterSync, syncAllocateAmount, "post-migration sync should book the full migrated position, not just the dust allocation");
+        assertApproxEqAbs(targetAllocationAfterSync, targetRealAssetsAfterSync, 3, "target allocation should track live real assets after the sync allocate");
         assertApproxEqAbs(
-            targetAllocationAfterSync,
-            targetRealAssetsAfterSync,
-            3,
-            "target allocation should track live real assets after the sync allocate"
-        );
-        assertApproxEqAbs(
-            IVaultV2(vault).allocation(sourceId),
-            sourceAllocationBeforeMigration,
-            1,
-            "source allocation should remain stale until it is explicitly unwound"
+            IVaultV2(vault).allocation(sourceId), sourceAllocationBeforeMigration, 1, "source allocation should remain stale until it is explicitly unwound"
         );
 
         vm.prank(admin);
         MYTStrategy(strategy).setAllowanceHolder(originalAllowanceHolder);
-        assertEq(
-            MYTStrategy(strategy).allowanceHolder(),
-            originalAllowanceHolder,
-            "migration should restore the source strategy allowance holder"
-        );
+        assertEq(MYTStrategy(strategy).allowanceHolder(), originalAllowanceHolder, "migration should restore the source strategy allowance holder");
     }
 
     function test_guardrailed_migration_sync_allocate_reverts_when_target_cap_is_too_low() public {
@@ -562,9 +492,7 @@ contract MYTTokenSwapperTest is StrategySetup {
         _installSwapperAndMigrate(amountToMove, minAethwstEthOut, targetStrategy);
 
         assertGt(
-            IMYTStrategy(targetStrategy).realAssets(),
-            IVaultV2(vault).absoluteCap(targetId),
-            "test setup should preload more value than the target cap allows"
+            IMYTStrategy(targetStrategy).realAssets(), IVaultV2(vault).absoluteCap(targetId), "test setup should preload more value than the target cap allows"
         );
 
         vm.prank(admin);
@@ -579,18 +507,12 @@ contract MYTTokenSwapperTest is StrategySetup {
         address targetStrategy = _deployAndRegisterWstethEthereumStrategy(testConfig.absoluteCap, testConfig.relativeCap);
         (uint256 amountToMove,, uint256 minAethwstEthOut) = _quoteFluidMigration(amountToAllocate * 98 / 100);
 
-        MYTTokenSwapper swapper = new MYTTokenSwapper(
-            admin,
-            AAVE_V3_ETH_WETH_ATOKEN,
-            AAVE_V3_ETH_WSTETH_ATOKEN,
-            WSTETH,
-            FLUID_A_TOKEN_SWAP,
-            AAVE_V3_ETH_POOL_ADDRESS_PROVIDER
-        );
+        MYTTokenSwapper swapper =
+            new MYTTokenSwapper(admin, AAVE_V3_ETH_WETH_ATOKEN, AAVE_V3_ETH_WSTETH_ATOKEN, WSTETH, FLUID_A_TOKEN_SWAP, AAVE_V3_ETH_POOL_ADDRESS_PROVIDER);
 
         vm.prank(strategy);
         vm.expectRevert(abi.encodeWithSelector(MYTTokenSwapper.SourceNotWhitelisted.selector, strategy));
-        swapper.swapAaveWethToWstethViaFluid(amountToMove, minAethwstEthOut, targetStrategy);
+        swapper.swapAaveWethToWstethViaFluid(amountToMove, minAethwstEthOut, targetStrategy, block.timestamp + 1 hours);
 
         vm.startPrank(admin);
         swapper.setWhitelistedSource(strategy, true);
@@ -598,6 +520,18 @@ contract MYTTokenSwapperTest is StrategySetup {
 
         vm.prank(strategy);
         vm.expectRevert(abi.encodeWithSelector(MYTTokenSwapper.DestinationNotWhitelisted.selector, targetStrategy));
-        swapper.swapAaveWethToWstethViaFluid(amountToMove, minAethwstEthOut, targetStrategy);
+        swapper.swapAaveWethToWstethViaFluid(amountToMove, minAethwstEthOut, targetStrategy, block.timestamp + 1 hours);
+    }
+
+    function test_swapper_reverts_when_deadline_expired() public {
+        MYTTokenSwapper swapper =
+            new MYTTokenSwapper(admin, AAVE_V3_ETH_WETH_ATOKEN, AAVE_V3_ETH_WSTETH_ATOKEN, WSTETH, FLUID_A_TOKEN_SWAP, AAVE_V3_ETH_POOL_ADDRESS_PROVIDER);
+
+        vm.warp(block.timestamp + 2 hours);
+        uint256 expiredDeadline = block.timestamp - 1;
+
+        vm.prank(strategy);
+        vm.expectRevert(abi.encodeWithSelector(MYTTokenSwapper.DeadlineExpired.selector, expiredDeadline, block.timestamp));
+        swapper.swapAaveWethToWstethViaFluid(1, 1, address(0xBEEF), expiredDeadline);
     }
 }

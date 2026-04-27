@@ -59,10 +59,11 @@ contract SimMigrateToWstethStrategy is Script, StdCheats {
 
     uint256 constant SLIPPAGE_NUM = 99_999;
     uint256 constant SLIPPAGE_DEN = 100_000;
+    uint256 constant SWAP_DEADLINE_WINDOW = 1 hours;
 
     /// @dev Update this value.
     /// @dev Operator reviewed Fluid quote for the full aWETH balance, e.g. 5246827227535022074113 (5246.827227535022074113).
-    uint256 constant MANUALLY_APPROVED_EXPECTED_OUT = 5246827227535022074113;
+    uint256 constant MANUALLY_APPROVED_EXPECTED_OUT = 5_246_827_227_535_022_074_113;
     uint256 constant MAX_APPROVED_QUOTE_DEVIATION_BPS = 10; // 0.1%
 
     /// @dev Market-price wstETH in WETH terms: wstETH -> stETH (via stEthPerToken) -> ETH (via Chainlink).
@@ -83,8 +84,7 @@ contract SimMigrateToWstethStrategy is Script, StdCheats {
 
     function _validateApprovedQuote(uint256 expectedOut) internal pure {
         require(MANUALLY_APPROVED_EXPECTED_OUT != 0, "manual quote unset");
-        uint256 minApprovedQuote =
-            (MANUALLY_APPROVED_EXPECTED_OUT * (10_000 - MAX_APPROVED_QUOTE_DEVIATION_BPS)) / 10_000;
+        uint256 minApprovedQuote = (MANUALLY_APPROVED_EXPECTED_OUT * (10_000 - MAX_APPROVED_QUOTE_DEVIATION_BPS)) / 10_000;
         require(expectedOut >= minApprovedQuote, "Fluid quote below manually approved value");
     }
 
@@ -138,14 +138,7 @@ contract SimMigrateToWstethStrategy is Script, StdCheats {
         console.log("caps updated on new strategy");
 
         // 2a-b. allowance holder and atomic helper-driven migration into the new strategy
-        MYTTokenSwapper helper = new MYTTokenSwapper(
-            ETH_MSIG,
-            AWETH,
-            AWSTETH,
-            WSTETH,
-            SWAP_TARGET,
-            AAVE_POOL_PROVIDER
-        );
+        MYTTokenSwapper helper = new MYTTokenSwapper(ETH_MSIG, AWETH, AWSTETH, WSTETH, SWAP_TARGET, AAVE_POOL_PROVIDER);
 
         vm.startPrank(ETH_MSIG);
         helper.setWhitelistedSource(address(oldStrategy), true);
@@ -156,10 +149,10 @@ contract SimMigrateToWstethStrategy is Script, StdCheats {
         uint256 expectedOut = swap.getWstETHAmountOut(aWethBal);
         _validateApprovedQuote(expectedOut);
         uint256 minOut = (expectedOut * SLIPPAGE_NUM) / SLIPPAGE_DEN;
+        uint256 deadline = block.timestamp + SWAP_DEADLINE_WINDOW;
         console.log("manually approved aWstETH out:", MANUALLY_APPROVED_EXPECTED_OUT);
         console.log("expected aWstETH out:", expectedOut);
-        bytes memory callData =
-            abi.encodeCall(MYTTokenSwapper.swapAaveWethToWstethViaFluid, (aWethBal, minOut, address(newStrategy)));
+        bytes memory callData = abi.encodeCall(MYTTokenSwapper.swapAaveWethToWstethViaFluid, (aWethBal, minOut, address(newStrategy), deadline));
 
         // IMPORTANT: the helper call below is the atomic migration leg.
         vm.startPrank(ETH_MSIG);
