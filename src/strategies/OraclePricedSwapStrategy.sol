@@ -188,7 +188,9 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
     /// @param oracleTokenReceived The oracle token amount returned by the allocation swap.
     function _afterAllocationSwap(uint256 oracleTokenReceived) internal virtual {}
 
-    /// @notice Returns the token whose amount is priced by the oracle and used in swap sizing math.
+    /// @notice Returns the token used in allocation/deallocation swap flows.
+    /// @dev This token may be the same as the oracle-priced unit, or a wrapped form that must be converted
+    /// into oracle-compatible units by `_positionBalance()` and `_prepareOracleTokenForSwap()`.
     function _oracleToken() internal view virtual returns (address);
 
     /// @notice Returns the strategy's deployed position balance in units consumable by the oracle pricing math.
