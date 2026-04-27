@@ -60,6 +60,11 @@ contract SimMigrateToWstethStrategy is Script, StdCheats {
     uint256 constant SLIPPAGE_NUM = 99_999;
     uint256 constant SLIPPAGE_DEN = 100_000;
 
+    /// @dev Update this value.
+    /// @dev Operator reviewed Fluid quote for the full aWETH balance, e.g. 5246827227535022074113 (5246.827227535022074113).
+    uint256 constant MANUALLY_APPROVED_EXPECTED_OUT = 5246827227535022074113;
+    uint256 constant MAX_APPROVED_QUOTE_DEVIATION_BPS = 10; // 0.1%
+
     /// @dev Market-price wstETH in WETH terms: wstETH -> stETH (via stEthPerToken) -> ETH (via Chainlink).
     function _wstEthToWeth(uint256 wstEthAmount) internal view returns (uint256) {
         uint256 stEthPerWst = IWstETH(WSTETH).stEthPerToken(); // 1e18
@@ -74,6 +79,13 @@ contract SimMigrateToWstethStrategy is Script, StdCheats {
         } else {
             console.log(string.concat(label, " (gain):"), b - a);
         }
+    }
+
+    function _validateApprovedQuote(uint256 expectedOut) internal pure {
+        require(MANUALLY_APPROVED_EXPECTED_OUT != 0, "manual quote unset");
+        uint256 minApprovedQuote =
+            (MANUALLY_APPROVED_EXPECTED_OUT * (10_000 - MAX_APPROVED_QUOTE_DEVIATION_BPS)) / 10_000;
+        require(expectedOut >= minApprovedQuote, "Fluid quote below manually approved value");
     }
 
     function run() external {
@@ -142,7 +154,9 @@ contract SimMigrateToWstethStrategy is Script, StdCheats {
         vm.stopPrank();
 
         uint256 expectedOut = swap.getWstETHAmountOut(aWethBal);
+        _validateApprovedQuote(expectedOut);
         uint256 minOut = (expectedOut * SLIPPAGE_NUM) / SLIPPAGE_DEN;
+        console.log("manually approved aWstETH out:", MANUALLY_APPROVED_EXPECTED_OUT);
         console.log("expected aWstETH out:", expectedOut);
         bytes memory callData =
             abi.encodeCall(MYTTokenSwapper.swapAaveWethToWstethViaFluid, (aWethBal, minOut, address(newStrategy)));
