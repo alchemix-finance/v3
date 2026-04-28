@@ -1801,6 +1801,64 @@ contract AlchemistV3Test is Test {
         );
     }
 
+    function testRegression_SameBlockClaimPreservesRepayCoverForNextWindow() external {
+        uint256 debtAmount = 100e18;
+        uint256 firstRedemptionAmount = 30e18;
+        uint256 secondRedemptionAmount = 20e18;
+        uint256 transmutationTime = transmuterLogic.timeToTransmute();
+
+        vm.startPrank(address(0xbeef));
+        SafeERC20.safeApprove(address(vault), address(alchemist), type(uint256).max);
+        SafeERC20.safeApprove(address(alToken), address(transmuterLogic), type(uint256).max);
+        alchemist.deposit(200e18, address(0xbeef), 0);
+        uint256 tokenId = AlchemistNFTHelper.getFirstTokenId(address(0xbeef), address(alchemistNFT));
+        alchemist.mint(tokenId, debtAmount, address(0xbeef));
+        transmuterLogic.createRedemption(firstRedemptionAmount, address(0xbeef));
+        vm.stopPrank();
+
+        uint256 initialTransmuterBalance = vault.balanceOf(address(transmuterLogic));
+        vm.prank(address(transmuterLogic));
+        alchemist.setTransmuterTokenBalance(initialTransmuterBalance);
+
+        vm.roll(block.number + transmutationTime);
+        alchemist.poke(tokenId);
+
+        (, , uint256 firstWindowEarmark) = alchemist.getCDP(tokenId);
+        assertApproxEqAbs(
+            firstWindowEarmark, firstRedemptionAmount, 1, "first graph window should earmark the original redemption"
+        );
+
+        uint256 repayShares = alchemist.convertDebtTokensToYield(firstWindowEarmark + secondRedemptionAmount);
+
+        vm.startPrank(address(0xbeef));
+        alchemist.repay(repayShares, tokenId);
+        transmuterLogic.claimRedemption(1);
+        transmuterLogic.createRedemption(secondRedemptionAmount, address(0xbeef));
+        vm.stopPrank();
+
+        uint256 transmuterBalanceAfterClaim = vault.balanceOf(address(transmuterLogic));
+        assertEq(
+            transmuterBalanceAfterClaim - initialTransmuterBalance,
+            secondRedemptionAmount,
+            "same-block claim should leave the unearmarked repay surplus in the transmuter"
+        );
+        assertEq(
+            alchemist.lastTransmuterTokenBalance(),
+            transmuterBalanceAfterClaim,
+            "claim should resync the transmuter balance snapshot to the surviving cover"
+        );
+
+        vm.roll(block.number + transmutationTime);
+        uint256 secondWindowDemand = transmuterLogic.queryGraph(alchemist.lastEarmarkBlock() + 1, block.number);
+        assertGt(secondWindowDemand, 0, "second graph window should have demand");
+
+        alchemist.poke(tokenId);
+
+        assertEq(alchemist.cumulativeEarmarked(), 0, "surviving repay cover should offset the next graph window");
+        (, , uint256 syncedAccountEarmarked) = alchemist.getCDP(tokenId);
+        assertEq(syncedAccountEarmarked, 0, "account should not receive phantom earmark after same-block claim");
+    }
+
     function testRepayZeroAmount() external {
         uint256 amount = 100e18;
 
@@ -3893,17 +3951,11 @@ contract AlchemistV3Test is Test {
             minimumDepositOrWithdrawalLoss * 2,
             "Transmuter should receive all debt collateral"
         );
-        uint256 expectedEarmarkedInYield = alchemist.convertDebtTokensToYield(earmarked);
         vm.assertApproxEqAbs(
             alchemist.lastTransmuterTokenBalance(),
-            transmuterPreviousBalance + expectedEarmarkedInYield,
-            minimumDepositOrWithdrawalLoss * 2,
-            "Only the earmarked self-liquidation transfer should sync the baseline"
-        );
-        assertGt(
             IERC20(address(vault)).balanceOf(address(transmuterLogic)),
-            alchemist.lastTransmuterTokenBalance(),
-            "The unearmarked self-liquidation transfer should remain available as cover"
+            minimumDepositOrWithdrawalLoss * 2,
+            "Self-liquidation should resync the full transmuter balance snapshot"
         );
 
         // Verify recipient received remaining collateral
