@@ -759,6 +759,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
         if(repaidDebtInYield > 0) {
             // Forward repaid collateral to the transmuter.
+            _syncEarmarkedTransmuterTransfer(repaidDebtInYield, 0);
             TokenUtils.safeTransfer(myt, transmuter, repaidDebtInYield);
         }
 
@@ -825,34 +826,25 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     ///@inheritdoc IAlchemistV3Actions
     function setTransmuterTokenBalance(uint256 amount) external onlyTransmuter {
         uint256 last = lastTransmuterTokenBalance;
+        uint256 cover = _pendingCoverShares;
 
-        // If balance went down, assume cover could have been spent and reduce it conservatively.
-        if (amount < last) {
-            uint256 spent = last - amount;
-            uint256 cover = _pendingCoverShares;
-
-            if (spent >= cover) {
-                _pendingCoverShares = 0;
-            } else {
-                _pendingCoverShares = cover - spent;
-            }
+        if (amount > last) {
+            cover += amount - last;
         }
 
-        // Always keep cover <= actual transmuter balance.
-        if (_pendingCoverShares > amount) {
-            _pendingCoverShares = amount;
+        if (cover > amount) {
+            cover = amount;
         }
 
-        // Update baseline
+        _pendingCoverShares = cover;
         lastTransmuterTokenBalance = amount;
     }
 
-    /// @dev Keeps already-earmarked transfers from being re-counted as future cover.
+    /// @dev Tracks transmuter inflows so earmarked shares bypass cover and the remainder becomes live cover.
     function _syncEarmarkedTransmuterTransfer(uint256 sharesSent, uint256 earmarkedShares) internal {
-        if (earmarkedShares == 0) return;
-
-        // Only the portion that satisfied an existing earmark should bypass cover accounting.
-        if (sharesSent > earmarkedShares) sharesSent = earmarkedShares;
+        if (sharesSent > earmarkedShares) {
+            _pendingCoverShares += sharesSent - earmarkedShares;
+        }
         lastTransmuterTokenBalance += sharesSent;
     }
 
@@ -1228,7 +1220,10 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         }
 
         // Route seized collateral net of liquidator fee to the transmuter.
-        TokenUtils.safeTransfer(myt, transmuter, netToTransmuter);
+        if (netToTransmuter > 0) {
+            _syncEarmarkedTransmuterTransfer(netToTransmuter, 0);
+            TokenUtils.safeTransfer(myt, transmuter, netToTransmuter);
+        }
 
         // Pay the liquidator from MYT if available, otherwise fall back to the fee vault.
         if (feeInYield > 0) {
