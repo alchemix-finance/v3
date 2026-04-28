@@ -66,7 +66,7 @@ contract DeployWstETHEthereumStrategyScriptTest is Test {
 
         assertEq(address(strategy.MYT()), address(myt), "unexpected MYT address");
         assertEq(address(strategy.wsteth()), wstETH, "unexpected wstETH");
-        assertEq(address(strategy.pricedTokenEthOracle()), address(oracle), "unexpected oracle");
+        assertEq(address(strategy.pricedTokenOracle()), address(oracle), "unexpected oracle");
         assertEq(strategy.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS, "unexpected max oracle staleness");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled");

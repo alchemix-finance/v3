@@ -336,7 +336,7 @@ contract WstethOptimismStrategyTest is Test {
         IMYTStrategy(mytStrategy).realAssets();
     }
 
-    function test_owner_can_set_priced_token_eth_oracle() public {
+    function test_owner_can_set_priced_token_oracle() public {
         address newOracle = address(0x1234567890123456789012345678901234567890);
         uint8 newDecimals = 18;
         int256 newAnswer = 2e18;
@@ -353,10 +353,10 @@ contract WstethOptimismStrategyTest is Test {
         );
 
         vm.prank(admin);
-        WstETHL2Strategy(mytStrategy).setPricedTokenEthOracle(newOracle);
+        WstETHL2Strategy(mytStrategy).setPricedTokenOracle(newOracle);
 
-        assertEq(address(WstETHL2Strategy(mytStrategy).pricedTokenEthOracle()), newOracle, "oracle should update");
-        assertEq(WstETHL2Strategy(mytStrategy).pricedTokenEthOracleDecimals(), newDecimals, "decimals should update");
+        assertEq(address(WstETHL2Strategy(mytStrategy).pricedTokenOracle()), newOracle, "oracle should update");
+        assertEq(WstETHL2Strategy(mytStrategy).pricedTokenOracleDecimals(), newDecimals, "decimals should update");
 
         uint256 wstETHBalance = 3e18;
         deal(WSTETH, mytStrategy, wstETHBalance);

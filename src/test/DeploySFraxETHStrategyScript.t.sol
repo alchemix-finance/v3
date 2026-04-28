@@ -63,7 +63,7 @@ contract DeploySFraxETHStrategyScriptTest is Test {
             minter: minter,
             frxETH: frxETH,
             sfrxETH: sfrxETH,
-            pricedTokenEthOracle: address(oracle),
+            pricedTokenOracle: address(oracle),
             minFrxEthOutBps: MIN_FRXETH_OUT_BPS,
             maxOracleStaleness: MAX_ORACLE_STALENESS,
             params: _buildParams("sfrxETH Mainnet", "Frax")
@@ -76,7 +76,7 @@ contract DeploySFraxETHStrategyScriptTest is Test {
         assertEq(address(strategy.minter()), minter, "unexpected minter");
         assertEq(address(strategy.frxETH()), frxETH, "unexpected frxETH");
         assertEq(address(strategy.sfrxETH()), sfrxETH, "unexpected sfrxETH");
-        assertEq(address(strategy.pricedTokenEthOracle()), address(oracle), "unexpected oracle");
+        assertEq(address(strategy.pricedTokenOracle()), address(oracle), "unexpected oracle");
         assertEq(strategy.minFrxEthOutBps(), MIN_FRXETH_OUT_BPS, "unexpected minFrxEthOutBps");
         assertEq(strategy.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS, "unexpected max oracle staleness");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
