@@ -7,7 +7,7 @@ import {AlchemistCurator} from "../src/AlchemistCurator.sol";
 import {WstETHEthereumStrategy} from "../src/strategies/WstETHEthereumStrategy.sol";
 
 contract DeployWstETHEthereumStrategyScript is Script {
-    address public deployerAddr = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+    address public deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
 
     // Existing deployed core contracts on Ethereum mainnet.
     address public myt = 0x29bcfeD246ce37319d94eBa107db90C453D4c43D;

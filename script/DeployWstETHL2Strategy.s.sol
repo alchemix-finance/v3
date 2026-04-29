@@ -7,7 +7,7 @@ import {AlchemistCurator} from "../src/AlchemistCurator.sol";
 import {WstETHL2Strategy} from "../src/strategies/WstETHL2Strategy.sol";
 
 contract DeployWstETHL2StrategyScript is Script {
-    address public deployerAddr = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+    address public deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
 
     // Existing deployed core contracts on Optimism.
     address public myt = 0x91b8657aea26Caa8A0E9D6DD4E24727Ccf32F822;
