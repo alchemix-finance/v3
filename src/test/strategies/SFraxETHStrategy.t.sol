@@ -31,6 +31,7 @@ contract SFraxETHStrategyTest is Test {
     uint256 internal constant ABSOLUTE_CAP = 1_000_000e18;
     uint256 internal constant RELATIVE_CAP = 1e18;
     uint256 internal constant MIN_FRXETH_OUT_BPS = 9000;
+    uint256 internal constant MAX_ORACLE_STALENESS = 24 hours;
 
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant FRXETH = 0x5E8422345238F34275888049021821E8E08CAa1f;
@@ -91,7 +92,8 @@ contract SFraxETHStrategyTest is Test {
             FRXETH,
             SFRXETH,
             address(oracleAdapter),
-            0
+            0,
+            MAX_ORACLE_STALENESS
         );
 
         classifier.assignStrategyRiskLevel(uint256(IMYTStrategy(address(strategy)).adapterId()), uint8(params.riskClass));
@@ -193,6 +195,10 @@ contract SFraxETHStrategyTest is Test {
         vm.expectRevert(bytes("Invalid min frxETH out bps"));
         vm.prank(admin);
         strategy.setMinFrxEthOutBps(10_001);
+    }
+
+    function test_constructor_sets_max_oracle_staleness() public view {
+        assertEq(strategy.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS, "unexpected initial max oracle staleness");
     }
 
     function test_allocator_deallocate_with_unwrapAndSwap_usesFrxEthIntermediate() public {

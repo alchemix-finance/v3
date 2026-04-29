@@ -53,6 +53,7 @@ contract SiUSDStrategyTest is BaseStrategyTest {
     uint256 internal constant INITIAL_VAULT_DEPOSIT = 1_000_000e6;
     uint256 internal constant ABSOLUTE_CAP = 10_000_000e6;
     uint256 internal constant RELATIVE_CAP = 1e18;
+    uint256 internal constant MAX_ORACLE_STALENESS = 365 days;
     uint8 internal constant IUSD_ORACLE_DECIMALS = 18;
     int256 internal constant IUSD_USDC_ORACLE_ANSWER = 1e6;
 
@@ -92,7 +93,20 @@ contract SiUSDStrategyTest is BaseStrategyTest {
 
     function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
         oracle = new MockIUsdOracle(IUSD_ORACLE_DECIMALS, IUSD_USDC_ORACLE_ANSWER, block.timestamp);
-        return address(new SiUSDStrategy(vault_, params, USDC, IUSD, SIUSD, GATEWAY, MINT_CONTROLLER, REDEEM_CONTROLLER, address(oracle)));
+        return address(
+            new SiUSDStrategy(
+                vault_,
+                params,
+                USDC,
+                IUSD,
+                SIUSD,
+                GATEWAY,
+                MINT_CONTROLLER,
+                REDEEM_CONTROLLER,
+                address(oracle),
+                MAX_ORACLE_STALENESS
+            )
+        );
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {
@@ -206,6 +220,10 @@ contract SiUSDStrategyTest is BaseStrategyTest {
         vm.expectRevert(IMYTStrategy.ActionNotSupported.selector);
         vm.prank(admin);
         IAllocator(allocator).deallocateWithSwap(strategy, 1e6, hex"01");
+    }
+
+    function test_constructor_sets_max_oracle_staleness() public view {
+        assertEq(SiUSDStrategy(strategy).MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS, "unexpected initial max oracle staleness");
     }
 
     function _useAllocatorDeallocateUnwrapAndSwap() internal pure override returns (bool) {

@@ -50,8 +50,9 @@ contract SiUSDStrategy is OraclePricedSwapStrategy {
         address _gateway,
         address _mintController,
         address _redeemController,
-        address _pricedTokenEthOracle
-    ) OraclePricedSwapStrategy(_myt, _params, _pricedTokenEthOracle) {
+        address _pricedTokenOracle,
+        uint256 _maxOracleStaleness
+    ) OraclePricedSwapStrategy(_myt, _params, _pricedTokenOracle, _maxOracleStaleness) {
         require(_usdc != address(0), "Zero USDC address");
         require(_iUSD != address(0), "Zero iUSD address");
         require(_siUSD != address(0), "Zero siUSD address");

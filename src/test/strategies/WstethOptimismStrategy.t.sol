@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import "forge-std/Test.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {TokenUtils} from "../../libraries/TokenUtils.sol";
-import {WstethStrategy} from "../../strategies/WStethStrategy.sol";
+import {WstETHL2Strategy} from "../../strategies/WstETHL2Strategy.sol";
 import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
@@ -60,20 +60,22 @@ contract MockSwapExecutorDynamic {
     }
 }
 
-contract MockWstethOptimismStrategy is WstethStrategy {
+contract MockWstethOptimismStrategy is WstETHL2Strategy {
     constructor(
         address _myt,
         StrategyParams memory _params,
         address _wstETH,
-        address _wstEthEthOracle
+        address _wstEthEthOracle,
+        uint256 _maxOracleStaleness
     )
-        WstethStrategy(_myt, _params, _wstETH, _wstEthEthOracle, false)
+        WstETHL2Strategy(_myt, _params, _wstETH, _wstEthEthOracle, _maxOracleStaleness)
     {}
 }
 
 contract WstethOptimismStrategyTest is Test {
     uint256 public constant STRATEGY_SLIPPAGE_BPS = 200;
     uint256 public constant TEST_RESIDUAL_TOLERANCE_BPS = 100;
+    uint256 public constant MAX_ORACLE_STALENESS = 1 hours;
 
     address public mytStrategy;
     address public vault;
@@ -143,8 +145,16 @@ contract WstethOptimismStrategyTest is Test {
     function _createStrategy(address _vault, IMYTStrategy.StrategyParams memory params) internal returns (address) {
         return address(
             new MockWstethOptimismStrategy{salt: bytes32("wsteth_strategy")}(
-                _vault, params, WSTETH, WSTETH_ETH_ORACLE
+                _vault, params, WSTETH, WSTETH_ETH_ORACLE, MAX_ORACLE_STALENESS
             )
+        );
+    }
+
+    function test_constructor_sets_max_oracle_staleness() public view {
+        assertEq(
+            WstETHL2Strategy(mytStrategy).MAX_ORACLE_STALENESS(),
+            MAX_ORACLE_STALENESS,
+            "unexpected initial max oracle staleness"
         );
     }
 
@@ -248,6 +258,21 @@ contract WstethOptimismStrategyTest is Test {
         vm.stopPrank();
     }
 
+    function test_realAssets_prices_wsteth_in_oracle_units() public {
+        uint256 mockedWstethOut = 10e18;
+        _allocateWithMockedSwap(10e18, mockedWstethOut);
+
+        uint256 wstETHBalance = IWstETH(WSTETH).balanceOf(mytStrategy);
+        uint256 scale = 10 ** AggregatorV3Interface(WSTETH_ETH_ORACLE).decimals();
+        uint256 expectedRealAssets = wstETHBalance * _wstEthOracleAnswer() / scale;
+
+        assertEq(
+            IMYTStrategy(mytStrategy).realAssets(),
+            expectedRealAssets,
+            "realAssets should value raw wstETH balance via the wstETH/ETH oracle"
+        );
+    }
+
     function test_realAssets_includes_idle_weth_leftover() public {
         assertEq(IWstETH(WSTETH).balanceOf(mytStrategy), 0, "strategy should start without wstETH");
 
@@ -304,11 +329,68 @@ contract WstethOptimismStrategyTest is Test {
         vm.mockCall(
             WSTETH_ETH_ORACLE,
             abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
-            abi.encode(roundId, answer, startedAt, block.timestamp - 8 days, answeredInRound)
+            abi.encode(roundId, answer, startedAt, block.timestamp - MAX_ORACLE_STALENESS - 1, answeredInRound)
         );
 
         vm.expectRevert(bytes("Stale oracle answer"));
         IMYTStrategy(mytStrategy).realAssets();
+    }
+
+    function test_owner_can_set_priced_token_oracle() public {
+        address newOracle = address(0x1234567890123456789012345678901234567890);
+        uint8 newDecimals = 18;
+        int256 newAnswer = 2e18;
+
+        vm.mockCall(
+            newOracle,
+            abi.encodeWithSelector(AggregatorV3Interface.decimals.selector),
+            abi.encode(newDecimals)
+        );
+        vm.mockCall(
+            newOracle,
+            abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
+            abi.encode(uint80(1), newAnswer, block.timestamp, block.timestamp, uint80(1))
+        );
+
+        vm.prank(admin);
+        WstETHL2Strategy(mytStrategy).setPricedTokenOracle(newOracle);
+
+        assertEq(address(WstETHL2Strategy(mytStrategy).pricedTokenOracle()), newOracle, "oracle should update");
+        assertEq(WstETHL2Strategy(mytStrategy).pricedTokenOracleDecimals(), newDecimals, "decimals should update");
+
+        uint256 wstETHBalance = 3e18;
+        deal(WSTETH, mytStrategy, wstETHBalance);
+
+        assertEq(
+            IMYTStrategy(mytStrategy).realAssets(),
+            wstETHBalance * uint256(newAnswer) / (10 ** newDecimals),
+            "realAssets should use the replacement oracle"
+        );
+    }
+
+    function test_owner_can_set_max_oracle_staleness() public {
+        uint256 newMaxOracleStaleness = 8 days;
+
+        vm.prank(admin);
+        WstETHL2Strategy(mytStrategy).setMaxOracleStaleness(newMaxOracleStaleness);
+
+        assertEq(
+            WstETHL2Strategy(mytStrategy).MAX_ORACLE_STALENESS(),
+            newMaxOracleStaleness,
+            "max oracle staleness should update"
+        );
+
+        _allocateWithMockedSwap(10e18, 10e18);
+
+        (uint80 roundId, int256 answer, uint256 startedAt,, uint80 answeredInRound) =
+            AggregatorV3Interface(WSTETH_ETH_ORACLE).latestRoundData();
+        vm.mockCall(
+            WSTETH_ETH_ORACLE,
+            abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
+            abi.encode(roundId, answer, startedAt, block.timestamp - newMaxOracleStaleness, answeredInRound)
+        );
+
+        assertGt(IMYTStrategy(mytStrategy).realAssets(), 0, "updated staleness window should be honored");
     }
 
     function test_allocator_allocate_with_mocked_swap() public {

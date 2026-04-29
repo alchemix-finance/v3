@@ -33,6 +33,9 @@ contract MockDeployOracle {
 }
 
 contract DeploySiUSDStrategiesScriptTest is Test {
+    uint256 internal constant MAX_ORACLE_STALENESS_A = 6 hours;
+    uint256 internal constant MAX_ORACLE_STALENESS_B = 12 hours;
+
     DeploySiUSDStrategiesScript internal deployScript;
     AlchemistCurator internal curator;
     TestERC20 internal assetToken;
@@ -78,6 +81,7 @@ contract DeploySiUSDStrategiesScriptTest is Test {
             mintController: mintControllerA,
             redeemController: redeemControllerA,
             iUsdUsdcOracle: address(iUsdUsdcOracleA),
+            maxOracleStaleness: MAX_ORACLE_STALENESS_A,
             params: _buildParams("SiUSD Mainnet USDC", "InfiniFi")
         });
 
@@ -91,7 +95,8 @@ contract DeploySiUSDStrategiesScriptTest is Test {
         assertEq(address(strategy.gateway()), gateway, "unexpected gateway");
         assertEq(address(strategy.mintController()), mintControllerA, "unexpected mint controller");
         assertEq(address(strategy.redeemController()), redeemControllerA, "unexpected redeem controller");
-        assertEq(address(strategy.pricedTokenEthOracle()), address(iUsdUsdcOracleA), "unexpected iUSD oracle");
+        assertEq(address(strategy.pricedTokenOracle()), address(iUsdUsdcOracleA), "unexpected iUSD oracle");
+        assertEq(strategy.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS_A, "unexpected max oracle staleness");
         (, string memory strategyName,,,,,,,) = strategy.params();
         assertEq(strategyName, "SiUSD Mainnet USDC", "unexpected strategy name");
     }
@@ -109,6 +114,7 @@ contract DeploySiUSDStrategiesScriptTest is Test {
             mintController: mintControllerA,
             redeemController: redeemControllerA,
             iUsdUsdcOracle: address(iUsdUsdcOracleA),
+            maxOracleStaleness: MAX_ORACLE_STALENESS_A,
             params: _buildParams("SiUSD Mainnet USDC", "InfiniFi")
         });
 
@@ -121,6 +127,7 @@ contract DeploySiUSDStrategiesScriptTest is Test {
             mintController: mintControllerB,
             redeemController: redeemControllerB,
             iUsdUsdcOracle: address(iUsdUsdcOracleB),
+            maxOracleStaleness: MAX_ORACLE_STALENESS_B,
             params: _buildParams("SiUSD Alternate USDC", "InfiniFi")
         });
 
@@ -135,7 +142,8 @@ contract DeploySiUSDStrategiesScriptTest is Test {
         assertEq(address(strategy0.gateway()), gateway, "strategy0 unexpected gateway");
         assertEq(address(strategy0.mintController()), mintControllerA, "strategy0 unexpected mint controller");
         assertEq(address(strategy0.redeemController()), redeemControllerA, "strategy0 unexpected redeem controller");
-        assertEq(address(strategy0.pricedTokenEthOracle()), address(iUsdUsdcOracleA), "strategy0 unexpected iUSD oracle");
+        assertEq(address(strategy0.pricedTokenOracle()), address(iUsdUsdcOracleA), "strategy0 unexpected iUSD oracle");
+        assertEq(strategy0.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS_A, "strategy0 unexpected max oracle staleness");
         (, string memory name0,,,,,,,) = strategy0.params();
         assertEq(name0, "SiUSD Mainnet USDC", "strategy0 unexpected name");
 
@@ -151,7 +159,8 @@ contract DeploySiUSDStrategiesScriptTest is Test {
             configs[1].redeemController,
             "strategy1 unexpected redeem controller"
         );
-        assertEq(address(strategy1.pricedTokenEthOracle()), configs[1].iUsdUsdcOracle, "strategy1 unexpected iUSD oracle");
+        assertEq(address(strategy1.pricedTokenOracle()), configs[1].iUsdUsdcOracle, "strategy1 unexpected iUSD oracle");
+        assertEq(strategy1.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS_B, "strategy1 unexpected max oracle staleness");
         (, string memory name1,,,,,,,) = strategy1.params();
         assertEq(name1, "SiUSD Alternate USDC", "strategy1 unexpected name");
     }

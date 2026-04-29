@@ -6,16 +6,22 @@ import {TokenUtils} from "../libraries/TokenUtils.sol";
 import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 abstract contract OraclePricedSwapStrategy is MYTStrategy {
-    uint256 public constant MAX_ORACLE_STALENESS = 7 days;
+    uint256 public MAX_ORACLE_STALENESS;
 
-    AggregatorV3Interface public immutable pricedTokenEthOracle;
-    uint8 public immutable pricedTokenEthOracleDecimals;
+    AggregatorV3Interface public pricedTokenOracle;
+    uint8 public pricedTokenOracleDecimals;
 
-    constructor(address _myt, StrategyParams memory _params, address _pricedTokenEthOracle) MYTStrategy(_myt, _params) {
-        require(_pricedTokenEthOracle != address(0), "Zero oracle address");
+    event PricedTokenOracleUpdated(address indexed pricedTokenOracle, uint8 decimals);
+    event MaxOracleStalenessUpdated(uint256 maxOracleStaleness);
 
-        pricedTokenEthOracle = AggregatorV3Interface(_pricedTokenEthOracle);
-        pricedTokenEthOracleDecimals = pricedTokenEthOracle.decimals();
+    constructor(
+        address _myt,
+        StrategyParams memory _params,
+        address _pricedTokenOracle,
+        uint256 _maxOracleStaleness
+    ) MYTStrategy(_myt, _params) {
+        _setPricedTokenOracle(_pricedTokenOracle);
+        _setMaxOracleStaleness(_maxOracleStaleness);
     }
 
     function _allocate(uint256 amount, bytes memory callData) internal virtual override returns (uint256) {
@@ -113,21 +119,21 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
     }
 
     function _oracleTokenToAsset(uint256 oracleTokenAmount) internal view returns (uint256) {
-        return oracleTokenAmount * _oracleAnswer() / (10 ** pricedTokenEthOracleDecimals);
+        return oracleTokenAmount * _oracleAnswer() / (10 ** pricedTokenOracleDecimals);
     }
 
     function _assetToOracleTokenDown(uint256 assetAmount) internal view returns (uint256) {
-        return assetAmount * (10 ** pricedTokenEthOracleDecimals) / _oracleAnswer();
+        return assetAmount * (10 ** pricedTokenOracleDecimals) / _oracleAnswer();
     }
 
     function _assetToOracleTokenUp(uint256 assetAmount) internal view returns (uint256) {
-        uint256 scale = 10 ** pricedTokenEthOracleDecimals;
+        uint256 scale = 10 ** pricedTokenOracleDecimals;
         uint256 answer = _oracleAnswer();
         return (assetAmount * scale + answer - 1) / answer;
     }
 
     function _oracleAnswer() internal view returns (uint256 answer) {
-        (, int256 raw,, uint256 updatedAt,) = pricedTokenEthOracle.latestRoundData();
+        (, int256 raw,, uint256 updatedAt,) = pricedTokenOracle.latestRoundData();
         require(raw > 0 && updatedAt != 0, "Invalid oracle answer");
         require(updatedAt <= block.timestamp && block.timestamp - updatedAt <= MAX_ORACLE_STALENESS, "Stale oracle answer");
         answer = uint256(raw);
@@ -135,6 +141,31 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
 
     function _roundUpMulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256) {
         return (x * y + denominator - 1) / denominator;
+    }
+
+    function setPricedTokenOracle(address _pricedTokenOracle) external onlyOwner {
+        _setPricedTokenOracle(_pricedTokenOracle);
+    }
+
+    function setMaxOracleStaleness(uint256 maxOracleStaleness) external onlyOwner {
+        _setMaxOracleStaleness(maxOracleStaleness);
+    }
+
+    function _setPricedTokenOracle(address _pricedTokenOracle) internal {
+        require(_pricedTokenOracle != address(0), "Zero oracle address");
+
+        AggregatorV3Interface newOracle = AggregatorV3Interface(_pricedTokenOracle);
+        uint8 newDecimals = newOracle.decimals();
+
+        pricedTokenOracle = newOracle;
+        pricedTokenOracleDecimals = newDecimals;
+        emit PricedTokenOracleUpdated(_pricedTokenOracle, newDecimals);
+    }
+
+    function _setMaxOracleStaleness(uint256 maxOracleStaleness) internal {
+        require(maxOracleStaleness > 0, "Zero oracle staleness");
+        MAX_ORACLE_STALENESS = maxOracleStaleness;
+        emit MaxOracleStalenessUpdated(maxOracleStaleness);
     }
 
     /// @notice Returns the vault asset managed by the parent MYT.
@@ -157,7 +188,9 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
     /// @param oracleTokenReceived The oracle token amount returned by the allocation swap.
     function _afterAllocationSwap(uint256 oracleTokenReceived) internal virtual {}
 
-    /// @notice Returns the token whose amount is priced by the oracle and used in swap sizing math.
+    /// @notice Returns the token used in allocation/deallocation swap flows.
+    /// @dev This token may be the same as the oracle-priced unit, or a wrapped form that must be converted
+    /// into oracle-compatible units by `_positionBalance()` and `_prepareOracleTokenForSwap()`.
     function _oracleToken() internal view virtual returns (address);
 
     /// @notice Returns the strategy's deployed position balance in units consumable by the oracle pricing math.

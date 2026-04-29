@@ -117,7 +117,8 @@ contract MockEtherfiEETHStrategy is EtherfiEETHMYTStrategy {
         address _weETH,
         address _depositAdapter,
         address _redemptionManager,
-        address _weEthEthOracle
+        address _weEthEthOracle,
+        uint256 _maxOracleStaleness
     )
         EtherfiEETHMYTStrategy(
             _myt,
@@ -126,7 +127,8 @@ contract MockEtherfiEETHStrategy is EtherfiEETHMYTStrategy {
             _weETH,
             _depositAdapter,
             _redemptionManager,
-            _weEthEthOracle
+            _weEthEthOracle,
+            _maxOracleStaleness
         )
     {}
 }
@@ -139,6 +141,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
     address public constant DEPOSIT_ADAPTER = 0xcfC6d9Bd7411962Bfe7145451A7EF71A24b6A7A2;
     address public constant REDEMPTION_MANAGER = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
     address public constant WEETH_ETH_ORACLE = 0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22;
+    uint256 public constant MAX_ORACLE_STALENESS = 24 hours;
     uint256 public constant TEST_RESIDUAL_TOLERANCE_BPS = 100;
 
     MockSwapper public swapper;
@@ -182,7 +185,24 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
 
     function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
         return address(
-            new MockEtherfiEETHStrategy(vault_, params, EETH, WEETH, DEPOSIT_ADAPTER, REDEMPTION_MANAGER, WEETH_ETH_ORACLE)
+            new MockEtherfiEETHStrategy(
+                vault_,
+                params,
+                EETH,
+                WEETH,
+                DEPOSIT_ADAPTER,
+                REDEMPTION_MANAGER,
+                WEETH_ETH_ORACLE,
+                MAX_ORACLE_STALENESS
+            )
+        );
+    }
+
+    function test_constructor_sets_max_oracle_staleness() public view {
+        assertEq(
+            EtherfiEETHMYTStrategy(payable(strategy)).MAX_ORACLE_STALENESS(),
+            MAX_ORACLE_STALENESS,
+            "unexpected initial max oracle staleness"
         );
     }
 
@@ -452,7 +472,16 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
 
         MockFeeRedemptionManager feeRedemptionManager = new MockFeeRedemptionManager(WEETH, EETH, 30);
         address localStrategy = address(
-            new MockEtherfiEETHStrategy(vault, strategyConfig, EETH, WEETH, DEPOSIT_ADAPTER, address(feeRedemptionManager), WEETH_ETH_ORACLE)
+            new MockEtherfiEETHStrategy(
+                vault,
+                strategyConfig,
+                EETH,
+                WEETH,
+                DEPOSIT_ADAPTER,
+                address(feeRedemptionManager),
+                WEETH_ETH_ORACLE,
+                MAX_ORACLE_STALENESS
+            )
         );
         vm.deal(address(feeRedemptionManager), allocateAmount);
 
@@ -475,7 +504,16 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
 
         MockFeeRedemptionManager feeRedemptionManager = new MockFeeRedemptionManager(WEETH, EETH, 100);
         address localStrategy = address(
-            new MockEtherfiEETHStrategy(vault, strategyConfig, EETH, WEETH, DEPOSIT_ADAPTER, address(feeRedemptionManager), WEETH_ETH_ORACLE)
+            new MockEtherfiEETHStrategy(
+                vault,
+                strategyConfig,
+                EETH,
+                WEETH,
+                DEPOSIT_ADAPTER,
+                address(feeRedemptionManager),
+                WEETH_ETH_ORACLE,
+                MAX_ORACLE_STALENESS
+            )
         );
         vm.deal(address(feeRedemptionManager), allocateAmount);
 

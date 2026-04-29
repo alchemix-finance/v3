@@ -32,9 +32,10 @@ contract SFraxETHStrategy is OraclePricedSwapStrategy {
         address _minter,
         address _frxETH,
         address _sfrxETH,
-        address _pricedTokenEthOracle,
-        uint256 _minFrxEthOutBps
-    ) OraclePricedSwapStrategy(_myt, _params, _pricedTokenEthOracle) {
+        address _pricedTokenOracle,
+        uint256 _minFrxEthOutBps,
+        uint256 _maxOracleStaleness
+    ) OraclePricedSwapStrategy(_myt, _params, _pricedTokenOracle, _maxOracleStaleness) {
         require(_minter != address(0), "Zero minter address");
         require(_frxETH != address(0), "Zero frxETH address");
         require(_sfrxETH != address(0), "Zero sfrxETH address");
