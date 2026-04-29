@@ -42,12 +42,12 @@ contract DeployYvWETHStrategyScript is Script {
         ERC4626Strategy strategy = new ERC4626Strategy(config.myt, config.params, config.yearnVault);
         strategyAddr = address(strategy);
 
-        curator.submitSetStrategy(strategyAddr, config.myt);
-        curator.setStrategy(strategyAddr, config.myt);
-        curator.submitIncreaseAbsoluteCap(strategyAddr, config.params.cap);
-        curator.increaseAbsoluteCap(strategyAddr, config.params.cap);
-        curator.submitIncreaseRelativeCap(strategyAddr, config.params.globalCap);
-        curator.increaseRelativeCap(strategyAddr, config.params.globalCap);
+        //curator.submitSetStrategy(strategyAddr, config.myt);
+        //curator.setStrategy(strategyAddr, config.myt);
+        //curator.submitIncreaseAbsoluteCap(strategyAddr, config.params.cap);
+        //curator.increaseAbsoluteCap(strategyAddr, config.params.cap);
+        //curator.submitIncreaseRelativeCap(strategyAddr, config.params.globalCap);
+        //curator.increaseRelativeCap(strategyAddr, config.params.globalCap);
 
         strategy.setKillSwitch(true);
         strategy.transferOwnership(targetOwner);
