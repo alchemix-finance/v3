@@ -7,11 +7,11 @@ import {AlchemistCurator} from "../src/AlchemistCurator.sol";
 import {WstETHL2Strategy} from "../src/strategies/WstETHL2Strategy.sol";
 
 contract DeployWstETHL2StrategyScript is Script {
-    address public deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
+    address public deployerAddr = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
 
     // Existing deployed core contracts on Optimism.
-    address public myt = 0x5b9d2BdC7Ea50A47518e1b1Cff1EF3ec490e9375;
-    AlchemistCurator public curator = AlchemistCurator(0x2bf0f9091Ad20f58253f62865B7d2883D6795E89);
+    address public myt = 0x91b8657aea26Caa8A0E9D6DD4E24727Ccf32F822;
+    AlchemistCurator public curator = AlchemistCurator(0xC8a2bdE198d21e9AbB0b306b4aD27F0711aEF20d);
     address public newOwner = 0x3Dda174aa9E897e18b8E10e6Ce39c2a52398181d;
 
     // Strategy-specific addresses.
@@ -53,12 +53,12 @@ contract DeployWstETHL2StrategyScript is Script {
             new WstETHL2Strategy(_myt, _params, _wstETH, _wstEthEthOracle, _maxOracleStaleness);
 
         strategy.setKillSwitch(true);
-        _curator.submitSetStrategy(address(strategy), address(_myt));
-        _curator.setStrategy(address(strategy), address(_myt));
-        _curator.submitIncreaseAbsoluteCap(address(strategy), _params.cap);
-        _curator.increaseAbsoluteCap(address(strategy), _params.cap);
-        _curator.submitIncreaseRelativeCap(address(strategy), _params.globalCap);
-        _curator.increaseRelativeCap(address(strategy), _params.globalCap);
+        // _curator.submitSetStrategy(address(strategy), address(_myt));
+        // _curator.setStrategy(address(strategy), address(_myt));
+        // _curator.submitIncreaseAbsoluteCap(address(strategy), _params.cap);
+        // _curator.increaseAbsoluteCap(address(strategy), _params.cap);
+        // _curator.submitIncreaseRelativeCap(address(strategy), _params.globalCap);
+        // _curator.increaseRelativeCap(address(strategy), _params.globalCap);
 
         strategy.transferOwnership(_newOwner);
         return strategy;
