@@ -97,6 +97,9 @@ contract DeploySiUSDStrategiesScriptTest is Test {
         assertEq(address(strategy.redeemController()), redeemControllerA, "unexpected redeem controller");
         assertEq(address(strategy.pricedTokenOracle()), address(iUsdUsdcOracleA), "unexpected iUSD oracle");
         assertEq(strategy.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS_A, "unexpected max oracle staleness");
+        assertTrue(strategy.killSwitch(), "kill switch should be enabled after deploy");
+        assertEq(strategy.owner(), newOwner, "unexpected owner");
+        assertEq(curator.adapterToMYT(strategyAddr), address(0), "deploy script should not register with curator");
         (, string memory strategyName,,,,,,,) = strategy.params();
         assertEq(strategyName, "SiUSD Mainnet USDC", "unexpected strategy name");
     }
@@ -144,6 +147,8 @@ contract DeploySiUSDStrategiesScriptTest is Test {
         assertEq(address(strategy0.redeemController()), redeemControllerA, "strategy0 unexpected redeem controller");
         assertEq(address(strategy0.pricedTokenOracle()), address(iUsdUsdcOracleA), "strategy0 unexpected iUSD oracle");
         assertEq(strategy0.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS_A, "strategy0 unexpected max oracle staleness");
+        assertTrue(strategy0.killSwitch(), "strategy0 kill switch should be enabled");
+        assertEq(strategy0.owner(), newOwner, "strategy0 unexpected owner");
         (, string memory name0,,,,,,,) = strategy0.params();
         assertEq(name0, "SiUSD Mainnet USDC", "strategy0 unexpected name");
 
@@ -161,8 +166,25 @@ contract DeploySiUSDStrategiesScriptTest is Test {
         );
         assertEq(address(strategy1.pricedTokenOracle()), configs[1].iUsdUsdcOracle, "strategy1 unexpected iUSD oracle");
         assertEq(strategy1.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS_B, "strategy1 unexpected max oracle staleness");
+        assertTrue(strategy1.killSwitch(), "strategy1 kill switch should be enabled");
+        assertEq(strategy1.owner(), newOwner, "strategy1 unexpected owner");
         (, string memory name1,,,,,,,) = strategy1.params();
         assertEq(name1, "SiUSD Alternate USDC", "strategy1 unexpected name");
+    }
+
+    function test_defaultParams_usesMainnetSiUSDDefaults() public view {
+        IMYTStrategy.StrategyParams memory params = deployScript.defaultParams();
+
+        assertEq(deployScript.curatorAddr(), 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4, "unexpected curator");
+        assertEq(params.owner, 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2, "unexpected owner");
+        assertEq(params.name, "SiUSD Mainnet USDC", "unexpected name");
+        assertEq(params.protocol, "InfiniFi", "unexpected protocol");
+        assertEq(uint256(params.riskClass), uint256(IMYTStrategy.RiskClass.LOW), "unexpected risk class");
+        assertEq(params.cap, 10_000e6, "unexpected cap");
+        assertEq(params.globalCap, 1e18, "unexpected global cap");
+        assertEq(params.estimatedYield, 500, "unexpected estimated yield");
+        assertFalse(params.additionalIncentives, "unexpected incentives flag");
+        assertEq(params.slippageBPS, 50, "unexpected slippage");
     }
 
     function _buildParams(string memory name, string memory protocol)
