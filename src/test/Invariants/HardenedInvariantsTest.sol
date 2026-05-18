@@ -978,6 +978,17 @@ contract HardenedInvariantsTest is InvariantsTest {
         assertGt(vault.convertToAssets(1e18), 0, "H7: share price is zero");
     }
 
+    function invariantPerformanceFeeEnabled() public view {
+        assertGt(vault.performanceFee(), 0, "H11: performance fee is zero - fees not enabled");
+        assertGt(vault.maxRate(), 0, "H11: maxRate is zero - fees cannot accrue");
+    }
+
+    function invariantFeeRecipientSharesBounded() public view {
+        if (vault.performanceFeeRecipient() == address(0)) return;
+        uint256 feeShares = vault.balanceOf(vault.performanceFeeRecipient());
+        assertLe(feeShares, vault.totalSupply() / 2, "H12: fee shares exceed 50% of totalSupply");
+    }
+
     function invariantLiquidationAccounting() public view {
         assertLe(
             handler.ghostLiquidationSuccesses(),

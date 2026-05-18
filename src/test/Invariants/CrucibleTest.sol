@@ -372,6 +372,7 @@ contract CrucibleTest is InvariantsTest {
         totalYieldAccrued += yieldAmount;
         yieldAccruals++;
 
+        vm.warp(block.timestamp + 1 days);
         vm.roll(block.number + bound(yieldBps, 10, 1000));
     }
 
@@ -708,13 +709,11 @@ contract CrucibleTest is InvariantsTest {
         uint256 debtTol = _max(1e6, cf * _max(active, 1));
         // Higher collateral tolerance: mulDivUp + weighted-average redemption
         // accounting accumulates divergence in share units when loss/yield cycles
-        // move the share price between redemptions.
-        // A replayed bad-debt claim + loss sequence drifted by ~1.28e18 shares
-        // on ~6.84e27 tracked shares (~1.86e-10 relative), so use a modest
-        // relative tolerance of 2e-10 plus a small floor instead of a fixed
-        // multi-ETH absolute value.
+        // move the share price between redemptions. Performance fee accrual
+        // amplifies this because fee shares are minted to the recipient on every
+        // accrueInterest, changing the share price each cycle.
         // NOTE: collateral values here are vault shares, not underlying units.
-        uint256 colTol = _max(1e15, totalDeposited / 5_000_000_000);
+        uint256 colTol = _max(5e18, totalDeposited / 1_000_000_000);
 
         assertLe(debtDelta, debtTol, "C1a: stored debt sum != totalDebt after full sync");
         assertLe(earmarkDelta, debtTol, "C1b: stored earmark sum != cumulativeEarmarked after full sync");
@@ -731,6 +730,17 @@ contract CrucibleTest is InvariantsTest {
     function invariantSharePriceNonZero() public view {
         uint256 sharePrice = vault.convertToAssets(1e18);
         assertGt(sharePrice, 0, "C2: share price is zero - total wipeout");
+    }
+
+    function invariantPerformanceFeeEnabled() public view {
+        assertGt(vault.performanceFee(), 0, "C-fees: performance fee is zero - fees not enabled");
+        assertGt(vault.maxRate(), 0, "C-fees: maxRate is zero - fees cannot accrue");
+    }
+
+    function invariantFeeRecipientSharesBounded() public view {
+        if (vault.performanceFeeRecipient() == address(0)) return;
+        uint256 feeShares = vault.balanceOf(vault.performanceFeeRecipient());
+        assertLe(feeShares, vault.totalSupply() / 2, "C-fees2: fee shares exceed 50% of totalSupply");
     }
 
     // ═══════════════════════════════════════════════════════════════

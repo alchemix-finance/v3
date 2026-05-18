@@ -1055,6 +1055,8 @@ contract MultiStrategyARBUSDCInvariantTest is Test {
             curator.submitIncreaseRelativeCap(strategies[i], strategyRelativeCap);
             curator.increaseRelativeCap(strategies[i], strategyRelativeCap);
         }
+
+        AlchemistAllocator(allocator).setMaxRate(200e16 / uint256(365 days));
     }
     
     function _makeInitialDeposit() internal {
@@ -1200,6 +1202,17 @@ contract MultiStrategyARBUSDCInvariantTest is Test {
         uint256 totalAssets = vault.totalAssets();
         uint256 sharePrice = (totalAssets * 1e18) / totalSupply;
         assertGt(sharePrice, 0, "Share price collapsed to zero");
+    }
+
+    function invariant_performanceFeeEnabled() public view {
+        assertGt(vault.performanceFee(), 0, "performance fee is zero - fees not enabled");
+        assertGt(vault.maxRate(), 0, "maxRate is zero - fees cannot accrue");
+    }
+
+    function invariant_feeRecipientSharesBounded() public view {
+        if (vault.performanceFeeRecipient() == address(0)) return;
+        uint256 feeShares = vault.balanceOf(vault.performanceFeeRecipient());
+        assertLe(feeShares, vault.totalSupply() / 2, "fee shares exceed 50% of totalSupply");
     }
     
     function invariant_userBalanceConsistency() public view {

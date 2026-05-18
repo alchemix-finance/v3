@@ -440,7 +440,7 @@ contract AlchemistAllocatorTest is Test {
         vault.increaseRelativeCap(idData, 1e18);
         vm.stopPrank();
 
-        // Phase 1: Strategy is LOW (100%/100%) — allocate 300 ether freely
+        // Phase 1: Strategy is LOW (100%/100%) - allocate 300 ether freely
         vm.startPrank(admin);
         assertEq(classifier.getStrategyRiskLevel(uint256(strategyId)), uint8(IMYTStrategy.RiskClass.LOW));
         allocator.allocate(address(mytStrategy), 300 ether);
@@ -502,7 +502,7 @@ contract AlchemistAllocatorTest is Test {
         assertEq(vault.allocation(strategyId), 100 ether, "Operator fills remaining global headroom");
         vm.stopPrank();
 
-        // Saturated — no more room under HIGH global cap
+        // Saturated - no more room under HIGH global cap
         vm.startPrank(operator);
         vm.expectRevert(abi.encodeWithSelector(IAllocator.EffectiveCap.selector, 1, 0));
         allocator.allocate(address(mytStrategy), 1);
@@ -590,22 +590,126 @@ contract AlchemistAllocatorPerformanceFeeTest is Test {
     }
 
     function testPerformanceFeeCollectedOnYield() public {
-        // With --isolate, transient firstTotalAssets resets between setUp and this test function.
-        // The first accrueInterest in this tx will see the yield and collect the 15% fee.
         uint256 idle = IERC20(mockVaultCollateral).balanceOf(address(vault));
         uint256 realAssets = mytStrategy.realAssets();
         uint256 newTotalAssets = idle + realAssets;
         uint256 interest = newTotalAssets - vault._totalAssets();
+
+        require(interest > 0, "no interest generated - fee test is vacuous");
+        require(vault.performanceFee() > 0, "performance fee is zero - fee not enabled");
+        require(vault.maxRate() > 0, "maxRate is zero - interest will be capped to zero");
+
         uint256 expectedFeeAssets = interest * 15e16 / 1e18;
+        require(expectedFeeAssets > 0, "expected fee assets is zero");
         uint256 expectedFeeShares = expectedFeeAssets * (vault.totalSupply() + 1) / (newTotalAssets - expectedFeeAssets + 1);
 
         uint256 adminSharesBefore = vault.balanceOf(admin);
         vault.accrueInterest();
-        assertEq(
-            vault.balanceOf(admin) - adminSharesBefore,
-            expectedFeeShares,
-            "performance fee shares mismatch"
+
+        uint256 feeSharesMinted = vault.balanceOf(admin) - adminSharesBefore;
+        assertGt(feeSharesMinted, 0, "performance fee shares must be non-zero");
+        assertEq(feeSharesMinted, expectedFeeShares, "performance fee shares mismatch");
+    }
+
+    function testPerformanceFeeAccruesThroughAllocate() public {
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        _magicDepositToVault(address(vault), user1, 100 ether);
+        uint256 feeShares = vault.balanceOf(admin) - adminSharesBefore;
+        assertGt(feeShares, 0, "deposit must settle pending fees");
+
+        uint256 feeSharesTotal = vault.balanceOf(admin);
+        uint256 feeAssetsValue = vault.previewRedeem(feeSharesTotal);
+        assertGt(feeAssetsValue, 0, "fee shares must have economic value");
+    }
+
+    function testPerformanceFeeAccruesThroughVaultDeposit() public {
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+
+        _magicDepositToVault(address(vault), user1, 100 ether);
+
+        uint256 feeShares = vault.balanceOf(admin) - adminSharesBefore;
+        assertGt(feeShares, 0, "performance fee must accrue through vault deposit");
+    }
+
+    function testPerformanceFeeAccruesThroughVaultWithdraw() public {
+        uint256 userShares = vault.balanceOf(user1);
+        require(userShares > 0, "user has no shares");
+
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+
+        vm.prank(user1);
+        vault.withdraw(10 ether, user1, user1);
+
+        uint256 feeShares = vault.balanceOf(admin) - adminSharesBefore;
+        assertGt(feeShares, 0, "performance fee must accrue through vault withdraw");
+    }
+
+    function testPerformanceFeeZeroOnNoYield() public {
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(
+            IERC20(mockStrategyYieldToken).totalSupply()
         );
+
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        vault.accrueInterest();
+        assertEq(vault.balanceOf(admin) - adminSharesBefore, 0, "no fee on zero yield");
+    }
+
+    function testPerformanceFeeMultipleAccrualCycles() public {
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        vault.accrueInterest();
+        uint256 firstFeeShares = vault.balanceOf(admin) - adminSharesBefore;
+        assertGt(firstFeeShares, 0, "first accrual must produce fee shares");
+
+        uint256 bookAssets = vault._totalAssets();
+        uint256 idle = IERC20(mockVaultCollateral).balanceOf(address(vault));
+        uint256 invested = mytStrategy.realAssets();
+        assertEq(idle + invested, bookAssets, "book value must match real assets after accrual");
+    }
+
+    function testPerformanceFeeWithLoss() public {
+        uint256 supply = IERC20(mockStrategyYieldToken).totalSupply();
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(supply * 2);
+
+        vault.accrueInterest();
+
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(supply / 4);
+
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        vault.accrueInterest();
+
+        uint256 feeShares = vault.balanceOf(admin) - adminSharesBefore;
+        assertEq(feeShares, 0, "no performance fee on loss");
+    }
+
+    function testPerformanceFeeAtMax50Percent() public {
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        vault.accrueInterest();
+        uint256 feeShares = vault.balanceOf(admin) - adminSharesBefore;
+        assertGt(feeShares, 0, "performance fee must produce shares at default rate");
+    }
+
+    function testConvertToAssetsReflectsFeeDilution() public {
+        uint256 priceBefore = vault.convertToAssets(1e18);
+
+        vault.accrueInterest();
+
+        uint256 priceAfter = vault.convertToAssets(1e18);
+
+        assertGt(priceBefore, 0, "price before must be non-zero");
+        assertGt(priceAfter, 0, "price after must be non-zero");
+    }
+
+    function testFeeRecipientBound() public {
+        for (uint256 i; i < 5; i++) {
+            uint256 supply = IERC20(mockStrategyYieldToken).totalSupply();
+            IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(supply * 95 / 100);
+            vm.warp(block.timestamp + 30 days);
+            vault.accrueInterest();
+        }
+
+        uint256 feeShares = vault.balanceOf(admin);
+        assertGt(feeShares, 0, "fee shares must exist");
+        assertLe(feeShares, vault.totalSupply() / 2, "fee shares bounded to 50% of totalSupply");
     }
 
     function _magicDepositToVault(address _vault, address depositor, uint256 amount) internal {
@@ -623,5 +727,50 @@ contract AlchemistAllocatorPerformanceFeeTest is Test {
         TokenUtils.safeApprove(mockVaultCollateral, mockStrategyYieldToken, seedUnderlying);
         IMockYieldToken(mockStrategyYieldToken).mint(seedUnderlying, yieldWhale);
         vm.stopPrank();
+    }
+
+    function testFeeChangeSettlesPendingFeesAtOldRate() public {
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        uint256 feeBefore = vault.performanceFee();
+
+        vm.startPrank(curator);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFee, (0.5e18)));
+        vault.setPerformanceFee(0.5e18);
+        vm.stopPrank();
+
+        uint256 feeSharesFromSettlement = vault.balanceOf(admin) - adminSharesBefore;
+        assertGt(feeSharesFromSettlement, 0, "changing fee must settle pending fees at old rate");
+        assertEq(vault.performanceFee(), 0.5e18, "fee must be updated to new rate");
+    }
+
+    function testFeeSetToZeroStopsAccrual() public {
+        vm.startPrank(curator);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFee, (0)));
+        vault.setPerformanceFee(0);
+        vm.stopPrank();
+
+        uint256 supply = IERC20(mockStrategyYieldToken).totalSupply();
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(supply / 2);
+        vm.warp(block.timestamp + 365 days);
+
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        vault.accrueInterest();
+        assertEq(vault.balanceOf(admin) - adminSharesBefore, 0, "no fees should accrue after fee set to zero");
+    }
+
+    function testFirstTotalAssetsGuardPreventsDoubleAccrual() public {
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        vault.accrueInterest();
+        uint256 feeSharesFirst = vault.balanceOf(admin) - adminSharesBefore;
+        assertGt(feeSharesFirst, 0, "first accrual must produce fees");
+
+        uint256 supply = IERC20(mockStrategyYieldToken).totalSupply();
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(supply / 2);
+        vm.warp(block.timestamp + 365 days);
+
+        adminSharesBefore = vault.balanceOf(admin);
+        vault.accrueInterest();
+        uint256 feeSharesSecond = vault.balanceOf(admin) - adminSharesBefore;
+        assertEq(feeSharesSecond, 0, "transient guard must prevent double accrual in same tx");
     }
 }

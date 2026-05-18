@@ -182,6 +182,9 @@ abstract contract StrategySetup is Test, IRevertAllowlistProvider {
         require(IVaultV2(_vault).absoluteCap(strategyId) == absoluteCap, "absoluteCap is not set");
         require(IVaultV2(_vault).relativeCap(strategyId) == relativeCap, "relativeCap is not set");
         vm.stopPrank();
+
+        vm.prank(admin);
+        AlchemistAllocator(allocator).setMaxRate(200e16 / uint256(365 days));
     }
 
     function _magicDepositToVault(address _vault, address depositor, uint256 amount) internal returns (uint256) {

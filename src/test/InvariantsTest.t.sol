@@ -173,6 +173,9 @@ contract InvariantsTest is Test {
         _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseRelativeCap, (idData, defaultStrategyRelativeCap)));
         vault.increaseRelativeCap(idData, defaultStrategyRelativeCap);
         vm.stopPrank();
+
+        vm.prank(admin);
+        allocator.setMaxRate(200e16 / uint256(365 days));
     }
 
     function _magicDepositToVault(address vault, address depositor, uint256 amount) internal returns (uint256) {
