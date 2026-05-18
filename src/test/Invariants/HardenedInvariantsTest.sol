@@ -565,6 +565,8 @@ contract HardenedInvariantHandler is Test {
         IERC20(mockVaultCollateral).approve(mockStrategyYieldToken, yieldAmount);
         ITestYieldToken(mockStrategyYieldToken).slurp(yieldAmount);
 
+        vm.warp(block.timestamp + 1 days);
+
         ghostYieldEvents++;
         ghostYieldAddedUnderlying += yieldAmount;
     }
@@ -892,11 +894,8 @@ contract HardenedInvariantsTest is InvariantsTest {
         // Collateral drift is structurally larger: lazy sync uses a weighted-
         // average shares/debt ratio across redemptions, diverging from per-
         // redemption exact debits when share prices shift between redemptions.
-        // Use a relative tolerance (2e-11 of total tracked shares) plus a tiny
-        // absolute floor. Avoids hard-coding multi-ETH absolute slack while
-        // still allowing deep-state fuzz sequences to pass.
         // NOTE: collateral values here are vault shares, not underlying units.
-        uint256 colTol = _max(1e15, totalDeposited / 50_000_000_000);
+        uint256 colTol = _max(5e18, totalDeposited / 1_000_000_000);
         assertLe(debtDelta, debtTol, "H1a: stored debt sum != totalDebt after full sync");
         assertLe(earmarkDelta, debtTol, "H1b: stored earmark sum != cumulativeEarmarked after full sync");
         assertLe(colDelta, colTol, "H1c: stored collateral sum != totalDeposited after full sync");

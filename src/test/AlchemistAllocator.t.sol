@@ -670,9 +670,9 @@ contract AlchemistAllocatorPerformanceFeeTest is Test {
         uint256 supply = IERC20(mockStrategyYieldToken).totalSupply();
         IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(supply * 2);
 
-        vault.accrueInterest();
-
-        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(supply / 4);
+        uint256 idle = IERC20(mockVaultCollateral).balanceOf(address(vault));
+        uint256 realAssets = idle + mytStrategy.realAssets();
+        assertLt(realAssets, vault._totalAssets(), "must simulate a loss scenario");
 
         uint256 adminSharesBefore = vault.balanceOf(admin);
         vault.accrueInterest();
@@ -767,6 +767,9 @@ contract AlchemistAllocatorPerformanceFeeTest is Test {
         uint256 supply = IERC20(mockStrategyYieldToken).totalSupply();
         IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(supply / 2);
         vm.warp(block.timestamp + 365 days);
+
+        (, uint256 pendingPerfShares,) = vault.accrueInterestView();
+        assertEq(pendingPerfShares, 0, "accrueInterestView must return zero fees when transient guard is active");
 
         adminSharesBefore = vault.balanceOf(admin);
         vault.accrueInterest();
