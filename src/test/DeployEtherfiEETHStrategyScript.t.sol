@@ -113,6 +113,36 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
         assertEq(protocol, "Ether.fi", "unexpected protocol");
     }
 
+    function test_deployEtherfiEETHStrategy_blocksForceDeallocateWhenDisabled() public {
+        DeployEtherfiEETHStrategyScript.EtherfiEETHDeployConfig memory config =
+            DeployEtherfiEETHStrategyScript.EtherfiEETHDeployConfig({
+                myt: address(myt),
+                eETH: eETH,
+                weETH: weETH,
+                depositAdapter: depositAdapter,
+                redemptionManager: redemptionManager,
+                weEthEthOracle: address(oracle),
+                maxOracleStaleness: deployScript.MAX_ORACLE_STALENESS(),
+                params: _buildParams("Ether.fi Mainnet weETH", "Ether.fi")
+            });
+
+        address strategyAddr = deployScript.deployEtherfiEETHStrategy(curator, newOwner, config);
+        EtherfiEETHMYTStrategy strategy = EtherfiEETHMYTStrategy(payable(strategyAddr));
+
+        assertTrue(strategy.canForceDeallocate(), "force deallocate should default to enabled");
+
+        vm.prank(newOwner);
+        strategy.setCanForceDeallocate(false);
+        assertFalse(strategy.canForceDeallocate(), "force deallocate should be disabled");
+
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+
+        vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
+        vm.prank(address(myt));
+        strategy.deallocate(abi.encode(params), 1, IVaultV2.forceDeallocate.selector, address(myt));
+    }
+
     function test_run_fork_allocatorCanAllocateAndDeallocateEtherfiEETH() public {
         vm.createSelectFork(vm.envString("MAINNET_RPC_URL"), MAINNET_FORK_BLOCK);
         vm.deal(DEPLOYER, 10 ether);

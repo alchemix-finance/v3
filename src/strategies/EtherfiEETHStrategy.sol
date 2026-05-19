@@ -58,6 +58,7 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
     IERC20 public immutable eETH;
     // address used to request native ETH instead of an ERC20 token.
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    bool public canForceDeallocate = true;
 
     constructor(
         address _myt,
@@ -166,6 +167,14 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
     function _prepareOracleTokenForSwap(uint256 maxOracleTokenIn) internal override returns (uint256) {
         uint256 weETHBalance = weETH.balanceOf(address(this));
         return maxOracleTokenIn > weETHBalance ? weETHBalance : maxOracleTokenIn;
+    }
+
+    function _canForceDeallocate() internal view override returns (bool) {
+        return canForceDeallocate;
+    }
+
+    function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
+        canForceDeallocate = canForceDeallocate_;
     }
 
     receive() external payable {}
