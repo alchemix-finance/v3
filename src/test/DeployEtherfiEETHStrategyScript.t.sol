@@ -229,8 +229,8 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
         assertEq(params.name, "Ether.fi Mainnet weETH", "unexpected name");
         assertEq(params.protocol, "Ether.fi", "unexpected protocol");
         assertEq(uint256(params.riskClass), uint256(IMYTStrategy.RiskClass.MEDIUM), "unexpected risk class");
-        assertEq(params.cap, 10_000e18, "unexpected cap");
-        assertEq(params.globalCap, 1e18, "unexpected global cap");
+        assertEq(params.cap, 5000e18, "unexpected cap");
+        assertEq(params.globalCap, 0.3e18, "unexpected global cap");
         assertEq(params.estimatedYield, 500, "unexpected estimated yield");
         assertFalse(params.additionalIncentives, "unexpected incentives flag");
         assertEq(params.slippageBPS, 10, "unexpected slippage");

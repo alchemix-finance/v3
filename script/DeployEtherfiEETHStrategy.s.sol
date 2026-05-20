@@ -40,8 +40,8 @@ contract DeployEtherfiEETHStrategyScript is Script {
             name: "Ether.fi Mainnet weETH",
             protocol: "Ether.fi",
             riskClass: IMYTStrategy.RiskClass.MEDIUM,
-            cap: 10_000e18,
-            globalCap: 1e18,
+            cap: 5000e18,
+            globalCap: 0.3e18,
             estimatedYield: 500,
             additionalIncentives: false,
             slippageBPS: 10
