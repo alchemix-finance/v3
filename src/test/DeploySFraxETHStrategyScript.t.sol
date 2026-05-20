@@ -186,7 +186,7 @@ contract DeploySFraxETHStrategyScriptTest is Test {
             name: name,
             protocol: protocol,
             riskClass: IMYTStrategy.RiskClass.LOW,
-            cap: 1_000e18,
+            cap: 5000e18,
             globalCap: 0.5e18,
             estimatedYield: 500,
             additionalIncentives: false,

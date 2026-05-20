@@ -41,7 +41,7 @@ contract DeploySFraxETHStrategyScript is Script {
             name: "sfrxETH Mainnet",
             protocol: "Frax",
             riskClass: IMYTStrategy.RiskClass.LOW,
-            cap: 10_000e18,
+            cap: 5000e18,
             globalCap: 1e18,
             estimatedYield: 500,
             additionalIncentives: false,
