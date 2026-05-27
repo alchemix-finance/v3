@@ -26,6 +26,7 @@ import {IMockYieldToken} from "./mocks/MockYieldToken.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 import {VaultV2} from "lib/vault-v2/src/VaultV2.sol";
 import {MockYieldToken} from "./mocks/MockYieldToken.sol";
+import {IERC721Enumerable} from "../../lib/openzeppelin-contracts/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 
 contract AlchemistV3PerformanceFeeTest is Test {
     uint256 public constant FIXED_POINT_SCALAR = 1e18;
@@ -271,6 +272,188 @@ contract AlchemistV3PerformanceFeeTest is Test {
         uint256 allocateAmt = vault.convertToAssets(vault.totalSupply());
         vm.prank(admin);
         allocator.allocate(address(mytStrategy), allocateAmt);
+    }
+
+    function testVaultFeeRateChangeSettlesPendingFeesWithActivePositions() public {
+        uint256 depositAmt = 100e18;
+        deal(address(vault), user, depositAmt);
+        vm.startPrank(user);
+        SafeERC20.safeApprove(address(vault), address(alchemist), depositAmt);
+        (uint256 tokenId,) = alchemist.deposit(depositAmt, user, 0);
+        uint256 mintAmt = alchemist.getMaxBorrowable(tokenId) / 2;
+        alchemist.mint(tokenId, mintAmt, user);
+        vm.stopPrank();
+
+        uint256 currentMocked = IMockYieldToken(mockStrategyYieldToken).mockedSupply();
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(currentMocked / 2);
+        vm.warp(block.timestamp + 180 days);
+
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        uint256 colValueBefore = alchemist.totalValue(tokenId);
+        assertGt(colValueBefore, 0, "position must have value before fee change");
+
+        vm.startPrank(curator);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFee, (0.5e18)));
+        vault.setPerformanceFee(0.5e18);
+        vm.stopPrank();
+
+        uint256 feeSharesSettled = vault.balanceOf(admin) - adminSharesBefore;
+        assertGt(feeSharesSettled, 0, "fee rate change must settle pending fees at old rate");
+        assertEq(vault.performanceFee(), 0.5e18, "new fee rate must be applied");
+
+        uint256 colValueAfter = alchemist.totalValue(tokenId);
+        assertLe(colValueAfter, colValueBefore, "collateral value must not increase after fee settlement");
+
+        vm.prank(user);
+        alchemist.withdraw(1, user, tokenId);
+        (uint256 colAfterWithdraw, uint256 debtAfterWithdraw,) = alchemist.getCDP(tokenId);
+        assertEq(colAfterWithdraw, depositAmt - 1, "withdrawn amount must be deducted");
+        assertEq(debtAfterWithdraw, mintAmt, "debt must be unchanged after withdraw");
+    }
+
+    function testVaultFeeRateChangeToZeroThenNewYieldDoesNotAccrue() public {
+        uint256 depositAmt = 100e18;
+        deal(address(vault), user, depositAmt);
+        vm.startPrank(user);
+        SafeERC20.safeApprove(address(vault), address(alchemist), depositAmt);
+        (uint256 tokenId,) = alchemist.deposit(depositAmt, user, 0);
+        uint256 mintAmt = alchemist.getMaxBorrowable(tokenId) / 2;
+        alchemist.mint(tokenId, mintAmt, user);
+        vm.stopPrank();
+
+        vm.startPrank(curator);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFee, (0)));
+        vault.setPerformanceFee(0);
+        vm.stopPrank();
+
+        assertEq(vault.performanceFee(), 0, "fee must be zeroed");
+
+        uint256 currentMocked = IMockYieldToken(mockStrategyYieldToken).mockedSupply();
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(currentMocked / 2);
+        vm.warp(block.timestamp + 180 days);
+
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        vault.accrueInterest();
+        assertEq(vault.balanceOf(admin) - adminSharesBefore, 0, "no fees should accrue after zeroing");
+
+        uint256 totalVal = alchemist.totalValue(tokenId);
+        assertGt(totalVal, depositAmt, "share price must still appreciate without fees");
+    }
+
+    function testVaultFeeRecipientChangeSettlesAtOldRecipient() public {
+        uint256 depositAmt = 100e18;
+        deal(address(vault), user, depositAmt);
+        vm.startPrank(user);
+        SafeERC20.safeApprove(address(vault), address(alchemist), depositAmt);
+        (uint256 tokenId,) = alchemist.deposit(depositAmt, user, 0);
+        uint256 mintAmt = alchemist.getMaxBorrowable(tokenId) / 2;
+        alchemist.mint(tokenId, mintAmt, user);
+        vm.stopPrank();
+
+        uint256 currentMocked = IMockYieldToken(mockStrategyYieldToken).mockedSupply();
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(currentMocked / 2);
+        vm.warp(block.timestamp + 180 days);
+
+        uint256 adminSharesBefore = vault.balanceOf(admin);
+        address newRecipient = address(0x9999);
+
+        vm.startPrank(curator);
+        vault.submit(abi.encodeCall(IVaultV2.setPerformanceFeeRecipient, (newRecipient)));
+        vault.setPerformanceFeeRecipient(newRecipient);
+        vm.stopPrank();
+
+        uint256 feeSharesToOldRecipient = vault.balanceOf(admin) - adminSharesBefore;
+        assertGt(feeSharesToOldRecipient, 0, "pending fees must settle to old recipient before switch");
+        assertEq(vault.performanceFeeRecipient(), newRecipient, "recipient must be updated");
+
+        uint256 colValue = alchemist.totalValue(tokenId);
+        assertGt(colValue, 0, "position must still be healthy after recipient change");
+        (, uint256 debt,) = alchemist.getCDP(tokenId);
+        assertEq(debt, mintAmt, "debt must be unchanged");
+
+        vm.prank(user);
+        alchemist.withdraw(1, user, tokenId);
+        (uint256 colAfter, uint256 debtAfter,) = alchemist.getCDP(tokenId);
+        assertLt(colAfter, depositAmt, "withdraw must reduce collateral");
+        assertEq(debtAfter, mintAmt, "debt must be unchanged after withdraw");
+    }
+
+    function testInterleavedVaultSettlementBetweenAlchemistOps() public {
+        uint256 depositAmt = 200e18;
+        uint256 extraForRepay = 50e18;
+        deal(address(vault), user, depositAmt + extraForRepay);
+        vm.startPrank(user);
+        SafeERC20.safeApprove(address(vault), address(alchemist), depositAmt + extraForRepay);
+        (uint256 tokenId,) = alchemist.deposit(depositAmt, user, 0);
+        uint256 mintAmt = alchemist.getMaxBorrowable(tokenId) / 2;
+        alchemist.mint(tokenId, mintAmt, user);
+        vm.stopPrank();
+
+        uint256 currentMocked = IMockYieldToken(mockStrategyYieldToken).mockedSupply();
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(currentMocked * 3 / 4);
+        vm.warp(block.timestamp + 90 days);
+
+        vm.roll(block.number + 1);
+        vm.startPrank(user);
+        uint256 repayShares = alchemist.convertDebtTokensToYield(mintAmt / 4);
+        if (repayShares > extraForRepay) repayShares = extraForRepay / 2;
+        alchemist.repay(repayShares, tokenId);
+        vm.stopPrank();
+
+        (, uint256 debtAfterRepay,) = alchemist.getCDP(tokenId);
+        assertLt(debtAfterRepay, mintAmt, "debt must decrease after repay");
+
+        vm.prank(user);
+        alchemist.withdraw(depositAmt / 10, user, tokenId);
+
+        (uint256 colAfter, uint256 debtAfter,) = alchemist.getCDP(tokenId);
+        assertLt(colAfter, depositAmt, "collateral must decrease after withdraw");
+        assertEq(debtAfter, debtAfterRepay, "debt must be unchanged after withdraw");
+
+        uint256 totalUnderlying = alchemist.getTotalUnderlyingValue();
+        uint256 totalDeposited = alchemist.getTotalDeposited();
+        assertGe(totalUnderlying, totalDeposited - 1, "total underlying must at least equal deposited after yield");
+    }
+
+    function testTransmuterFlowUnderFeeDilution() public {
+        uint256 depositAmt = 200e18;
+        deal(address(vault), user, depositAmt);
+        vm.startPrank(user);
+        SafeERC20.safeApprove(address(vault), address(alchemist), depositAmt);
+        (uint256 tokenId,) = alchemist.deposit(depositAmt, user, 0);
+        uint256 mintAmt = alchemist.getMaxBorrowable(tokenId) / 2;
+        alchemist.mint(tokenId, mintAmt, user);
+        vm.stopPrank();
+
+        vm.prank(alOwner);
+        alToken.setWhitelist(user, true);
+        vm.startPrank(user);
+        SafeERC20.safeApprove(address(alToken), address(transmuter), mintAmt);
+        transmuter.createRedemption(mintAmt, user);
+        vm.stopPrank();
+
+        uint256 currentMocked = IMockYieldToken(mockStrategyYieldToken).mockedSupply();
+        IMockYieldToken(mockStrategyYieldToken).updateMockTokenSupply(currentMocked / 2);
+        vm.warp(block.timestamp + 365 days);
+
+        uint256 redemptionTokenId = IERC721Enumerable(address(transmuter)).tokenOfOwnerByIndex(user, 0);
+        ITransmuter.StakingPosition memory pos = transmuter.getPosition(redemptionTokenId);
+        vm.roll(pos.maturationBlock);
+
+        uint256 transmuterBalanceBefore = IERC20(address(vault)).balanceOf(address(transmuter));
+
+        vm.prank(user);
+        transmuter.claimRedemption(redemptionTokenId);
+
+        uint256 transmuterBalanceAfter = IERC20(address(vault)).balanceOf(address(transmuter));
+        assertGe(
+            transmuterBalanceBefore,
+            transmuterBalanceAfter,
+            "transmuter must send shares to claimer"
+        );
+
+        (uint256 colAfter,,) = alchemist.getCDP(tokenId);
+        assertLt(colAfter, depositAmt, "redeem must debit collateral from position");
     }
 
     function _magicDepositToVault(address _vault, address depositor, uint256 amount) internal {
