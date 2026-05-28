@@ -14,7 +14,7 @@ contract DeploySiUSDStrategiesScript is Script {
 
     address public newOwner = 0xF56D660138815fC5d7a06cd0E1630225E788293D;
     address public curatorAddr = 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4;
-    address public usdcMYT = address(0);
+    address public usdcMYT = 0x9B44efCa3e2a707B63Dc00CE79d646E5E5D24bA5;
 
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address public constant IUSD = 0x48f9e38f3070AD8945DFEae3FA70987722E3D89c;
@@ -24,7 +24,7 @@ contract DeploySiUSDStrategiesScript is Script {
     address public constant REDEEM_CONTROLLER = 0xCb1747E89a43DEdcF4A2b831a0D94859EFeC7601;
 
     // TODO: replace with the live mainnet iUSD/USDC oracle before broadcasting.
-    address public iUsdUsdcOracle = address(0);
+    address public iUsdUsdcOracle = 0xF81Aa28A4F68124683AfadA81e8EBBf6e2867067;
     uint256 public maxOracleStaleness = 365 days;
 
     struct SiUSDDeployConfig {

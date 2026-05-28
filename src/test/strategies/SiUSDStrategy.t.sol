@@ -25,28 +25,9 @@ contract MockSwapperForSiUSD {
     }
 }
 
-contract MockIUsdOracle {
-    uint8 internal immutable _decimals;
-    int256 internal _answer;
-    uint256 internal _updatedAt;
-
-    constructor(uint8 decimals_, int256 answer_, uint256 updatedAt_) {
-        _decimals = decimals_;
-        _answer = answer_;
-        _updatedAt = updatedAt_;
-    }
-
-    function decimals() external view returns (uint8) {
-        return _decimals;
-    }
-
-    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80) {
-        return (0, _answer, 0, _updatedAt, 0);
-    }
-
-    function setUpdatedAt(uint256 updatedAt_) external {
-        _updatedAt = updatedAt_;
-    }
+interface IChainlinkOracleView {
+    function decimals() external view returns (uint8);
+    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80);
 }
 
 contract SiUSDStrategyTest is BaseStrategyTest {
@@ -54,8 +35,10 @@ contract SiUSDStrategyTest is BaseStrategyTest {
     uint256 internal constant ABSOLUTE_CAP = 10_000_000e6;
     uint256 internal constant RELATIVE_CAP = 1e18;
     uint256 internal constant MAX_ORACLE_STALENESS = 365 days;
+    uint8 internal constant USDC_DECIMALS = 6;
+    uint8 internal constant IUSD_DECIMALS = 18;
     uint8 internal constant IUSD_ORACLE_DECIMALS = 18;
-    int256 internal constant IUSD_USDC_ORACLE_ANSWER = 1e6;
+    int256 internal constant IUSD_USDC_ORACLE_ANSWER = 1e18;
 
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address public constant IUSD = 0x48f9e38f3070AD8945DFEae3FA70987722E3D89c;
@@ -63,9 +46,9 @@ contract SiUSDStrategyTest is BaseStrategyTest {
     address public constant GATEWAY = 0x3f04b65Ddbd87f9CE0A2e7Eb24d80e7fb87625b5;
     address public constant MINT_CONTROLLER = 0x49877d937B9a00d50557bdC3D87287b5c3a4C256;
     address public constant REDEEM_CONTROLLER = 0xCb1747E89a43DEdcF4A2b831a0D94859EFeC7601;
+    address public constant IUSD_USDC_ORACLE = 0xF81Aa28A4F68124683AfadA81e8EBBf6e2867067;
 
     MockSwapperForSiUSD internal swapper;
-    MockIUsdOracle internal oracle;
 
     function getStrategyConfig() internal pure override returns (IMYTStrategy.StrategyParams memory) {
         return IMYTStrategy.StrategyParams({
@@ -92,7 +75,6 @@ contract SiUSDStrategyTest is BaseStrategyTest {
     }
 
     function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
-        oracle = new MockIUsdOracle(IUSD_ORACLE_DECIMALS, IUSD_USDC_ORACLE_ANSWER, block.timestamp);
         return address(
             new SiUSDStrategy(
                 vault_,
@@ -103,7 +85,7 @@ contract SiUSDStrategyTest is BaseStrategyTest {
                 GATEWAY,
                 MINT_CONTROLLER,
                 REDEEM_CONTROLLER,
-                address(oracle),
+                IUSD_USDC_ORACLE,
                 MAX_ORACLE_STALENESS
             )
         );
@@ -123,7 +105,6 @@ contract SiUSDStrategyTest is BaseStrategyTest {
 
     function setUp() public override {
         super.setUp();
-        oracle.setUpdatedAt(block.timestamp);
 
         swapper = new MockSwapperForSiUSD();
         deal(USDC, address(swapper), 100_000_000e6);
@@ -226,6 +207,15 @@ contract SiUSDStrategyTest is BaseStrategyTest {
         assertEq(SiUSDStrategy(strategy).MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS, "unexpected initial max oracle staleness");
     }
 
+    function test_uses_live_iusd_usdc_oracle_with_6_decimal_asset_conversion() public view {
+        assertEq(address(SiUSDStrategy(strategy).pricedTokenOracle()), IUSD_USDC_ORACLE, "unexpected iUSD/USDC oracle");
+        assertEq(IChainlinkOracleView(IUSD_USDC_ORACLE).decimals(), IUSD_ORACLE_DECIMALS, "unexpected oracle decimals");
+
+        (, int256 answer,,,) = IChainlinkOracleView(IUSD_USDC_ORACLE).latestRoundData();
+        assertEq(answer, IUSD_USDC_ORACLE_ANSWER, "unexpected oracle answer");
+        assertEq(_oracleTokenToAsset(1e18), 1e6, "1 iUSD should price to 1 USDC in 6 decimals");
+    }
+
     function _useAllocatorDeallocateUnwrapAndSwap() internal pure override returns (bool) {
         return false;
     }
@@ -246,14 +236,6 @@ contract SiUSDStrategyTest is BaseStrategyTest {
         return desiredIUsd > availableIUsd ? availableIUsd : desiredIUsd;
     }
 
-    function _beforeTimeShift(uint256 targetTimestamp) internal override {
-        oracle.setUpdatedAt(targetTimestamp);
-    }
-
-    function _beforePreviewWithdraw(uint256) internal override {
-        oracle.setUpdatedAt(block.timestamp);
-    }
-
     function _expectedTotalValue() internal view returns (uint256) {
         uint256 siUsdShares = ISIUSDView(SIUSD).balanceOf(strategy);
         uint256 iUsdFromShares = ISIUSDView(SIUSD).convertToAssets(siUsdShares);
@@ -263,10 +245,12 @@ contract SiUSDStrategyTest is BaseStrategyTest {
     }
 
     function _oracleTokenToAsset(uint256 oracleTokenAmount) internal pure returns (uint256) {
-        return oracleTokenAmount * uint256(IUSD_USDC_ORACLE_ANSWER) / (10 ** IUSD_ORACLE_DECIMALS);
+        return oracleTokenAmount * uint256(IUSD_USDC_ORACLE_ANSWER) * (10 ** USDC_DECIMALS) / (10 ** IUSD_DECIMALS)
+            / (10 ** IUSD_ORACLE_DECIMALS);
     }
 
     function _assetToOracleToken(uint256 assetAmount) internal pure returns (uint256) {
-        return assetAmount * (10 ** IUSD_ORACLE_DECIMALS) / uint256(IUSD_USDC_ORACLE_ANSWER);
+        return assetAmount * (10 ** IUSD_DECIMALS) * (10 ** IUSD_ORACLE_DECIMALS)
+            / uint256(IUSD_USDC_ORACLE_ANSWER) / (10 ** USDC_DECIMALS);
     }
 }
