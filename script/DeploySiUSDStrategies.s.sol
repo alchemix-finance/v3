@@ -22,8 +22,6 @@ contract DeploySiUSDStrategiesScript is Script {
     address public constant GATEWAY = 0x3f04b65Ddbd87f9CE0A2e7Eb24d80e7fb87625b5;
     address public constant MINT_CONTROLLER = 0x49877d937B9a00d50557bdC3D87287b5c3a4C256;
     address public constant REDEEM_CONTROLLER = 0xCb1747E89a43DEdcF4A2b831a0D94859EFeC7601;
-
-    // TODO: replace with the live mainnet iUSD/USDC oracle before broadcasting.
     address public iUsdUsdcOracle = 0xF81Aa28A4F68124683AfadA81e8EBBf6e2867067;
     uint256 public maxOracleStaleness = 365 days;
 
