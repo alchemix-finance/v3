@@ -56,8 +56,15 @@ contract CrucibleTest is InvariantsTest {
     bool public lossAfterLastLiquidation; // tracks if a loss occurred after the most recent cascade
     bool public recoverySinceLastStress; // successful recovery checkpoint still current for C5
 
+    uint256 public totalHandlerCalls;
+
     uint256 internal constant MAX_TEST_VALUE = 1e28;
     bytes4 internal constant ILLEGAL_STATE_SELECTOR = bytes4(keccak256("IllegalState()"));
+
+    modifier counted() {
+        totalHandlerCalls++;
+        _;
+    }
 
     function setUp() public virtual override {
         // Position-building handlers
@@ -177,7 +184,7 @@ contract CrucibleTest is InvariantsTest {
     //  underlying amount at current share price.
     // ═══════════════════════════════════════════════════════════════
 
-    function depositCollateral(uint256 amount, uint256 onBehalfSeed) external {
+    function depositCollateral(uint256 amount, uint256 onBehalfSeed) external counted {
         address onBehalf = _randomNonZero(targetSenders(), onBehalfSeed);
         if (onBehalf == address(0)) { handlerSkips++; return; }
 
@@ -204,7 +211,7 @@ contract CrucibleTest is InvariantsTest {
     //  mint() does NOT call _sync() — poke AFTER vm.roll to sync.
     // ═══════════════════════════════════════════════════════════════
 
-    function borrowCollateral(uint256 amount, uint256 onBehalfSeed) external {
+    function borrowCollateral(uint256 amount, uint256 onBehalfSeed) external counted {
         address onBehalf = _findMinter(targetSenders(), onBehalfSeed);
         if (onBehalf == address(0)) { handlerSkips++; return; }
 
@@ -233,7 +240,7 @@ contract CrucibleTest is InvariantsTest {
     //  Uses previewMint for correct underlying at current price.
     // ═══════════════════════════════════════════════════════════════
 
-    function repayDebt(uint256 amount, uint256 onBehalfSeed) external {
+    function repayDebt(uint256 amount, uint256 onBehalfSeed) external counted {
         address onBehalf = _findRepayer(targetSenders(), onBehalfSeed);
         if (onBehalf == address(0)) { handlerSkips++; return; }
 
@@ -268,7 +275,7 @@ contract CrucibleTest is InvariantsTest {
     //  would bypass totalSyntheticsIssued tracking and corrupt C6/C7.
     // ═══════════════════════════════════════════════════════════════
 
-    function transmuterStake(uint256 amount, uint256 onBehalfSeed) external {
+    function transmuterStake(uint256 amount, uint256 onBehalfSeed) external counted {
         uint256 totalIssued = alchemist.totalSyntheticsIssued();
         uint256 totalLocked = transmuterLogic.totalLocked();
         if (totalIssued <= totalLocked) { handlerSkips++; return; }
@@ -338,7 +345,7 @@ contract CrucibleTest is InvariantsTest {
     //  HANDLER: Transmuter Claim
     // ═══════════════════════════════════════════════════════════════
 
-    function transmuterClaim(uint256 onBehalfSeed) external {
+    function transmuterClaim(uint256 onBehalfSeed) external counted {
         address onBehalf = _findClaimer(targetSenders(), onBehalfSeed);
         if (onBehalf == address(0)) { handlerSkips++; return; }
 
@@ -358,7 +365,7 @@ contract CrucibleTest is InvariantsTest {
     //  Positions become healthier, earmark capacity increases.
     // ═══════════════════════════════════════════════════════════════
 
-    function accrueYield(uint256 yieldBps) external {
+    function accrueYield(uint256 yieldBps) external counted {
         yieldBps = bound(yieldBps, 1, 50);
 
         uint256 currentUnderlying = IERC20(mockVaultCollateral).balanceOf(mockStrategyYieldToken);
@@ -383,7 +390,7 @@ contract CrucibleTest is InvariantsTest {
     //  Floor: won't drain below 5% to avoid total wipeout.
     // ═══════════════════════════════════════════════════════════════
 
-    function realizeLargeValueLoss(uint256 lossBps) external {
+    function realizeLargeValueLoss(uint256 lossBps) external counted {
         lossBps = bound(lossBps, 500, 3000);
 
         uint256 currentUnderlying = IERC20(mockVaultCollateral).balanceOf(mockStrategyYieldToken);
@@ -414,7 +421,7 @@ contract CrucibleTest is InvariantsTest {
     //  changes, global accounting consistency after multiple liquidations.
     // ═══════════════════════════════════════════════════════════════
 
-    function cascadeLiquidations() external {
+    function cascadeLiquidations() external counted {
         // Guard: share price must be > 0, otherwise _liquidate early-returns (0,0,0) → LiquidationError
         if (vault.convertToAssets(1e18) == 0) { handlerSkips++; return; }
         // Guard: totalDebt must be > 0, otherwise _doLiquidation divides by zero in
@@ -503,7 +510,7 @@ contract CrucibleTest is InvariantsTest {
     //  advances blocks, then claims. No more skipping.
     // ═══════════════════════════════════════════════════════════════
 
-    function transmuterClaimDuringBadDebt(uint256 onBehalfSeed, uint256 stakeAmount) external {
+    function transmuterClaimDuringBadDebt(uint256 onBehalfSeed, uint256 stakeAmount) external counted {
         address[] memory senders = targetSenders();
         address onBehalf = _findClaimer(senders, onBehalfSeed);
 
@@ -591,7 +598,7 @@ contract CrucibleTest is InvariantsTest {
     //  experienced loss. Tracks transitions out of bad debt.
     // ═══════════════════════════════════════════════════════════════
 
-    function recoverFromLoss(uint256 recoveryBps) external {
+    function recoverFromLoss(uint256 recoveryBps) external counted {
         if (!_isBadDebt() && totalLossRealized == 0) { handlerSkips++; return; }
 
         recoveryBps = bound(recoveryBps, 1000, 5000);
@@ -870,5 +877,42 @@ contract CrucibleTest is InvariantsTest {
             alchemist.totalDebt(),
             "C7: cumulativeEarmarked > totalDebt"
         );
+    }
+
+    function invariantCoverageVisibility() public view {
+        console2.log("--- Crucible Invariant Coverage ---");
+        console2.log("  totalHandlerCalls:     ", totalHandlerCalls);
+        console2.log("  handlerSkips:          ", handlerSkips);
+        console2.log("  yieldAccruals:         ", yieldAccruals);
+        console2.log("  totalYieldAccrued:     ", totalYieldAccrued);
+        console2.log("  totalLossRealized:     ", totalLossRealized);
+        console2.log("  liquidationAttempts:   ", liquidationAttempts);
+        console2.log("  liquidationSuccesses:  ", liquidationSuccesses);
+        console2.log("  cascadingLiqRounds:    ", cascadingLiquidationRounds);
+        console2.log("  badDebtEvents:         ", badDebtEvents);
+        console2.log("  recoveryEvents:        ", recoveryEvents);
+
+        address feeRecipient = vault.performanceFeeRecipient();
+        if (feeRecipient != address(0)) {
+            uint256 feeShares = vault.balanceOf(feeRecipient);
+            uint256 ts = vault.totalSupply();
+            console2.log("  feeRecipientShares:    ", feeShares);
+            console2.log("  feeSharePct (e18):     ", ts > 0 ? feeShares * 1e18 / ts : 0);
+        }
+        console2.log("-----------------------------------");
+    }
+
+    function invariantStressPathCoverage() public view {
+        if (totalHandlerCalls < 64) return;
+
+        assertGt(yieldAccruals, 0, "C-cov: no yield accrued");
+        assertGt(totalLossRealized, 0, "C-cov: no losses realized");
+        assertGt(liquidationAttempts, 0, "C-cov: no liquidation attempts");
+        assertGt(cascadingLiquidationRounds, 0, "C-cov: no cascading liquidation rounds");
+
+        address feeRecipient = vault.performanceFeeRecipient();
+        if (feeRecipient != address(0) && vault.performanceFee() > 0) {
+            assertGt(vault.balanceOf(feeRecipient), 0, "C-cov: no perf fee shares minted");
+        }
     }
 }

@@ -83,6 +83,9 @@ contract HardenedInvariantHandler is Test {
     uint256 public ghostStrategyUnderlyingIncrease;
     uint256 public ghostStrategyUnderlyingDecrease;
 
+    uint256 public totalHandlerCalls;
+    mapping(bytes4 => uint256) public selectorCounts;
+
     constructor(
         AlchemistV3 _alchemist,
         Transmuter _transmuterLogic,
@@ -115,7 +118,8 @@ contract HardenedInvariantHandler is Test {
     }
 
     modifier tracked(bytes4 selector) {
-    
+        totalHandlerCalls++;
+        selectorCounts[selector]++;
 
         Snapshot memory beforeState = _snapshot();
         _;
@@ -1017,6 +1021,53 @@ contract HardenedInvariantsTest is InvariantsTest {
 
     function invariantTransmuterLockedBoundedBySupply() public view {
         assertGe(alToken.totalSupply(), transmuterLogic.totalLocked(), "H10: transmuter locked exceeds alToken supply");
+    }
+
+    function invariantCoverageVisibility() public view {
+        console2.log("--- Hardened Invariant Coverage ---");
+        console2.log("  totalHandlerCalls:", handler.totalHandlerCalls());
+        console2.log("  skippedCalls:      ", handler.skippedCalls());
+        console2.log("  deposits:          ", handler.ghostDeposits());
+        console2.log("  withdrawals:       ", handler.ghostWithdrawals());
+        console2.log("  borrows:           ", handler.ghostBorrows());
+        console2.log("  repays:            ", handler.ghostRepays());
+        console2.log("  burnRepays:        ", handler.ghostBurnRepays());
+        console2.log("  transmuterStakes:  ", handler.ghostStakes());
+        console2.log("  transmuterClaims:  ", handler.ghostClaims());
+        console2.log("  liqAttempts:       ", handler.ghostLiquidationAttempts());
+        console2.log("  liqSuccesses:      ", handler.ghostLiquidationSuccesses());
+        console2.log("  yieldEvents:       ", handler.ghostYieldEvents());
+        console2.log("  lossEvents:        ", handler.ghostValueLossEvents());
+        console2.log("  pokeCalls:         ", handler.ghostPokeCalls());
+        console2.log("  blocksAdvanced:    ", handler.ghostBlocksAdvanced());
+
+        address feeRecipient = vault.performanceFeeRecipient();
+        if (feeRecipient != address(0)) {
+            uint256 feeShares = vault.balanceOf(feeRecipient);
+            uint256 ts = vault.totalSupply();
+            console2.log("  feeRecipientShares:", feeShares);
+            console2.log("  feeSharePct (e18): ", ts > 0 ? feeShares * 1e18 / ts : 0);
+        }
+        console2.log("-----------------------------------");
+    }
+
+    function invariantCriticalPathsExplored() public view {
+        if (handler.totalHandlerCalls() < 200) return;
+
+        assertGt(handler.ghostDeposits(), 0, "H-cov: no deposits executed");
+        assertGt(handler.ghostBorrows(), 0, "H-cov: no borrows executed");
+        assertGt(handler.ghostRepays() + handler.ghostBurnRepays(), 0, "H-cov: no repay/burn executed");
+        assertGt(handler.ghostYieldEvents(), 0, "H-cov: no yield events injected");
+        assertGt(handler.ghostValueLossEvents(), 0, "H-cov: no loss events injected");
+        assertGt(handler.ghostStakes(), 0, "H-cov: no transmuter stakes");
+        assertGt(handler.ghostClaims(), 0, "H-cov: no transmuter claims");
+        assertGt(handler.ghostLiquidationAttempts(), 0, "H-cov: no liquidation attempts");
+        assertGt(handler.ghostPokeCalls(), 0, "H-cov: no poke calls");
+
+        address feeRecipient = vault.performanceFeeRecipient();
+        if (feeRecipient != address(0) && vault.performanceFee() > 0) {
+            assertGt(vault.balanceOf(feeRecipient), 0, "H-cov: no perf fee shares minted");
+        }
     }
 
     function _tokenId(address user) internal view returns (uint256) {
