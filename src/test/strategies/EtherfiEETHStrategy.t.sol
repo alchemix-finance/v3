@@ -465,6 +465,26 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.stopPrank();
     }
 
+    function test_vault_user_forceDeallocate_reverts_when_strategy_disables_force_deallocation() public {
+        uint256 allocateAmount = 10e18;
+        uint256 forceDeallocateAmount = 1e18;
+
+        _mockFreshWeEthEthOracle(block.timestamp);
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, allocateAmount);
+
+        vm.prank(admin);
+        EtherfiEETHMYTStrategy(payable(strategy)).setCanForceDeallocate(false);
+
+        IMYTStrategy.VaultAdapterParams memory directDealloc;
+        directDealloc.action = IMYTStrategy.ActionType.direct;
+
+        vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
+        vm.prank(vaultDepositor);
+        IVaultV2(vault).forceDeallocate(strategy, abi.encode(directDealloc), forceDeallocateAmount, vaultDepositor);
+    }
+
     function test_deallocate_direct_accounts_for_instant_redemption_fee() public {
         uint256 allocateAmount = 10e18;
         uint256 deallocateAmount = 1e18;
