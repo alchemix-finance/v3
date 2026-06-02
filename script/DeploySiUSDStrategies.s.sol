@@ -23,7 +23,8 @@ contract DeploySiUSDStrategiesScript is Script {
     address public constant MINT_CONTROLLER = 0x49877d937B9a00d50557bdC3D87287b5c3a4C256;
     address public constant REDEEM_CONTROLLER = 0xCb1747E89a43DEdcF4A2b831a0D94859EFeC7601;
     address public iUsdUsdcOracle = 0xF81Aa28A4F68124683AfadA81e8EBBf6e2867067;
-    uint256 public maxOracleStaleness = 365 days;
+    // InfiniFi oracle reads protocol conversion state directly; timestamp is adapter-provided.
+    uint256 public maxOracleStaleness = 24 hours;
 
     struct SiUSDDeployConfig {
         address myt;

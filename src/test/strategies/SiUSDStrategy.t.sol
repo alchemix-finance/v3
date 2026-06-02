@@ -34,7 +34,7 @@ contract SiUSDStrategyTest is BaseStrategyTest {
     uint256 internal constant INITIAL_VAULT_DEPOSIT = 1_000_000e6;
     uint256 internal constant ABSOLUTE_CAP = 10_000_000e6;
     uint256 internal constant RELATIVE_CAP = 1e18;
-    uint256 internal constant MAX_ORACLE_STALENESS = 365 days;
+    uint256 internal constant MAX_ORACLE_STALENESS = 24 hours;
     uint8 internal constant USDC_DECIMALS = 6;
     uint8 internal constant IUSD_DECIMALS = 18;
     uint8 internal constant IUSD_ORACLE_DECIMALS = 18;
