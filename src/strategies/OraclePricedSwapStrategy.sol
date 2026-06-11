@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {MYTStrategy} from "../MYTStrategy.sol";
 import {TokenUtils} from "../libraries/TokenUtils.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 abstract contract OraclePricedSwapStrategy is MYTStrategy {
@@ -119,17 +120,20 @@ abstract contract OraclePricedSwapStrategy is MYTStrategy {
     }
 
     function _oracleTokenToAsset(uint256 oracleTokenAmount) internal view returns (uint256) {
-        return oracleTokenAmount * _oracleAnswer() / (10 ** pricedTokenOracleDecimals);
+        return oracleTokenAmount * _oracleAnswer() * (10 ** IERC20Metadata(_asset()).decimals())
+            / (10 ** IERC20Metadata(_oracleToken()).decimals()) / (10 ** pricedTokenOracleDecimals);
     }
 
     function _assetToOracleTokenDown(uint256 assetAmount) internal view returns (uint256) {
-        return assetAmount * (10 ** pricedTokenOracleDecimals) / _oracleAnswer();
+        return assetAmount * (10 ** IERC20Metadata(_oracleToken()).decimals()) * (10 ** pricedTokenOracleDecimals)
+            / _oracleAnswer() / (10 ** IERC20Metadata(_asset()).decimals());
     }
 
     function _assetToOracleTokenUp(uint256 assetAmount) internal view returns (uint256) {
-        uint256 scale = 10 ** pricedTokenOracleDecimals;
-        uint256 answer = _oracleAnswer();
-        return (assetAmount * scale + answer - 1) / answer;
+        uint256 numerator =
+            assetAmount * (10 ** IERC20Metadata(_oracleToken()).decimals()) * (10 ** pricedTokenOracleDecimals);
+        uint256 denominator = _oracleAnswer() * (10 ** IERC20Metadata(_asset()).decimals());
+        return (numerator + denominator - 1) / denominator;
     }
 
     function _oracleAnswer() internal view returns (uint256 answer) {
