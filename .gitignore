@@ -24,3 +24,10 @@ docs/
 .secret
 
 opencode.jsonc
+
+# Certora prover artifacts
+.certora_internal/
+.certora_sources/
+emv-*-certora-*/
+last_certora_run/
+build_cache/
