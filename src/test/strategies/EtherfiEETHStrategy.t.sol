@@ -207,7 +207,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {
-        return 24595012;//24592846;
+        return 24595012; //25324617
     }
 
     function getRpcUrl() internal view override returns (string memory) {
@@ -465,6 +465,30 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.stopPrank();
     }
 
+    function test_deallocate_direct_uses_live_etherfi_redemption_manager() public {
+        uint256 allocateAmount = 10e18;
+        uint256 deallocateAmount = 4e18;
+        bytes memory allocParams = getDirectAllocateVaultParams(allocateAmount);
+
+        vm.startPrank(vault);
+        deal(WETH, strategy, allocateAmount);
+        IMYTStrategy(strategy).allocate(allocParams, allocateAmount, "", address(vault));
+
+        uint256 grossRedeemAmount = _grossRedeemAmount(REDEMPTION_MANAGER, deallocateAmount);
+        require(
+            IRedemptionManagerView(REDEMPTION_MANAGER).canRedeem(grossRedeemAmount, ETH),
+            "fork block should support instant redemption"
+        );
+
+        IMYTStrategy.VaultAdapterParams memory directDealloc;
+        directDealloc.action = IMYTStrategy.ActionType.direct;
+        bytes memory deallocParams = abi.encode(directDealloc);
+
+        IMYTStrategy(strategy).deallocate(deallocParams, deallocateAmount, "", address(vault));
+        assertGe(IERC20(WETH).balanceOf(strategy), deallocateAmount, "idle WETH should cover requested deallocation");
+        vm.stopPrank();
+    }
+
     function test_vault_user_forceDeallocate_reverts_when_strategy_disables_force_deallocation() public {
         uint256 allocateAmount = 10e18;
         uint256 forceDeallocateAmount = 1e18;
@@ -483,6 +507,12 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
         vm.prank(vaultDepositor);
         IVaultV2(vault).forceDeallocate(strategy, abi.encode(directDealloc), forceDeallocateAmount, vaultDepositor);
+    }
+
+    function getDirectAllocateVaultParams(uint256) internal view virtual returns (bytes memory) {
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        return abi.encode(params);
     }
 
     function test_deallocate_direct_accounts_for_instant_redemption_fee() public {

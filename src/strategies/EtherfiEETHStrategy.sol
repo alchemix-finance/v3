@@ -26,7 +26,7 @@ interface IRedemptionManager {
         external
         view
         returns (RedemptionLimit memory limit, uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl);
-    function redeemWeEth(uint256 amount, address receiver, address outputToken) external returns (uint256);
+    function redeemWeEth(uint256 amount, address receiver, address outputToken) external;
 }
 
 interface ILiquidityPoolLike {
@@ -51,6 +51,7 @@ interface IWeETH {
  */
 contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
     uint256 internal constant BPS = 10_000;
+    uint256 public constant MAX_GROSS_REDEEM_AMOUNT_BUFFER = 1e12;
 
     IDepositAdapter public immutable depositAdapter;
     IRedemptionManager public immutable redemptionManager;
@@ -59,6 +60,9 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
     // address used to request native ETH instead of an ERC20 token.
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     bool public canForceDeallocate = true;
+    uint256 public grossRedeemAmountBuffer = 1;
+
+    event GrossRedeemAmountBufferUpdated(uint256 grossRedeemAmountBuffer);
 
     constructor(
         address _myt,
@@ -144,9 +148,11 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
         uint256 requiredNetShares = liquidityPool.sharesForWithdrawalAmount(shortfall);
         uint256 requiredGrossShares = Math.mulDiv(requiredNetShares, BPS, BPS - exitFeeInBps, Math.Rounding.Ceil);
         uint256 grossRedeemAmount = liquidityPool.amountForShare(requiredGrossShares);
+        if (liquidityPool.sharesForAmount(grossRedeemAmount) < requiredGrossShares) {
+            grossRedeemAmount += grossRedeemAmountBuffer;
+        }
 
         uint256 weETHToRedeem = _weETHForGrossRedeem(grossRedeemAmount, weETHBalance);
-        require(_previewNetEthFromWeETH(weETHToRedeem) >= shortfall, "Insufficient ETH redeemed");
         return weETHToRedeem;
     }
 
@@ -175,6 +181,12 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
 
     function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
         canForceDeallocate = canForceDeallocate_;
+    }
+
+    function setGrossRedeemAmountBuffer(uint256 grossRedeemAmountBuffer_) external onlyOwner {
+        require(grossRedeemAmountBuffer_ <= MAX_GROSS_REDEEM_AMOUNT_BUFFER, "Buffer too large");
+        grossRedeemAmountBuffer = grossRedeemAmountBuffer_;
+        emit GrossRedeemAmountBufferUpdated(grossRedeemAmountBuffer_);
     }
 
     receive() external payable {}
