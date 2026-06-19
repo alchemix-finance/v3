@@ -51,7 +51,7 @@ interface IWeETH {
  */
 contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
     uint256 internal constant BPS = 10_000;
-    uint256 public constant MAX_GROSS_REDEEM_AMOUNT_BUFFER = 1e12;
+    uint256 public constant MAX_GROSS_REDEEM_AMOUNT_BUFFER = 1e18;
 
     IDepositAdapter public immutable depositAdapter;
     IRedemptionManager public immutable redemptionManager;
