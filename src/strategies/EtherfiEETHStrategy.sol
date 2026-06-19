@@ -59,7 +59,7 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
     IERC20 public immutable eETH;
     // address used to request native ETH instead of an ERC20 token.
     address public constant ETH = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-    bool public canForceDeallocate = true;
+    bool public canForceDeallocate = false;
     uint256 public grossRedeemAmountBuffer = 1;
 
     event GrossRedeemAmountBufferUpdated(uint256 grossRedeemAmountBuffer);
