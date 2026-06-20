@@ -7,6 +7,8 @@
 #   ./certora/scripts/run.sh calculateLiquidation
 #   ./certora/scripts/run.sh normalization
 #   ./certora/scripts/run.sh feeBounds
+#   ./certora/scripts/run.sh conservation
+#   ./certora/scripts/run.sh collateralizationInvariant
 #
 # The prover is a self-built, offline build at /tmp/certora-build (NOT the
 # certora-cli cloud product). Local run mode is auto-detected: setting
@@ -32,7 +34,7 @@
 #                          swap (15 GB RAM + 31 GB swap) but gives ample headroom.
 set -euo pipefail
 
-SPEC_NAME="${1:?usage: $0 <spec_name> (calculateLiquidation|normalization|feeBounds)}"
+SPEC_NAME="${1:?usage: $0 <spec_name>}"
 SPEC="certora/specs/${SPEC_NAME}.spec"
 
 [[ -f "$SPEC" ]] || { echo "spec not found: $SPEC" >&2; exit 1; }
@@ -45,12 +47,31 @@ command -v solc >/dev/null || { echo "solc not on PATH" >&2; exit 1; }
 
 CERTORA_BIN="python3 ${CERTORA_BUILD}/certoraRun.py"
 
+# End-to-end specs use the scene harness with typed anchors; pure-function
+# specs use the original lightweight harness.
+case "$SPEC_NAME" in
+    conservation|collateralizationInvariant)
+        HARNESS="AlchemistV3SceneHarness"
+        SOURCES=(
+            certora/harnesses/AlchemistV3SceneHarness.sol
+            src/AlchemistV3.sol
+        )
+        ;;
+    *)
+        HARNESS="AlchemistV3Harness"
+        SOURCES=(
+            certora/harnesses/AlchemistV3Harness.sol
+            src/AlchemistV3.sol
+        )
+        ;;
+esac
+
 echo "==> Verifying ${SPEC_NAME} with the local prover (via_ir, no optimizer)"
+echo "    Harness: ${HARNESS}"
 
 $CERTORA_BIN \
-    certora/harnesses/AlchemistV3Harness.sol \
-    src/AlchemistV3.sol \
-    --verify AlchemistV3Harness:"${SPEC}" \
+    "${SOURCES[@]}" \
+    --verify "${HARNESS}":"${SPEC}" \
     --solc solc \
     --solc_allow_path . \
     --solc_via_ir \

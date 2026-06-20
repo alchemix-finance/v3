@@ -46,6 +46,15 @@ rule debtToBurn_le_debt(
     require to_mathint(collateral) * feeBps <= max_uint256;
     require to_mathint(targetCollateralization) * debt <= max_uint256;
 
+    // Domain constraints the function relies on to return normally and to keep
+    // its outputs bounded. Both are enforced by the contract's admin setters:
+    //   * feeBps <= BPS (10000)  — setLiquidationFee / init `_checkArgument(fee <= BPS)`
+    //   * targetCollateralization > FIXED_POINT_SCALAR (1e18) — otherwise the
+    //     `denom = targetCollateralization - FIXED_POINT_SCALAR` line underflows
+    //     (or divides by zero), so the function reverts rather than returns.
+    require feeBps <= 10000;
+    require targetCollateralization > 1000000000000000000;
+
     uint256 debtToBurn = calcLiquidation_debtToBurn(
         collateral, debt, targetCollateralization,
         alchemistCurrentCollateralization, alchemistMinimumCollateralization, feeBps
@@ -68,6 +77,8 @@ rule grossCollateralToSeize_le_collateral(
     require to_mathint(debt) * feeBps <= max_uint256;
     require to_mathint(collateral) * feeBps <= max_uint256;
     require to_mathint(targetCollateralization) * debt <= max_uint256;
+    require feeBps <= 10000;
+    require targetCollateralization > 1000000000000000000;
 
     uint256 grossCollateralToSeize = calcLiquidation_grossCollateralToSeize(
         collateral, debt, targetCollateralization,
@@ -93,6 +104,7 @@ rule surplus_branch_decomposition(
 ) {
     require collateral > debt;                                    // surplus exists
     require alchemistCurrentCollateralization >= alchemistMinimumCollateralization; // not the high-LTV branch
+    require targetCollateralization > 1000000000000000000;        // avoids denom underflow/div-by-zero revert
     require to_mathint(collateral) * feeBps <= max_uint256;
     require to_mathint(targetCollateralization) * debt <= max_uint256;
 
