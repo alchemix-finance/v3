@@ -1,80 +1,138 @@
 #!/usr/bin/env bash
 #
-# Runs the local (offline) Certora prover against an AlchemistV3 spec.
+# Runs the Certora prover against a spec — locally or in the cloud.
 #
 # Usage:
-#   ./certora/scripts/run.sh <spec_name>
-#   ./certora/scripts/run.sh calculateLiquidation
-#   ./certora/scripts/run.sh normalization
-#   ./certora/scripts/run.sh feeBounds
-#   ./certora/scripts/run.sh conservation
-#   ./certora/scripts/run.sh collateralizationInvariant
+#   ./certora/scripts/run.sh [--cloud] <spec_name>
+#   ./certora/scripts/run.sh alchemist            # local (default)
+#   ./certora/scripts/run.sh --cloud alchemist    # certora cloud
+#   ./certora/scripts/run.sh transmuter
+#   ./certora/scripts/run.sh myt
+#   ./certora/scripts/run.sh global               # not yet functional
 #
-# The prover is a self-built, offline build at /tmp/certora-build (NOT the
-# certora-cli cloud product). Local run mode is auto-detected: setting
-# CERTORA=<dir> causes the wrapper to find emv.jar there, which makes
-# Util.is_local() return true (no cloud request is made).
+# Modes:
+#   --local  (default)  Uses the self-built offline prover at
+#                       /tmp/certora-build.  Sets CERTORA=<dir> so the
+#                       wrapper finds emv.jar and runs locally.
+#   --cloud             Uses the official certora-cli (certoraRun on PATH).
+#                       Uploads to the Certora cloud.  Requires CERTORA_KEY.
 #
-# Compiler flags:
+# Compiler flags (both modes):
 #   --solc_via_ir   is REQUIRED — without it solc fails with "Stack too deep".
-#   --solc_optimize is deliberately OMIT. The via_ir optimizer (even at a low
-#                   runs value) produces bytecode whose internal-function
-#                   annotations the prover cannot reconstruct, crashing the
-#                   control-flow-graph build ("Incoherent graph" /
-#                   FUNCTION_BUILDER errors) on functions like _forceRepay.
-#                   The optimizer only changes gas/representation, not logical
-#                   results, so verifying unoptimized bytecode proves the same
-#                   properties.
-# Prover JVM flags:
-#   --java_args "-Xmx10g"  raises the JVM max heap (default is ~25% of RAM,
-#                          ~3.75 GB here), which is insufficient — analyzing
-#                          all of AlchemistV3's internal functions during the
-#                          global build phase overflows the default heap
-#                          (OutOfMemoryError: Java heap space). 20 GB leans on
-#                          swap (15 GB RAM + 31 GB swap) but gives ample headroom.
+#   --solc_optimize is deliberately OMIT. The via_ir optimizer produces
+#                   bytecode whose internal-function annotations the prover
+#                   cannot reconstruct, crashing the CFG build.
+#
+# Local-only flags:
+#   --java_args "-Xmx20g"  Raises JVM max heap (default ~25% of RAM is
+#                          insufficient for AlchemistV3's global build phase).
+#                          20 GB leans on swap (15 GB RAM + 31 GB swap).
 set -euo pipefail
 
-SPEC_NAME="${1:?usage: $0 <spec_name>}"
+# -----------------------------------------------------------------------
+# Parse mode flag
+# -----------------------------------------------------------------------
+MODE="local"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --cloud) MODE="cloud"; shift ;;
+        --local) MODE="local"; shift ;;
+        --) shift; break ;;
+        -*) echo "unknown flag: $1" >&2; exit 1 ;;
+        *) break ;;
+    esac
+done
+
+SPEC_NAME="${1:?usage: $0 [--cloud|--local] <spec_name>}"
 SPEC="certora/specs/${SPEC_NAME}.spec"
 
 [[ -f "$SPEC" ]] || { echo "spec not found: $SPEC" >&2; exit 1; }
 
-CERTORA_BUILD="${CERTORA_BUILD:-/tmp/certora-build}"
-export CERTORA="$CERTORA_BUILD"        # tells the wrapper where its scripts + emv.jar live
-
 # solc 0.8.28 (selected via solc-select). certora calls `solc` off PATH.
 command -v solc >/dev/null || { echo "solc not on PATH" >&2; exit 1; }
 
-CERTORA_BIN="python3 ${CERTORA_BUILD}/certoraRun.py"
-
-# End-to-end specs use the scene harness with typed anchors; pure-function
-# specs use the original lightweight harness.
+# -----------------------------------------------------------------------
+# Select spec harness + sources
+# -----------------------------------------------------------------------
 case "$SPEC_NAME" in
-    conservation|collateralizationInvariant)
+    alchemist)
         HARNESS="AlchemistV3SceneHarness"
         SOURCES=(
             certora/harnesses/AlchemistV3SceneHarness.sol
             src/AlchemistV3.sol
         )
         ;;
-    *)
-        HARNESS="AlchemistV3Harness"
+    transmuter)
+        HARNESS="TransmuterSceneHarness"
         SOURCES=(
-            certora/harnesses/AlchemistV3Harness.sol
-            src/AlchemistV3.sol
+            certora/harnesses/TransmuterSceneHarness.sol
+            src/Transmuter.sol
         )
+        ;;
+    myt)
+        HARNESS="MYTSceneHarness"
+        SOURCES=(
+            certora/harnesses/MYTSceneHarness.sol
+            lib/vault-v2/src/VaultV2.sol
+        )
+        ;;
+    global)
+        echo "global spec not yet functional — GlobalSceneHarness not implemented" >&2
+        exit 1
+        ;;
+    *)
+        echo "unknown spec: $SPEC_NAME" >&2
+        echo "valid specs: alchemist, transmuter, myt, global" >&2
+        exit 1
         ;;
 esac
 
-echo "==> Verifying ${SPEC_NAME} with the local prover (via_ir, no optimizer)"
-echo "    Harness: ${HARNESS}"
+# -----------------------------------------------------------------------
+# Build common args (shared between local and cloud)
+# -----------------------------------------------------------------------
+COMMON_ARGS=(
+    --verify "${HARNESS}":"${SPEC}"
+    --solc solc
+    --solc_allow_path .
+    --solc_via_ir
+    --packages "@openzeppelin/contracts=lib/openzeppelin-contracts/contracts"
+)
 
+# -----------------------------------------------------------------------
+# Mode-specific setup
+# -----------------------------------------------------------------------
+if [[ "$MODE" == "local" ]]; then
+    CERTORA_BUILD="${CERTORA_BUILD:-/tmp/certora-build}"
+    [[ -f "${CERTORA_BUILD}/emv.jar" ]] || { echo "emv.jar not found at ${CERTORA_BUILD}/emv.jar" >&2; exit 1; }
+
+    export CERTORA="$CERTORA_BUILD"
+    CERTORA_BIN="python3 ${CERTORA_BUILD}/certoraRun.py"
+    EXTRA_ARGS=(--java_args "-Xmx20g")
+    MSG="local prover: ${SPEC_NAME}"
+
+    echo "==> Verifying ${SPEC_NAME} locally (via_ir, no optimizer, 20g heap)"
+else
+    command -v certoraRun >/dev/null || { echo "certoraRun not on PATH — install certora-cli (pip install certora-cli)" >&2; exit 1; }
+    [[ -n "${CERTORA_KEY:-}" ]] || { echo "CERTORA_KEY not set — required for cloud runs" >&2; exit 1; }
+
+    # Ensure CERTORA env doesn't point at the local build
+    unset CERTORA
+
+    CERTORA_BIN="certoraRun"
+    EXTRA_ARGS=()
+    MSG="cloud prover: ${SPEC_NAME}"
+
+    echo "==> Verifying ${SPEC_NAME} in the Certora cloud (via_ir, no optimizer)"
+fi
+
+echo "    Harness: ${HARNESS}"
+echo "    Mode:    ${MODE}"
+
+# -----------------------------------------------------------------------
+# Run
+# -----------------------------------------------------------------------
 $CERTORA_BIN \
     "${SOURCES[@]}" \
-    --verify "${HARNESS}":"${SPEC}" \
-    --solc solc \
-    --solc_allow_path . \
-    --solc_via_ir \
-    --java_args "-Xmx20g" \
-    --packages "@openzeppelin/contracts=lib/openzeppelin-contracts/contracts" \
-    --msg "local prover: ${SPEC_NAME}"
+    "${COMMON_ARGS[@]}" \
+    "${EXTRA_ARGS[@]}" \
+    --msg "${MSG}"

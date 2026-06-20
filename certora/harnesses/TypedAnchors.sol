@@ -11,10 +11,9 @@ import {IAlchemistV3} from "../../src/interfaces/IAlchemistV3.sol";
 ///   3. Metadata — decimals (during initialize, which we bypass)
 ///
 /// The anchor implements all three with concrete, simple arithmetic so the
-/// prover reasons about real accounting.  A performance-fee mechanism models
-/// VaultV2 `accrueInterest` share-minting to a fee-collector EOA that is
-/// outside the actor set, exercising the dilution path that reduces
-/// `convertToAssets` for all holders (including Alchemix).
+/// prover reasons about real accounting.  A performance-fee field exists to
+/// verify the ≤ 5 % cap (feeBounds / cfg rules); the fee is on yield only
+/// and does NOT affect position collateralization.
 contract VaultAnchor {
     // -----------------------------------------------------------------------
     // ERC20 metadata
@@ -92,11 +91,10 @@ contract VaultAnchor {
     // Performance fee (environment action — not called by Alchemix)
     // -----------------------------------------------------------------------
 
-    /// @notice Models VaultV2 `accrueInterest` performance-fee charging.
+    /// @notice VaultV2 performance-fee field (verification target: ≤ 5 % cap).
     ///
-    /// Mints shares to `performanceFeeRecipient` proportional to the yield
-    /// gain times the fee rate, diluting all existing holders.  This is the
-    /// sole mechanism by which value leaks out of the in-scene actor set.
+    /// The fee is on yield performance only and does NOT affect collateral.
+    /// Not exercised as an environment action in the current scene.
     function takePerformanceFee(uint256 yieldAssets) external {
         if (yieldAssets == 0 || performanceFee == 0) return;
         uint256 feeAssets = yieldAssets * uint256(performanceFee) / 10_000;

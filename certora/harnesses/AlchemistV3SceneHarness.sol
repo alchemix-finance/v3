@@ -165,6 +165,10 @@ contract AlchemistV3SceneHarness is AlchemistV3 {
         return vault.convertToAssets(shares);
     }
 
+    function __vaultConvertToShares(uint256 assets) external view returns (uint256) {
+        return vault.convertToShares(assets);
+    }
+
     function __transmuterTotalLocked() external view returns (uint256) {
         return transmuterAnchor.totalLocked();
     }
@@ -180,16 +184,13 @@ contract AlchemistV3SceneHarness is AlchemistV3 {
     // -----------------------------------------------------------------------
     // Environment-action wrappers (so Certora `invariant` explores them)
     // -----------------------------------------------------------------------
-    // These model external events (vault yield, fee accrual, transmuter
+    // These model external events (vault yield, transmuter
     // staking/claiming) that happen independently of Alchemix's own
     // functions.  Without wrappers, `invariant` would only check after
     // calls to Alchemix itself.
 
-    function __envVaultTakePerformanceFee(uint256 yieldAssets) external {
-        vault.takePerformanceFee(yieldAssets);
-    }
-
     function __envVaultSetTotalAssets(uint256 assets) external {
+        require(assets > 0 || vault.totalSupply() == 0, "cannot zero assets with supply");
         vault.__setTotalAssets(assets);
     }
 
@@ -207,5 +208,99 @@ contract AlchemistV3SceneHarness is AlchemistV3 {
 
     function __envTransmuterSetQueryGraph(uint256 value) external {
         transmuterAnchor.__setQueryGraphResult(value);
+    }
+
+    // -----------------------------------------------------------------------
+    // Mutation wrappers (mint vault shares / debt tokens as needed so
+    // the prover can exercise deposit, mint, withdraw, repay, burn).
+    // Without these, every state-changing function reverts because the
+    // caller has no vault shares, and ALL conservation invariants are
+    // vacuously true.
+    // -----------------------------------------------------------------------
+
+    /// @notice Deposit collateral into a new position owned by the harness.
+    /// Returns the tokenId so the prover can reference it in later calls.
+    function __deposit(uint256 amount) external returns (uint256 tokenId) {
+        vault.__mintShares(address(this), amount);
+        (tokenId, ) = this.deposit(amount, address(this), 0);
+    }
+
+    /// @notice Mint debt (synthetics) against an existing position.
+    function __mint(uint256 tokenId, uint256 amount) external {
+        this.mint(tokenId, amount, address(this));
+    }
+
+    /// @notice Withdraw collateral from a position owned by the harness.
+    function __withdraw(uint256 amount, uint256 tokenId) external {
+        this.withdraw(amount, address(this), tokenId);
+    }
+
+    /// @notice Repay debt using vault shares (harness mints them first).
+    function __repay(uint256 amount, uint256 tokenId) external {
+        vault.__mintShares(address(this), amount);
+        this.repay(amount, tokenId);
+    }
+
+    /// @notice Burn debt tokens, reducing totalSyntheticsIssued.
+    function __burn(uint256 tokenId, uint256 amount) external {
+        this.burn(tokenId, amount);
+    }
+
+    /// @notice Self-liquidate a position owned by the harness.
+    function __selfLiquidate(uint256 tokenId) external {
+        this.selfLiquidate(tokenId, address(this));
+    }
+
+    // -----------------------------------------------------------------------
+    // Pure-function wrappers (CVL cannot destructure multi-return values)
+    // -----------------------------------------------------------------------
+
+    function calcLiquidation_grossCollateralToSeize(
+        uint256 collateral, uint256 debt, uint256 targetCollateralization,
+        uint256 alchemistCurrentCollateralization, uint256 alchemistMinimumCollateralization, uint256 feeBps
+    ) external pure returns (uint256) {
+        (uint256 grossCollateralToSeize, , , ) = calculateLiquidation(
+            collateral, debt, targetCollateralization,
+            alchemistCurrentCollateralization, alchemistMinimumCollateralization, feeBps
+        );
+        return grossCollateralToSeize;
+    }
+
+    function calcLiquidation_debtToBurn(
+        uint256 collateral, uint256 debt, uint256 targetCollateralization,
+        uint256 alchemistCurrentCollateralization, uint256 alchemistMinimumCollateralization, uint256 feeBps
+    ) external pure returns (uint256) {
+        ( , uint256 debtToBurn, , ) = calculateLiquidation(
+            collateral, debt, targetCollateralization,
+            alchemistCurrentCollateralization, alchemistMinimumCollateralization, feeBps
+        );
+        return debtToBurn;
+    }
+
+    function calcLiquidation_fee(
+        uint256 collateral, uint256 debt, uint256 targetCollateralization,
+        uint256 alchemistCurrentCollateralization, uint256 alchemistMinimumCollateralization, uint256 feeBps
+    ) external pure returns (uint256) {
+        ( , , uint256 fee, ) = calculateLiquidation(
+            collateral, debt, targetCollateralization,
+            alchemistCurrentCollateralization, alchemistMinimumCollateralization, feeBps
+        );
+        return fee;
+    }
+
+    function calcLiquidation_outsourcedFee(
+        uint256 collateral, uint256 debt, uint256 targetCollateralization,
+        uint256 alchemistCurrentCollateralization, uint256 alchemistMinimumCollateralization, uint256 feeBps
+    ) external pure returns (uint256) {
+        ( , , , uint256 outsourcedFee) = calculateLiquidation(
+            collateral, debt, targetCollateralization,
+            alchemistCurrentCollateralization, alchemistMinimumCollateralization, feeBps
+        );
+        return outsourcedFee;
+    }
+
+    /// @dev CVL only: set the debt<->underlying conversion factor directly.
+    function __setUnderlyingConversionFactor(uint256 v) external {
+        underlyingConversionFactor = v;
     }
 }
