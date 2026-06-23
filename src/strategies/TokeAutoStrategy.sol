@@ -34,6 +34,28 @@ interface IERC4626Like is IERC4626 {
     }
 }
 
+struct TokeSwapRoute {
+    address fromToken;
+    address toToken;
+    address target;
+    bytes data;
+}
+
+struct TokeRedeemParams {
+    uint256 minAmountOut;
+    TokeSwapRoute[] customRoutes;
+}
+
+interface IAutopilotRouterWithRoutes {
+    function redeemWithRoutes(
+        IERC4626 vault,
+        address to,
+        uint256 shares,
+        uint256 minAmountOut,
+        TokeSwapRoute[] calldata customRoutes
+    ) external payable returns (uint256 amountOut);
+}
+
 /**
  * @title TokeAutoStrategy
  * @notice Generic Tokemak auto-vault strategy with rewarder staking.
@@ -49,6 +71,7 @@ contract TokeAutoStrategy is MYTStrategy {
     IERC4626Like public immutable autoVault;
     IMainRewarder public immutable rewarder;
     address public immutable tokeRewardsToken;
+    IAutopilotRouterWithRoutes public immutable autopilotRouter;
 
     constructor(
         address _myt,
@@ -56,15 +79,18 @@ contract TokeAutoStrategy is MYTStrategy {
         address _asset,
         address _autoVault,
         address _rewarder,
-        address _tokeRewardsToken
+        address _tokeRewardsToken,
+        address _autopilotRouter
     ) MYTStrategy(_myt, _params) {
         require(_asset == MYT.asset(), "Vault asset != MYT asset");
         require(_tokeRewardsToken != address(0), "Invalid rewards token");
+        require(_autopilotRouter != address(0), "Zero autopilot router");
 
         mytAsset = IERC20(_asset);
         autoVault = IERC4626Like(_autoVault);
         rewarder = IMainRewarder(_rewarder);
         tokeRewardsToken = _tokeRewardsToken;
+        autopilotRouter = IAutopilotRouterWithRoutes(_autopilotRouter);
     }
 
     function _allocate(uint256 amount) internal virtual override returns (uint256) {
@@ -134,6 +160,63 @@ contract TokeAutoStrategy is MYTStrategy {
         TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
         return amount;
     }
+
+    function _deallocate(uint256 amount, bytes memory data) internal virtual override returns (uint256) {
+        uint256 assetBalance = _idleAssets();
+        if (assetBalance >= amount) {
+            TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
+            return amount;
+        }
+
+        require(address(autopilotRouter) != address(0), "Zero autopilot router");
+        TokeRedeemParams memory redeemParams = abi.decode(data, (TokeRedeemParams));
+
+        uint256 shortfall = amount - assetBalance;
+        require(redeemParams.minAmountOut >= shortfall, "Min out below shortfall");
+
+        uint256 totalAssetsForWithdraw = autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
+        uint256 totalSupply = autoVault.totalSupply();
+        uint256 sharesNeeded = autoVault.convertToShares(
+            shortfall,
+            totalAssetsForWithdraw,
+            totalSupply,
+            IERC4626Like.Rounding.Up
+        );
+
+        uint256 directShares = autoVault.balanceOf(address(this));
+        uint256 totalSharesAvailable = directShares + rewarder.balanceOf(address(this));
+        sharesNeeded = Math.max(sharesNeeded, MIN_SHARES);
+        if (sharesNeeded > totalSharesAvailable) sharesNeeded = totalSharesAvailable;
+
+        require(sharesNeeded > 0, "No shares available");
+        require(
+            autoVault.convertToAssets(sharesNeeded, totalAssetsForWithdraw, totalSupply, IERC4626Like.Rounding.Down) > 0,
+            "Zero redeemable assets"
+        );
+
+        if (sharesNeeded > directShares) {
+            rewarder.withdraw(address(this), sharesNeeded - directShares, false);
+        }
+
+        require(autoVault.balanceOf(address(this)) >= sharesNeeded, "Insufficient unstaked shares");
+
+        TokenUtils.safeApprove(address(autoVault), address(autopilotRouter), sharesNeeded);
+        uint256 balanceBefore = TokenUtils.safeBalanceOf(address(mytAsset), address(this));
+        autopilotRouter.redeemWithRoutes(
+            IERC4626(address(autoVault)),
+            address(this),
+            sharesNeeded,
+            redeemParams.minAmountOut,
+            redeemParams.customRoutes
+        );
+        uint256 received = TokenUtils.safeBalanceOf(address(mytAsset), address(this)) - balanceBefore;
+        TokenUtils.safeApprove(address(autoVault), address(autopilotRouter), 0);
+
+        require(received >= shortfall, "Insufficient redeem output");
+        require(TokenUtils.safeBalanceOf(address(mytAsset), address(this)) >= amount, "Withdraw amount insufficient");
+        TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
+        return amount;
+    }
         
     function _totalValue() internal view virtual override returns (uint256) {
         uint256 shares = rewarder.balanceOf(address(this)) + autoVault.balanceOf(address(this));
@@ -196,6 +279,4 @@ contract TokeAutoStrategy is MYTStrategy {
     function _isProtectedToken(address token) internal view virtual override returns (bool) {
         return token == MYT.asset() || token == address(autoVault);
     }
-
-
 }

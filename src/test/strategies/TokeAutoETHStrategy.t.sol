@@ -2,11 +2,13 @@
 pragma solidity 0.8.28;
 // Adjust these imports to your layout
 
-import {TokeAutoStrategy} from "../../strategies/TokeAutoStrategy.sol";
+import {TokeAutoStrategy, TokeRedeemParams, TokeSwapRoute} from "../../strategies/TokeAutoStrategy.sol";
 import {BaseStrategyTest, RevertContext} from "../BaseStrategyTest.sol";
+import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
 interface IRootOracle {
@@ -88,6 +90,26 @@ contract MockSwapExecutor {
     }
 }
 
+contract MockAutopilotRouter {
+    IERC20 public immutable asset;
+
+    constructor(address _asset) {
+        asset = IERC20(_asset);
+    }
+
+    function redeemWithRoutes(
+        IERC4626 vault,
+        address to,
+        uint256 shares,
+        uint256 minAmountOut,
+        TokeSwapRoute[] calldata
+    ) external returns (uint256 amountOut) {
+        IERC20(address(vault)).transferFrom(msg.sender, address(this), shares);
+        asset.transfer(to, minAmountOut);
+        return minAmountOut;
+    }
+}
+
 contract MockTokeAutoEthStrategy is TokeAutoStrategy {
     constructor(
         address _myt,
@@ -95,14 +117,16 @@ contract MockTokeAutoEthStrategy is TokeAutoStrategy {
         address _autoEth,
         address _rewarder,
         address _weth,
-        address _tokeRewardsToken
-    ) TokeAutoStrategy(_myt, _params, _weth, _autoEth, _rewarder, _tokeRewardsToken) {}
+        address _tokeRewardsToken,
+        address _autopilotRouter
+    ) TokeAutoStrategy(_myt, _params, _weth, _autoEth, _rewarder, _tokeRewardsToken, _autopilotRouter) {}
 }
 
 contract TokeAutoETHStrategyTest is BaseStrategyTest {
     address public constant TOKE_AUTO_ETH_VAULT = 0x0A2b94F6871c1D7A32Fe58E1ab5e6deA2f114E56;
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant REWARDER = 0x60882D6f70857606Cdd37729ccCe882015d1755E;
+    address public constant AUTOPILOT_ROUTER = 0x39ff6d21204B919441d17bef61D19181870835A2;
     address public constant ORACLE = 0x61F8BE7FD721e80C0249829eaE6f0DAf21bc2CaC;
     address public constant TOKE = 0x2e9d63788249371f1DFC918a52f8d799F4a38C94;
     // Error(string) selector (0x08c379a0), observed in Tokemak traces.
@@ -131,7 +155,7 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
     }
 
     function createStrategy(address vault, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
-        return address(new MockTokeAutoEthStrategy(vault, params, TOKE_AUTO_ETH_VAULT, REWARDER, WETH, TOKE));
+        return address(new MockTokeAutoEthStrategy(vault, params, TOKE_AUTO_ETH_VAULT, REWARDER, WETH, TOKE, AUTOPILOT_ROUTER));
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {
@@ -235,6 +259,59 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
         assertGt(idleWeth, 0, "Idle WETH should remain on strategy after direct deallocate");
         assertApproxEqRel(IMYTStrategy(strategy).realAssets(), idleWeth, 1e16);
         vm.stopPrank();
+    }
+
+    function test_deallocateWithSwap_redeems_with_custom_routes() public {
+        uint256 amountToAllocate = 10e18;
+        uint256 amountToDeallocate = 1e18;
+
+        MockAutopilotRouter router = new MockAutopilotRouter(WETH);
+        address localStrategy =
+            address(new MockTokeAutoEthStrategy(vault, strategyConfig, TOKE_AUTO_ETH_VAULT, REWARDER, WETH, TOKE, address(router)));
+
+        vm.startPrank(vault);
+        deal(testConfig.vaultAsset, localStrategy, amountToAllocate);
+        IMYTStrategy(localStrategy).allocate(getVaultParams(), amountToAllocate, "", address(vault));
+        vm.stopPrank();
+
+        deal(WETH, address(router), amountToDeallocate);
+
+        TokeSwapRoute[] memory routes = new TokeSwapRoute[](0);
+        TokeRedeemParams memory redeemParams =
+            TokeRedeemParams({minAmountOut: amountToDeallocate, customRoutes: routes});
+        IMYTStrategy.SwapParams memory swapParams =
+            IMYTStrategy.SwapParams({txData: abi.encode(redeemParams), minIntermediateOut: 0});
+        IMYTStrategy.VaultAdapterParams memory params =
+            IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: swapParams});
+
+        vm.prank(vault);
+        IMYTStrategy(localStrategy).deallocate(abi.encode(params), amountToDeallocate, "", address(vault));
+
+        assertGe(IERC20(WETH).balanceOf(localStrategy), amountToDeallocate, "strategy should hold deallocated WETH");
+        assertGt(IERC20(TOKE_AUTO_ETH_VAULT).balanceOf(address(router)), 0, "router should pull shares");
+    }
+
+    function test_allocator_deallocateWithSwap_redeems_with_custom_routes() public {
+        uint256 amountToAllocate = 10e18;
+        uint256 amountToDeallocate = 1e18;
+
+        MockAutopilotRouter router = new MockAutopilotRouter(WETH);
+        vm.etch(AUTOPILOT_ROUTER, address(router).code);
+        deal(WETH, AUTOPILOT_ROUTER, amountToDeallocate);
+
+        vm.startPrank(admin);
+        IAllocator(allocator).allocate(strategy, amountToAllocate);
+
+        TokeSwapRoute[] memory routes = new TokeSwapRoute[](0);
+        TokeRedeemParams memory redeemParams =
+            TokeRedeemParams({minAmountOut: amountToDeallocate, customRoutes: routes});
+
+        uint256 vaultBalanceBefore = IERC20(WETH).balanceOf(vault);
+        IAllocator(allocator).deallocateWithSwap(strategy, amountToDeallocate, abi.encode(redeemParams));
+        vm.stopPrank();
+
+        assertEq(IERC20(WETH).balanceOf(vault) - vaultBalanceBefore, amountToDeallocate, "vault should receive WETH");
+        assertGt(IERC20(TOKE_AUTO_ETH_VAULT).balanceOf(AUTOPILOT_ROUTER), 0, "router should pull shares");
     }
 
     function test_claimRewards_emits_event_and_vault_receives_asset() public {
