@@ -47,6 +47,13 @@ struct TokeRedeemParams {
 }
 
 interface IAutopilotRouterWithRoutes {
+    function redeem(
+        IERC4626 vault,
+        address to,
+        uint256 shares,
+        uint256 minAmountOut
+    ) external payable returns (uint256 amountOut);
+
     function redeemWithRoutes(
         IERC4626 vault,
         address to,
@@ -112,7 +119,7 @@ contract TokeAutoStrategy is MYTStrategy {
         return assetsReceived;
     }
 
-    function _deallocate(uint256 amount) internal virtual override returns (uint256) {
+    /* function _deallocate(uint256 amount) internal virtual override returns (uint256) {
         uint256 assetBalance = _idleAssets();
 
         if (assetBalance < amount) {
@@ -156,6 +163,54 @@ contract TokeAutoStrategy is MYTStrategy {
             }
         }
 
+        require(TokenUtils.safeBalanceOf(address(mytAsset), address(this)) >= amount, "Withdraw amount insufficient");
+        TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
+        return amount;
+    } */
+
+
+    function _deallocate(uint256 amount) internal virtual override returns (uint256) {
+        uint256 assetBalance = _idleAssets();
+        if (assetBalance >= amount) {
+            TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
+            return amount;
+        }
+
+        uint256 shortfall = amount - assetBalance;
+        uint256 maxAssetIn = (shortfall * BASIS_POINTS + (BASIS_POINTS - params.slippageBPS) - 1)
+            / (BASIS_POINTS - params.slippageBPS);
+        uint256 totalAssetsForWithdraw = autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
+        uint256 totalSupply = autoVault.totalSupply();
+        uint256 sharesNeeded = autoVault.convertToShares(
+            maxAssetIn,
+            totalAssetsForWithdraw,
+            totalSupply,
+            IERC4626Like.Rounding.Up
+        );
+
+        uint256 directShares = autoVault.balanceOf(address(this));
+        uint256 totalSharesAvailable = directShares + rewarder.balanceOf(address(this));
+        sharesNeeded = Math.max(sharesNeeded, MIN_SHARES);
+        if (sharesNeeded > totalSharesAvailable) sharesNeeded = totalSharesAvailable;
+        require(sharesNeeded > 0, "No shares available");
+        require(
+            autoVault.convertToAssets(sharesNeeded, totalAssetsForWithdraw, totalSupply, IERC4626Like.Rounding.Down) > 0,
+            "Zero redeemable assets"
+        );
+
+        if (sharesNeeded > directShares) {
+            rewarder.withdraw(address(this), sharesNeeded - directShares, false);
+        }
+
+        require(autoVault.balanceOf(address(this)) >= sharesNeeded, "Insufficient unstaked shares");
+
+        TokenUtils.safeApprove(address(autoVault), address(autopilotRouter), sharesNeeded);
+        uint256 balanceBefore = TokenUtils.safeBalanceOf(address(mytAsset), address(this));
+        autopilotRouter.redeem(IERC4626(address(autoVault)), address(this), sharesNeeded, shortfall);
+        uint256 pulled = TokenUtils.safeBalanceOf(address(mytAsset), address(this)) - balanceBefore;
+        TokenUtils.safeApprove(address(autoVault), address(autopilotRouter), 0);
+
+        require(pulled >= shortfall, "Insufficient redeem output");
         require(TokenUtils.safeBalanceOf(address(mytAsset), address(this)) >= amount, "Withdraw amount insufficient");
         TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
         return amount;

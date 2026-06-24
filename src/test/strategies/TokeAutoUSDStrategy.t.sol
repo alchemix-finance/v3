@@ -7,6 +7,7 @@ import {BaseStrategyTest} from "../BaseStrategyTest.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
 /// @notice Replaces the Tokemak MainRewarder via vm.etch so that
@@ -59,6 +60,25 @@ contract MockSwapExecutor {
     }
 }
 
+contract MockAutopilotRouter {
+    IERC20 public immutable asset;
+
+    constructor(address _asset) {
+        asset = IERC20(_asset);
+    }
+
+    function redeem(
+        IERC4626 vault,
+        address to,
+        uint256 shares,
+        uint256 minAmountOut
+    ) external returns (uint256 amountOut) {
+        IERC20(address(vault)).transferFrom(msg.sender, address(this), shares);
+        asset.transfer(to, minAmountOut);
+        return minAmountOut;
+    }
+}
+
 contract MockTokeAutoUSDStrategy is TokeAutoStrategy {
     constructor(
         address _myt,
@@ -97,7 +117,9 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
     }
 
     function createStrategy(address vault, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
-        return address(new MockTokeAutoUSDStrategy(vault, params, USDC, TOKE_AUTO_USD_VAULT, REWARDER, TOKE, AUTOPILOT_ROUTER));
+        MockAutopilotRouter router = new MockAutopilotRouter(USDC);
+        deal(USDC, address(router), type(uint128).max);
+        return address(new MockTokeAutoUSDStrategy(vault, params, USDC, TOKE_AUTO_USD_VAULT, REWARDER, TOKE, address(router)));
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {

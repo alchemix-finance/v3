@@ -92,9 +92,22 @@ contract MockSwapExecutor {
 
 contract MockAutopilotRouter {
     IERC20 public immutable asset;
+    uint256 public redeemCalls;
 
     constructor(address _asset) {
         asset = IERC20(_asset);
+    }
+
+    function redeem(
+        IERC4626 vault,
+        address to,
+        uint256 shares,
+        uint256 minAmountOut
+    ) external returns (uint256 amountOut) {
+        redeemCalls++;
+        IERC20(address(vault)).transferFrom(msg.sender, address(this), shares);
+        asset.transfer(to, minAmountOut);
+        return minAmountOut;
     }
 
     function redeemWithRoutes(
@@ -259,6 +272,29 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
         assertGt(idleWeth, 0, "Idle WETH should remain on strategy after direct deallocate");
         assertApproxEqRel(IMYTStrategy(strategy).realAssets(), idleWeth, 1e16);
         vm.stopPrank();
+    }
+
+    function test_deallocate_direct_uses_router_redeem_once() public {
+        uint256 amountToAllocate = 10e18;
+        uint256 amountToDeallocate = 1e18;
+
+        MockAutopilotRouter router = new MockAutopilotRouter(WETH);
+        address localStrategy =
+            address(new MockTokeAutoEthStrategy(vault, strategyConfig, TOKE_AUTO_ETH_VAULT, REWARDER, WETH, TOKE, address(router)));
+
+        vm.startPrank(vault);
+        deal(testConfig.vaultAsset, localStrategy, amountToAllocate);
+        IMYTStrategy(localStrategy).allocate(getVaultParams(), amountToAllocate, "", address(vault));
+        vm.stopPrank();
+
+        deal(WETH, address(router), amountToDeallocate);
+
+        vm.prank(vault);
+        IMYTStrategy(localStrategy).deallocate(getVaultParams(), amountToDeallocate, "", address(vault));
+
+        assertEq(router.redeemCalls(), 1, "router redeem should be called once");
+        assertGe(IERC20(WETH).balanceOf(localStrategy), amountToDeallocate, "strategy should hold deallocated WETH");
+        assertGt(IERC20(TOKE_AUTO_ETH_VAULT).balanceOf(address(router)), 0, "router should pull shares");
     }
 
     function test_deallocateWithSwap_redeems_with_custom_routes() public {
