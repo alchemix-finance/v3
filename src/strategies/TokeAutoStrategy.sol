@@ -73,12 +73,29 @@ contract TokeAutoStrategy is MYTStrategy {
     uint256 internal constant BASIS_POINTS = 10_000;
     /// @dev Minimum shares to ensure possibleAssets > 0 in TokeAutoETH.redeem
     uint256 internal constant MIN_SHARES = 1e15;
+    /// @dev Per-redeem execution slippage tolerance for the direct path. This is the REAL
+    /// round-trip cost of redeeming from the autoVault (queue + destination swaps), NOT the
+    /// user-facing `params.slippageBPS` haircut. It bounds both the share over-redeem and the
+    /// NAV-anchored output floor, so the worst-case loss on a direct deallocation is
+    /// ~execToleranceBps of the NAV of the shares actually burned.
+    /// @dev Empirical basis (wstETH-backed autoETH autopool, mainnet): honest direct redeems cost
+    /// ~0–4.5 bps for sizes up to 1,500 WETH across ~4 weeks of blocks; 25 bps gives ~5x headroom.
+    /// Re-validate before reusing on a thinner or less tightly-pegged autopool.
+    uint256 public constant DEFAULT_EXEC_TOLERANCE_BPS = 25;
+    /// @dev Hard upper bound for the configurable execution tolerance (mirrors slippage cap).
+    uint256 internal constant MAX_EXEC_TOLERANCE_BPS = 650;
 
     IERC20 public immutable mytAsset;
     IERC4626Like public immutable autoVault;
     IMainRewarder public immutable rewarder;
     address public immutable tokeRewardsToken;
     IAutopilotRouterWithRoutes public immutable autopilotRouter;
+
+    /// @notice Per-redeem execution slippage tolerance (bps) for the direct deallocation path.
+    /// Set at construction and tunable by the owner via {setExecToleranceBps}.
+    uint256 public execToleranceBps;
+
+    event ExecToleranceBpsUpdated(uint256 newExecToleranceBps);
 
     constructor(
         address _myt,
@@ -87,17 +104,27 @@ contract TokeAutoStrategy is MYTStrategy {
         address _autoVault,
         address _rewarder,
         address _tokeRewardsToken,
-        address _autopilotRouter
+        address _autopilotRouter,
+        uint256 _execToleranceBps
     ) MYTStrategy(_myt, _params) {
         require(_asset == MYT.asset(), "Vault asset != MYT asset");
         require(_tokeRewardsToken != address(0), "Invalid rewards token");
         require(_autopilotRouter != address(0), "Zero autopilot router");
+        require(_execToleranceBps < MAX_EXEC_TOLERANCE_BPS, "Exec tolerance too high");
 
         mytAsset = IERC20(_asset);
         autoVault = IERC4626Like(_autoVault);
         rewarder = IMainRewarder(_rewarder);
         tokeRewardsToken = _tokeRewardsToken;
         autopilotRouter = IAutopilotRouterWithRoutes(_autopilotRouter);
+        execToleranceBps = _execToleranceBps;
+    }
+
+    /// @notice Update the per-redeem execution slippage tolerance for the direct deallocation path.
+    function setExecToleranceBps(uint256 newExecToleranceBps) external onlyOwner {
+        require(newExecToleranceBps < MAX_EXEC_TOLERANCE_BPS, "Exec tolerance too high");
+        execToleranceBps = newExecToleranceBps;
+        emit ExecToleranceBpsUpdated(newExecToleranceBps);
     }
 
     function _allocate(uint256 amount) internal virtual override returns (uint256) {
@@ -177,8 +204,11 @@ contract TokeAutoStrategy is MYTStrategy {
         }
 
         uint256 shortfall = amount - assetBalance;
-        uint256 maxAssetIn = (shortfall * BASIS_POINTS + (BASIS_POINTS - params.slippageBPS) - 1)
-            / (BASIS_POINTS - params.slippageBPS);
+        // Over-redeem only by the real execution tolerance (not the user-facing slippageBPS,
+        // which is already applied once on the request side in `_previewAdjustedWithdraw`).
+        uint256 tolerance = execToleranceBps;
+        uint256 maxAssetIn = (shortfall * BASIS_POINTS + (BASIS_POINTS - tolerance) - 1)
+            / (BASIS_POINTS - tolerance);
         uint256 totalAssetsForWithdraw = autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
         uint256 totalSupply = autoVault.totalSupply();
         uint256 sharesNeeded = autoVault.convertToShares(
@@ -193,10 +223,13 @@ contract TokeAutoStrategy is MYTStrategy {
         sharesNeeded = Math.max(sharesNeeded, MIN_SHARES);
         if (sharesNeeded > totalSharesAvailable) sharesNeeded = totalSharesAvailable;
         require(sharesNeeded > 0, "No shares available");
-        require(
-            autoVault.convertToAssets(sharesNeeded, totalAssetsForWithdraw, totalSupply, IERC4626Like.Rounding.Down) > 0,
-            "Zero redeemable assets"
-        );
+
+        // Anchor the redeem floor to the NAV of the shares actually being burned, minus the
+        // execution tolerance. This bounds the worst-case loss to ~EXEC_TOLERANCE_BPS of NAV,
+        // regardless of how much `shortfall` differs from that NAV.
+        uint256 expectedAssets = _redeemableAssets(sharesNeeded);
+        require(expectedAssets > 0, "Zero redeemable assets");
+        uint256 minOut = expectedAssets * (BASIS_POINTS - tolerance) / BASIS_POINTS;
 
         if (sharesNeeded > directShares) {
             rewarder.withdraw(address(this), sharesNeeded - directShares, false);
@@ -206,7 +239,7 @@ contract TokeAutoStrategy is MYTStrategy {
 
         TokenUtils.safeApprove(address(autoVault), address(autopilotRouter), sharesNeeded);
         uint256 balanceBefore = TokenUtils.safeBalanceOf(address(mytAsset), address(this));
-        autopilotRouter.redeem(IERC4626(address(autoVault)), address(this), sharesNeeded, shortfall);
+        autopilotRouter.redeem(IERC4626(address(autoVault)), address(this), sharesNeeded, minOut);
         uint256 pulled = TokenUtils.safeBalanceOf(address(mytAsset), address(this)) - balanceBefore;
         TokenUtils.safeApprove(address(autoVault), address(autopilotRouter), 0);
 
@@ -288,6 +321,19 @@ contract TokeAutoStrategy is MYTStrategy {
 
     function _idleAssets() internal view virtual override returns (uint256) {
         return TokenUtils.safeBalanceOf(address(mytAsset), address(this));
+    }
+
+    /// @notice Withdraw-purpose NAV of `shares` per the autoVault's own accounting.
+    /// @dev Used to anchor redeem floors to the fair value of the shares being burned,
+    /// rather than to the caller-requested amount. The Withdraw purpose uses Tokemak's
+    /// conservative (floor) valuation, which is not moved by spot-AMM manipulation.
+    function _redeemableAssets(uint256 shares) internal view returns (uint256) {
+        return autoVault.convertToAssets(
+            shares,
+            autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw),
+            autoVault.totalSupply(),
+            IERC4626Like.Rounding.Down
+        );
     }
 
     function _previewAdjustedWithdraw(uint256 amount) internal view virtual override returns (uint256) {

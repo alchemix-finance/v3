@@ -57,7 +57,7 @@ contract TokeAutoETHOffchainRoutesTest is Test {
             slippageBPS: 100
         });
 
-        strategy = new TokeAutoStrategy(address(vault), params, WETH, TOKE_AUTO_ETH_VAULT, REWARDER, TOKE, AUTOPILOT_ROUTER);
+        strategy = new TokeAutoStrategy(address(vault), params, WETH, TOKE_AUTO_ETH_VAULT, REWARDER, TOKE, AUTOPILOT_ROUTER, 25);
         _setUpAllocator();
     }
 

@@ -88,7 +88,11 @@ contract MockTokeAutoUSDStrategy is TokeAutoStrategy {
         address _rewarder,
         address _tokeRewardsToken,
         address _autopilotRouter
-    ) TokeAutoStrategy(_myt, _params, _usdc, _autoUSD, _rewarder, _tokeRewardsToken, _autopilotRouter) {}
+    )
+        // Mocked-oracle suite: widen the execution tolerance so the artificial NAV/proceeds gap
+        // does not trip Tokemak's MinAmountError on legitimate deallocations (see ETH suite note).
+        TokeAutoStrategy(_myt, _params, _usdc, _autoUSD, _rewarder, _tokeRewardsToken, _autopilotRouter, 600)
+    {}
 }
 
 contract TokeAutoUSDStrategyTest is BaseStrategyTest {

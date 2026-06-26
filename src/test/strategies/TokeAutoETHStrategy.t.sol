@@ -132,7 +132,13 @@ contract MockTokeAutoEthStrategy is TokeAutoStrategy {
         address _weth,
         address _tokeRewardsToken,
         address _autopilotRouter
-    ) TokeAutoStrategy(_myt, _params, _weth, _autoEth, _rewarder, _tokeRewardsToken, _autopilotRouter) {}
+    )
+        // This suite drives the real AutopoolETH.redeem while mocking only the oracle, which
+        // creates a several-percent gap between convertToAssets (NAV) and realized redeem proceeds.
+        // Production uses the tight DEFAULT_EXEC_TOLERANCE_BPS; here we widen it so the mocked
+        // valuation gap does not trip Tokemak's MinAmountError on legitimate deallocations.
+        TokeAutoStrategy(_myt, _params, _weth, _autoEth, _rewarder, _tokeRewardsToken, _autopilotRouter, 600)
+    {}
 }
 
 contract TokeAutoETHStrategyTest is BaseStrategyTest {

@@ -1066,7 +1066,8 @@ contract MultiStrategyUSDCInvariantTest is Test {
             TOKE_AUTO_USD_VAULT,
             TOKE_REWARDER_USD,
             TOKE,
-            TOKE_AUTOPILOT_ROUTER
+            TOKE_AUTOPILOT_ROUTER,
+            600
         ));
     }
     

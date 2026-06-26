@@ -247,7 +247,8 @@ contract DeployV3ETHScript is Script {
             tokeAutoEth,
             tokeAutoRewarder,
             tokeRewardsToken,
-            tokeAutopilotRouter
+            tokeAutopilotRouter,
+            25 // DEFAULT_EXEC_TOLERANCE_BPS: per-redeem execution slippage tolerance
         );
         strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
@@ -270,7 +271,8 @@ contract DeployV3ETHScript is Script {
             tokeAutoUsd,
             tokeAutoUsdRewarder,
             tokeRewardsToken,
-            tokeAutopilotRouter
+            tokeAutopilotRouter,
+            25 // DEFAULT_EXEC_TOLERANCE_BPS: per-redeem execution slippage tolerance
         );
         strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));

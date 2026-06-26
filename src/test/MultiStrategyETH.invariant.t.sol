@@ -1086,7 +1086,8 @@ contract MultiStrategyETHInvariantTest is Test {
             TOKE_AUTO_ETH_VAULT,
             TOKE_REWARDER_ETH,
             TOKE,
-            TOKE_AUTOPILOT_ROUTER
+            TOKE_AUTOPILOT_ROUTER,
+            600
         ));
     }
     
