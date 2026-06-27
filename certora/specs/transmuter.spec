@@ -14,6 +14,19 @@
  *   LOCK — totalLocked / totalActiveLocked conservation
  */
 
+using TransmuterSceneHarness as trans;
+using MockToken as tokenC;
+using MockAlchemist as alchC;
+
+links {
+    trans.syntheticToken => tokenC;
+    trans.alchemist => alchC;
+    trans.mockMYT => tokenC;
+    trans.mockSynthetic => tokenC;
+    trans.mockUnderlying => tokenC;
+    trans.mockAlchemist => alchC;
+}
+
 methods {
     // --- Transmuter state getters ---
     function exitFee() external returns (uint256) envfree;

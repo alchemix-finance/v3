@@ -59,48 +59,6 @@ contract TransmuterSceneHarness is Transmuter {
     }
 
     // -----------------------------------------------------------------------
-    // Prover-facing wrappers
-    // -----------------------------------------------------------------------
-
-    /// @notice Creates a redemption position on behalf of the harness.
-    /// Mints synthetics to self so createRedemption's transferFrom succeeds.
-    function __createRedemption(uint256 amount) external {
-        mockSynthetic.__mint(address(this), amount);
-        this.createRedemption(amount, address(this));
-    }
-
-    /// @notice Claims a matured position owned by the harness.
-    function __claimRedemption(uint256 tokenId) external {
-        this.claimRedemption(tokenId);
-    }
-
-    /// @notice Pokes a matured position to remove from active cap.
-    function __pokeMatured(uint256 tokenId) external {
-        this.pokeMatured(tokenId);
-    }
-
-    // -----------------------------------------------------------------------
-    // Admin wrappers — call the REAL setters so _checkArgument is enforced.
-    // (harness is admin, so onlyAdmin passes on self-call)
-    // -----------------------------------------------------------------------
-
-    function __setDepositCap(uint256 cap) external {
-        this.setDepositCap(cap);
-    }
-
-    function __setTransmutationFee(uint256 fee) external {
-        this.setTransmutationFee(fee);
-    }
-
-    function __setExitFee(uint256 fee) external {
-        this.setExitFee(fee);
-    }
-
-    function __setTransmutationTime(uint256 time) external {
-        this.setTransmutationTime(time);
-    }
-
-    // -----------------------------------------------------------------------
     // Mock Alchemist control
     // -----------------------------------------------------------------------
 

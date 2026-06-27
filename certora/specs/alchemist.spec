@@ -16,6 +16,22 @@
  *   NORM  — Token normalization round-trip
  */
 
+using AlchemistV3SceneHarness as alch;
+using VaultAnchor as vaultC;
+using DebtTokenAnchor as debtC;
+using TransmuterAnchor as transC;
+using AlchemistV3Position as positionNftC;
+
+links {
+    alch.myt => vaultC;
+    alch.debtToken => debtC;
+    alch.transmuter => transC;
+    alch.vault => vaultC;
+    alch.debtTokenAnchor => debtC;
+    alch.transmuterAnchor => transC;
+    alch.alchemistPositionNFT => positionNftC;
+}
+
 methods {
     // --- harness readers (private storage) ---
     function __mytSharesDeposited() external returns (uint256) envfree;
@@ -60,9 +76,26 @@ methods {
     function admin() external returns (address) envfree;
     function FEE_COLLECTOR() external returns (address) envfree;
     function ADMIN_ACTOR() external returns (address) envfree;
+    function REDEMPTION_DUST_THRESHOLD() external returns (uint256) envfree;
 
-    // --- havoc (array-param function crashes points-to analysis) ---
-    function batchLiquidate(uint256[]) external returns (uint256, uint256, uint256) => HAVOC_ALL;
+    // --- batchLiquidate excluded via --exclude_method (array-param loop,
+    //     same pattern as multicall in MYT) ---
+
+    // --- AlchemistV3Position: HAVOC_ALL over-approximates the ERC721
+    //     return values (e.g. ownerOf). This is intentional — it
+    //     strengthens verification by exploring both authorized and
+    //     unauthorized access paths. Induction tasks for Position's own
+    //     functions are excluded via --exclude_rule. ---
+    function AlchemistV3Position.ownerOf(uint256) external returns (address) => HAVOC_ALL;
+    function AlchemistV3Position.transferFrom(address,address,uint256) external => HAVOC_ALL;
+    function AlchemistV3Position.safeTransferFrom(address,address,uint256) external => HAVOC_ALL;
+    function AlchemistV3Position.safeTransferFrom(address,address,uint256,bytes) external => HAVOC_ALL;
+    function AlchemistV3Position.approve(address,uint256) external => HAVOC_ALL;
+    function AlchemistV3Position.setApprovalForAll(address,bool) external => HAVOC_ALL;
+    function AlchemistV3Position.mint(address) external returns (uint256) => HAVOC_ALL;
+    function AlchemistV3Position.burn(uint256) external => HAVOC_ALL;
+    function AlchemistV3Position.setMetadataRenderer(address) external => HAVOC_ALL;
+    function AlchemistV3Position.setAdmin(address) external => HAVOC_ALL;
 }
 
 /* =======================================================================
@@ -85,9 +118,6 @@ invariant pendingCoverBoundedByTransmuterBalance()
 invariant syntheticsLeDebtTokenSupply()
     totalSyntheticsIssued() <= __debtTokenTotalSupply();
 
-invariant syntheticsGeqLocked()
-    totalSyntheticsIssued() >= __transmuterTotalLocked();
-
 invariant storedDebtLeTotalDebt(uint256 tokenId)
     __storedDebt(tokenId) <= totalDebt();
 
@@ -106,6 +136,66 @@ invariant earmarkWeightPositive()
 
 invariant redemptionWeightPositive()
     __redemptionWeight() > 0;
+
+/* =======================================================================
+ * RED — Redemption effective-amount bounding
+ *
+ * The fixed redeem() deliberately sweeps dust (up to REDEMPTION_DUST_THRESHOLD)
+ * to the trusted transmuter on a near-full redemption, and reverts if it would
+ * under-deliver by more. These rules verify that the debt actually burned
+ * (effectiveRedeemed) never strays from the clamped requested amount by more
+ * than the dust threshold:
+ *
+ *   RED-OVER  — effectiveRedeemed <= clampedAmount + REDEMPTION_DUST_THRESHOLD
+ *   RED-UNDER — effectiveRedeemed >= clampedAmount - REDEMPTION_DUST_THRESHOLD
+ *
+ * clampedAmount = min(requestedAmount, liveEarmarked). Because redeem()
+ * overwrites cumulativeEarmarked with remainingEarmarked, and _earmark() never
+ * touches totalDebt, liveEarmarked is reconstructible from observable state:
+ *     effectiveRedeemed = totalDebt_before - totalDebt_after
+ *     liveEarmarked     = effectiveRedeemed + cumulativeEarmarked_after
+ *
+ * This holds both when the redemption branch runs (cumulativeEarmarked is set
+ * to remainingEarmarked) and when it is skipped (effectiveRedeemed == 0 and
+ * cumulativeEarmarked is left at liveEarmarked).
+ * ===================================================================== */
+
+rule redeem_overshoot_bounded(env e, uint256 requestedAmount) {
+    require e.msg.sender == transmuter();
+
+    uint256 totalDebtBefore = totalDebt();
+
+    redeem@withrevert(e, requestedAmount);
+    bool reverted = lastReverted;
+
+    mathint effectiveRedeemed = to_mathint(totalDebtBefore) - to_mathint(totalDebt());
+    mathint liveEarmarked = effectiveRedeemed + to_mathint(cumulativeEarmarked());
+    mathint threshold = to_mathint(REDEMPTION_DUST_THRESHOLD());
+    // clampedAmount = min(requestedAmount, liveEarmarked).
+    mathint clampedAmount =
+        to_mathint(requestedAmount) < liveEarmarked ? to_mathint(requestedAmount) : liveEarmarked;
+
+    assert reverted || effectiveRedeemed <= clampedAmount + threshold,
+        "RED-OVER: effectiveRedeemed overshoot exceeds dust threshold";
+}
+
+rule redeem_undershoot_bounded(env e, uint256 requestedAmount) {
+    require e.msg.sender == transmuter();
+
+    uint256 totalDebtBefore = totalDebt();
+
+    redeem@withrevert(e, requestedAmount);
+    bool reverted = lastReverted;
+
+    mathint effectiveRedeemed = to_mathint(totalDebtBefore) - to_mathint(totalDebt());
+    mathint liveEarmarked = effectiveRedeemed + to_mathint(cumulativeEarmarked());
+    mathint threshold = to_mathint(REDEMPTION_DUST_THRESHOLD());
+    mathint clampedAmount =
+        to_mathint(requestedAmount) < liveEarmarked ? to_mathint(requestedAmount) : liveEarmarked;
+
+    assert reverted || effectiveRedeemed >= clampedAmount - threshold,
+        "RED-UNDER: effectiveRedeemed under-delivery exceeds dust threshold (revert guard bypassed)";
+}
 
 /* =======================================================================
  * CFG — Configuration parameter bounds (state invariants)

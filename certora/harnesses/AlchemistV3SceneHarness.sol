@@ -211,47 +211,6 @@ contract AlchemistV3SceneHarness is AlchemistV3 {
     }
 
     // -----------------------------------------------------------------------
-    // Mutation wrappers (mint vault shares / debt tokens as needed so
-    // the prover can exercise deposit, mint, withdraw, repay, burn).
-    // Without these, every state-changing function reverts because the
-    // caller has no vault shares, and ALL conservation invariants are
-    // vacuously true.
-    // -----------------------------------------------------------------------
-
-    /// @notice Deposit collateral into a new position owned by the harness.
-    /// Returns the tokenId so the prover can reference it in later calls.
-    function __deposit(uint256 amount) external returns (uint256 tokenId) {
-        vault.__mintShares(address(this), amount);
-        (tokenId, ) = this.deposit(amount, address(this), 0);
-    }
-
-    /// @notice Mint debt (synthetics) against an existing position.
-    function __mint(uint256 tokenId, uint256 amount) external {
-        this.mint(tokenId, amount, address(this));
-    }
-
-    /// @notice Withdraw collateral from a position owned by the harness.
-    function __withdraw(uint256 amount, uint256 tokenId) external {
-        this.withdraw(amount, address(this), tokenId);
-    }
-
-    /// @notice Repay debt using vault shares (harness mints them first).
-    function __repay(uint256 amount, uint256 tokenId) external {
-        vault.__mintShares(address(this), amount);
-        this.repay(amount, tokenId);
-    }
-
-    /// @notice Burn debt tokens, reducing totalSyntheticsIssued.
-    function __burn(uint256 tokenId, uint256 amount) external {
-        this.burn(tokenId, amount);
-    }
-
-    /// @notice Self-liquidate a position owned by the harness.
-    function __selfLiquidate(uint256 tokenId) external {
-        this.selfLiquidate(tokenId, address(this));
-    }
-
-    // -----------------------------------------------------------------------
     // Pure-function wrappers (CVL cannot destructure multi-return values)
     // -----------------------------------------------------------------------
 

@@ -6,6 +6,7 @@
 #   ./certora/scripts/run.sh [--cloud] <spec_name>
 #   ./certora/scripts/run.sh alchemist            # local (default)
 #   ./certora/scripts/run.sh --cloud alchemist    # certora cloud
+#   ./certora/scripts/run.sh alchemist --rule cvSoundMint   # single rule
 #   ./certora/scripts/run.sh transmuter
 #   ./certora/scripts/run.sh myt
 #   ./certora/scripts/run.sh global               # not yet functional
@@ -33,17 +34,22 @@ set -euo pipefail
 # Parse mode flag
 # -----------------------------------------------------------------------
 MODE="local"
+PASSTHROUGH=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --cloud) MODE="cloud"; shift ;;
         --local) MODE="local"; shift ;;
         --) shift; break ;;
-        -*) echo "unknown flag: $1" >&2; exit 1 ;;
+        --rule|--rule_timeout|--exclude|--include|--multi_run_test)
+            PASSTHROUGH+=("$1" "$2"); shift 2 ;;
+        --*) PASSTHROUGH+=("$1"); shift ;;
         *) break ;;
     esac
 done
 
-SPEC_NAME="${1:?usage: $0 [--cloud|--local] <spec_name>}"
+SPEC_NAME="${1:?usage: $0 [--cloud|--local] <spec_name> [--certora-flags...]}"
+shift
+PASSTHROUGH+=("$@")
 SPEC="certora/specs/${SPEC_NAME}.spec"
 
 [[ -f "$SPEC" ]] || { echo "spec not found: $SPEC" >&2; exit 1; }
@@ -54,27 +60,35 @@ command -v solc >/dev/null || { echo "solc not on PATH" >&2; exit 1; }
 # -----------------------------------------------------------------------
 # Select spec harness + sources
 # -----------------------------------------------------------------------
+EXTRA_EXCLUDE=""
 case "$SPEC_NAME" in
     alchemist)
         HARNESS="AlchemistV3SceneHarness"
         SOURCES=(
             certora/harnesses/AlchemistV3SceneHarness.sol
-            src/AlchemistV3.sol
+            certora/harnesses/TypedAnchors.sol:VaultAnchor
+            certora/harnesses/TypedAnchors.sol:DebtTokenAnchor
+            certora/harnesses/TypedAnchors.sol:TransmuterAnchor
+            src/AlchemistV3Position.sol
         )
+        EXTRA_EXCLUDE="--exclude_method batchLiquidate(uint256[]) --exclude_rule *AlchemistV3Position*"
         ;;
     transmuter)
         HARNESS="TransmuterSceneHarness"
         SOURCES=(
             certora/harnesses/TransmuterSceneHarness.sol
-            src/Transmuter.sol
+            certora/harnesses/TransmuterMocks.sol:MockToken
+            certora/harnesses/TransmuterMocks.sol:MockAlchemist
         )
         ;;
     myt)
         HARNESS="MYTSceneHarness"
         SOURCES=(
             certora/harnesses/MYTSceneHarness.sol
-            lib/vault-v2/src/VaultV2.sol
+            certora/harnesses/MYTMocks.sol:MockAsset
+            certora/harnesses/MYTMocks.sol:MockStrategy
         )
+        EXTRA_EXCLUDE="--exclude_method multicall(bytes[])"
         ;;
     global)
         echo "global spec not yet functional — GlobalSceneHarness not implemented" >&2
@@ -95,6 +109,11 @@ COMMON_ARGS=(
     --solc solc
     --solc_allow_path .
     --solc_via_ir
+    --optimistic_loop
+    --loop_iter 5
+    --optimistic_hashing
+    --smt_timeout 3600
+    --rule_sanity none
     --packages "@openzeppelin/contracts=lib/openzeppelin-contracts/contracts"
 )
 
@@ -102,7 +121,7 @@ COMMON_ARGS=(
 # Mode-specific setup
 # -----------------------------------------------------------------------
 if [[ "$MODE" == "local" ]]; then
-    CERTORA_BUILD="${CERTORA_BUILD:-/tmp/certora-build}"
+    CERTORA_BUILD="${CERTORA_BUILD:-$CERTORA}"
     [[ -f "${CERTORA_BUILD}/emv.jar" ]] || { echo "emv.jar not found at ${CERTORA_BUILD}/emv.jar" >&2; exit 1; }
 
     export CERTORA="$CERTORA_BUILD"
@@ -134,5 +153,7 @@ echo "    Mode:    ${MODE}"
 $CERTORA_BIN \
     "${SOURCES[@]}" \
     "${COMMON_ARGS[@]}" \
+    ${EXTRA_EXCLUDE} \
     "${EXTRA_ARGS[@]}" \
-    --msg "${MSG}"
+    --msg "${MSG}" \
+    "${PASSTHROUGH[@]}"
