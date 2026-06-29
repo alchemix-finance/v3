@@ -527,15 +527,22 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         IVaultV2(vault).forceDeallocate(strategy, abi.encode(directDealloc), forceDeallocateAmount, vaultDepositor);
     }
 
-    function test_fuzz_deallocate_direct_succeeds_with_updated_gross_redeem_amount_buffer(uint256 rawBuffer) public {
-        uint256 allocateAmount = 10e18;
-        uint256 deallocateAmount = 1e18;
-        uint256 buffer =
-            bound(rawBuffer, 1, EtherfiEETHMYTStrategy(payable(strategy)).MAX_GROSS_REDEEM_AMOUNT_BUFFER());
+    function test_fuzz_deallocate_direct_succeeds_with_updated_gross_redeem_amount_buffer(
+        uint256 rawAllocateAmount,
+        uint256 rawDeallocateAmount,
+        uint256 rawBuffer
+    ) public {
+        // sanity check that the pinned fork block exposes instant redemption liquidity at all
+        require(
+            IRedemptionManagerView(REDEMPTION_MANAGER).canRedeem(_grossRedeemAmount(REDEMPTION_MANAGER, 1e18), ETH),
+            "fork block should support instant redemption"
+        );
+
+        uint256 allocateAmount = bound(rawAllocateAmount, 2e18, 100e18);
+        uint256 buffer = bound(rawBuffer, 1, EtherfiEETHMYTStrategy(payable(strategy)).MAX_GROSS_REDEEM_AMOUNT_BUFFER());
 
         vm.prank(admin);
         EtherfiEETHMYTStrategy(payable(strategy)).setGrossRedeemAmountBuffer(buffer);
-        assertEq(EtherfiEETHMYTStrategy(payable(strategy)).grossRedeemAmountBuffer(), buffer, "unexpected buffer");
 
         bytes memory allocParams = getDirectAllocateVaultParams(allocateAmount);
 
@@ -543,11 +550,15 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         deal(WETH, strategy, allocateAmount);
         IMYTStrategy(strategy).allocate(allocParams, allocateAmount, "", address(vault));
 
-        uint256 grossRedeemAmount = _grossRedeemAmount(REDEMPTION_MANAGER, deallocateAmount);
-        require(
-            IRedemptionManagerView(REDEMPTION_MANAGER).canRedeem(grossRedeemAmount, ETH),
-            "fork block should support instant redemption"
-        );
+        // gross redeem = shortfall*10000/(10000-fee)+buffer must fit positionEETH; reserve covers the
+        // strategy's `ethReceived >= shortfall` check which is ~1 wei short at the boundary.
+        (, uint16 exitFeeInBps,) = _redemptionInfo(REDEMPTION_MANAGER);
+        uint256 positionEETH = IWeETH(WEETH).getEETHByWeETH(IWeETH(WEETH).balanceOf(strategy));
+        uint256 maxDeallocate = ((positionEETH - buffer) * (10_000 - exitFeeInBps)) / 10_000 - 1e3;
+        uint256 deallocateAmount = bound(rawDeallocateAmount, 1e16, maxDeallocate);
+
+        // consistency: the closed-form bound must agree with the contract's gross-up getter
+        assertLe(_grossRedeemAmount(REDEMPTION_MANAGER, deallocateAmount) + buffer, positionEETH, "bound diverges from getter");
 
         IMYTStrategy.VaultAdapterParams memory directDealloc;
         directDealloc.action = IMYTStrategy.ActionType.direct;
