@@ -90,6 +90,7 @@ contract TokeAutoStrategy is MYTStrategy {
     IMainRewarder public immutable rewarder;
     address public immutable tokeRewardsToken;
     IAutopilotRouterWithRoutes public immutable autopilotRouter;
+    bool public canForceDeallocate;
 
     /// @notice Per-redeem execution slippage tolerance (bps) for the direct deallocation path.
     /// Set at construction and tunable by the owner via {setExecToleranceBps}.
@@ -127,6 +128,10 @@ contract TokeAutoStrategy is MYTStrategy {
         emit ExecToleranceBpsUpdated(newExecToleranceBps);
     }
 
+    function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
+        canForceDeallocate = canForceDeallocate_;
+    }
+
     function _allocate(uint256 amount) internal virtual override returns (uint256) {
         _ensureIdleBalance(address(mytAsset), amount);
 
@@ -145,56 +150,6 @@ contract TokeAutoStrategy is MYTStrategy {
         rewarder.stake(address(this), shares);
         return assetsReceived;
     }
-
-    /* function _deallocate(uint256 amount) internal virtual override returns (uint256) {
-        uint256 assetBalance = _idleAssets();
-
-        if (assetBalance < amount) {
-            uint256 shortfall = amount - assetBalance;
-            uint256 totalPulled;
-
-            // Iteratively redeem until we've pulled enough assets.
-            // TokeAutoETH.redeem may return fewer assets than convertToAssets suggests due to slippage/recoup.
-            for (totalPulled = 0; totalPulled < shortfall;) {
-                uint256 totalAssetsForWithdraw = autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
-                uint256 totalSupply = autoVault.totalSupply();
-
-                uint256 sharesNeeded = autoVault.convertToShares(
-                    shortfall - totalPulled,
-                    totalAssetsForWithdraw,
-                    totalSupply,
-                    IERC4626Like.Rounding.Up
-                );
-
-                // Ensure minimum shares and cap to available
-                uint256 directShares = autoVault.balanceOf(address(this));
-                uint256 totalSharesAvailable = directShares + rewarder.balanceOf(address(this));
-                sharesNeeded = Math.max(sharesNeeded, MIN_SHARES);
-                if (sharesNeeded > totalSharesAvailable) sharesNeeded = totalSharesAvailable;
-
-                // Break if no shares or would result in zero possibleAssets
-                if (sharesNeeded == 0) break;
-                if (autoVault.convertToAssets(sharesNeeded, totalAssetsForWithdraw, totalSupply, IERC4626Like.Rounding.Down) == 0) break;
-
-                // Unstake if needed
-                if (sharesNeeded > directShares) {
-                    rewarder.withdraw(address(this), sharesNeeded - directShares, false);
-                }
-
-                uint256 balanceBefore = TokenUtils.safeBalanceOf(address(mytAsset), address(this));
-                autoVault.redeem(sharesNeeded, address(this), address(this));
-                uint256 pulled = TokenUtils.safeBalanceOf(address(mytAsset), address(this)) - balanceBefore;
-
-                if (pulled == 0) break;
-                totalPulled += pulled;
-            }
-        }
-
-        require(TokenUtils.safeBalanceOf(address(mytAsset), address(this)) >= amount, "Withdraw amount insufficient");
-        TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
-        return amount;
-    } */
-
 
     function _deallocate(uint256 amount) internal virtual override returns (uint256) {
         uint256 assetBalance = _idleAssets();
@@ -379,5 +334,9 @@ contract TokeAutoStrategy is MYTStrategy {
 
     function _isProtectedToken(address token) internal view virtual override returns (bool) {
         return token == MYT.asset() || token == address(autoVault);
+    }
+
+    function _canForceDeallocate() internal view virtual override returns (bool) {
+        return canForceDeallocate;
     }
 }

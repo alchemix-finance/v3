@@ -39,6 +39,7 @@ interface ITokeAutoStrategyForceRun {
     function rewarder() external view returns (address);
     function tokeRewardsToken() external view returns (address);
     function killSwitch() external view returns (bool);
+    function setCanForceDeallocate(bool canForceDeallocate_) external;
 }
 
 interface ITokeAutoVaultForceRun {
@@ -157,6 +158,9 @@ contract TokeAutoForceDeallocateUpdatedRunTest is Test {
         bytes memory args =
             abi.encode(ETH_MYT, p, WETH, autoVault, rewarder, tokeRewardsToken, AUTOPILOT_ROUTER, uint256(25));
         deployCodeTo("TokeAutoStrategy.sol:TokeAutoStrategy", args, TOKE_AUTO_ETH_STRATEGY);
+
+        vm.prank(pOwner);
+        strategy.setCanForceDeallocate(true);
 
         assertEq(strategy.adapterId(), keccak256(abi.encode("this", TOKE_AUTO_ETH_STRATEGY)), "adapterId mismatch");
         assertEq(strategy.previewAdjustedWithdraw(1 ether), 0.94 ether, "slippage param not preserved");

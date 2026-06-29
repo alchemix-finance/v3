@@ -246,6 +246,22 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
     }
 
     // Add any strategy-specific tests here
+    function test_forceDeallocate_direct_disabled_by_default_and_owner_can_enable() public {
+        assertFalse(TokeAutoStrategy(strategy).canForceDeallocate(), "force deallocate should default disabled");
+
+        vm.prank(vault);
+        vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
+
+        vm.prank(admin);
+        TokeAutoStrategy(strategy).setCanForceDeallocate(true);
+        assertTrue(TokeAutoStrategy(strategy).canForceDeallocate(), "force deallocate should be enabled");
+
+        deal(WETH, strategy, 1);
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
+    }
+
     function test_strategy_deallocate_reverts_due_to_slippage(uint256 amountToAllocate, uint256 amountToDeallocate) public {
         amountToAllocate = bound(amountToAllocate, 1e18, testConfig.vaultInitialDeposit);
         amountToDeallocate = amountToAllocate;
