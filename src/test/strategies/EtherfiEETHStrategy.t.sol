@@ -207,7 +207,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {
-        return 24595012;//24592846;
+        return 24595012; //25324617
     }
 
     function getRpcUrl() internal view override returns (string memory) {
@@ -332,7 +332,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
     }
 
     function _useAllocatorDeallocateSwap() internal pure override returns (bool) {
-        return true;
+        return false;
     }
 
     function _allocatorDeallocateSwapData(uint256 amount) internal view override returns (bytes memory) {
@@ -440,6 +440,48 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         assertLe(leftoverWeth, maxResidual, "leftover idle WETH should stay within slippage tolerance");
     }
 
+
+    function test_fuzz_allocator_deallocate_with_swap(uint256 amountToAllocate, uint256 rawDeallocateAmount) public {
+        amountToAllocate = bound(amountToAllocate, 1e18, 100e18);
+        _mockFreshWeEthEthOracle(block.timestamp);
+
+        vm.startPrank(admin);
+        IAllocator(allocator).allocate(strategy, amountToAllocate);
+
+        uint256 realAssetsBefore = IMYTStrategy(strategy).realAssets();
+        assertGt(realAssetsBefore, 0, "real assets should be positive after allocation");
+
+        uint256 maxDeallocate = _effectiveDeallocateAmount(realAssetsBefore);
+        require(maxDeallocate >= 1e16, "max deallocate too small");
+        uint256 deallocateAmount = bound(rawDeallocateAmount, 1e16, maxDeallocate);
+        uint256 previewedDeallocate = IMYTStrategy(strategy).previewAdjustedWithdraw(deallocateAmount);
+        assertGt(previewedDeallocate, 0, "previewed deallocation should be positive");
+        assertLe(previewedDeallocate, deallocateAmount, "previewed amount should not exceed target");
+
+        uint256 weETHBalanceBefore = IWeETH(WEETH).balanceOf(strategy);
+        uint256 weETHToSwap = _maxWeEthIn(previewedDeallocate);
+        assertLe(weETHToSwap, weETHBalanceBefore, "previewed deallocation should be fundable by position");
+
+        deal(WETH, address(swapper), previewedDeallocate);
+
+        bytes32 allocationId = IMYTStrategy(strategy).adapterId();
+        uint256 allocationBefore = IVaultV2(vault).allocation(allocationId);
+
+        IAllocator(allocator).deallocateWithSwap(strategy, previewedDeallocate, _swapCallDataForWethOut(previewedDeallocate));
+        vm.stopPrank();
+
+        uint256 allocationAfter = IVaultV2(vault).allocation(allocationId);
+        uint256 realAssetsAfter = IMYTStrategy(strategy).realAssets();
+        uint256 leftoverWeth = IERC20(WETH).balanceOf(strategy);
+        uint256 maxResidual = (realAssetsBefore * TEST_RESIDUAL_TOLERANCE_BPS) / 10_000 + 1e18;
+        uint256 expectedRemaining = realAssetsBefore > previewedDeallocate ? realAssetsBefore - previewedDeallocate : 0;
+
+        assertLt(allocationAfter, allocationBefore, "allocator deallocation should reduce vault allocation");
+        assertLt(IWeETH(WEETH).balanceOf(strategy), weETHBalanceBefore, "weETH balance should decrease after deallocation");
+        assertLe(realAssetsAfter, expectedRemaining + maxResidual, "remaining strategy balance should stay near expected residual");
+        assertLe(leftoverWeth, maxResidual, "leftover idle WETH should stay within slippage tolerance");
+    }
+
     function test_deallocate_direct_uses_instant_redeem_path_cant_redeem() public {
         uint256 allocateAmount = 1e18;
         uint256 deallocateAmount = 1e16;
@@ -483,6 +525,54 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
         vm.prank(vaultDepositor);
         IVaultV2(vault).forceDeallocate(strategy, abi.encode(directDealloc), forceDeallocateAmount, vaultDepositor);
+    }
+
+    function test_fuzz_deallocate_direct_succeeds_with_updated_gross_redeem_amount_buffer(
+        uint256 rawAllocateAmount,
+        uint256 rawDeallocateAmount,
+        uint256 rawBuffer
+    ) public {
+        // sanity check that the pinned fork block exposes instant redemption liquidity at all
+        require(
+            IRedemptionManagerView(REDEMPTION_MANAGER).canRedeem(_grossRedeemAmount(REDEMPTION_MANAGER, 1e18), ETH),
+            "fork block should support instant redemption"
+        );
+
+        uint256 allocateAmount = bound(rawAllocateAmount, 2e18, 100e18);
+        uint256 buffer = bound(rawBuffer, 1, EtherfiEETHMYTStrategy(payable(strategy)).MAX_GROSS_REDEEM_AMOUNT_BUFFER());
+
+        vm.prank(admin);
+        EtherfiEETHMYTStrategy(payable(strategy)).setGrossRedeemAmountBuffer(buffer);
+
+        bytes memory allocParams = getDirectAllocateVaultParams(allocateAmount);
+
+        vm.startPrank(vault);
+        deal(WETH, strategy, allocateAmount);
+        IMYTStrategy(strategy).allocate(allocParams, allocateAmount, "", address(vault));
+
+        // gross redeem = shortfall*10000/(10000-fee)+buffer must fit positionEETH; reserve covers the
+        // strategy's `ethReceived >= shortfall` check which is ~1 wei short at the boundary.
+        (, uint16 exitFeeInBps,) = _redemptionInfo(REDEMPTION_MANAGER);
+        uint256 positionEETH = IWeETH(WEETH).getEETHByWeETH(IWeETH(WEETH).balanceOf(strategy));
+        uint256 maxDeallocate = ((positionEETH - buffer) * (10_000 - exitFeeInBps)) / 10_000 - 1e3;
+        uint256 deallocateAmount = bound(rawDeallocateAmount, 1e16, maxDeallocate);
+
+        // consistency: the closed-form bound must agree with the contract's gross-up getter
+        assertLe(_grossRedeemAmount(REDEMPTION_MANAGER, deallocateAmount) + buffer, positionEETH, "bound diverges from getter");
+
+        IMYTStrategy.VaultAdapterParams memory directDealloc;
+        directDealloc.action = IMYTStrategy.ActionType.direct;
+        bytes memory deallocParams = abi.encode(directDealloc);
+
+        IMYTStrategy(strategy).deallocate(deallocParams, deallocateAmount, "", address(vault));
+        assertGe(IERC20(WETH).balanceOf(strategy), deallocateAmount, "idle WETH should cover requested deallocation");
+        vm.stopPrank();
+    }
+
+    function getDirectAllocateVaultParams(uint256) internal view virtual returns (bytes memory) {
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        return abi.encode(params);
     }
 
     function test_deallocate_direct_accounts_for_instant_redemption_fee() public {
