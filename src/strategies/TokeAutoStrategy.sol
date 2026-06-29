@@ -184,7 +184,7 @@ contract TokeAutoStrategy is MYTStrategy {
         // regardless of how much `shortfall` differs from that NAV.
         uint256 expectedAssets = _redeemableAssets(sharesNeeded);
         require(expectedAssets > 0, "Zero redeemable assets");
-        uint256 minOut = expectedAssets * (BASIS_POINTS - tolerance) / BASIS_POINTS;
+        uint256 minOut = Math.max(shortfall, expectedAssets * (BASIS_POINTS - tolerance) / BASIS_POINTS);
 
         if (sharesNeeded > directShares) {
             rewarder.withdraw(address(this), sharesNeeded - directShares, false);

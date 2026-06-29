@@ -134,6 +134,22 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
         return vm.envString("MAINNET_RPC_URL");
     }
 
+    function test_forceDeallocate_direct_disabled_by_default_and_owner_can_enable() public {
+        assertFalse(TokeAutoStrategy(strategy).canForceDeallocate(), "force deallocate should default disabled");
+
+        vm.prank(vault);
+        vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
+
+        vm.prank(address(1));
+        TokeAutoStrategy(strategy).setCanForceDeallocate(true);
+        assertTrue(TokeAutoStrategy(strategy).canForceDeallocate(), "force deallocate should be enabled");
+
+        deal(USDC, strategy, 1);
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
+    }
+
     // Test that full deallocation completes without reverting
     function test_strategy_full_deallocate(uint256 amountToAllocate) public {
         amountToAllocate = bound(amountToAllocate, 1 * 10 ** testConfig.decimals, testConfig.vaultInitialDeposit);
@@ -143,7 +159,8 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
         IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
         uint256 initialRealAssets = IMYTStrategy(strategy).realAssets();
         require(initialRealAssets > 0, "Initial real assets is 0");
-        IMYTStrategy(strategy).deallocate(params, amountToAllocate, "", address(vault));
+        uint256 amountToDeallocate = IMYTStrategy(strategy).previewAdjustedWithdraw(initialRealAssets);
+        IMYTStrategy(strategy).deallocate(params, amountToDeallocate, "", address(vault));
         uint256 finalRealAssets = IMYTStrategy(strategy).realAssets();
         uint256 idleUsdc = IERC20(USDC).balanceOf(strategy);
         assertGt(idleUsdc, 0, "Idle USDC should remain on strategy after direct deallocate");
