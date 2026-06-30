@@ -129,7 +129,7 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
         address strategyAddr = deployScript.deployEtherfiEETHStrategy(curator, newOwner, config);
         EtherfiEETHMYTStrategy strategy = EtherfiEETHMYTStrategy(payable(strategyAddr));
 
-        assertTrue(strategy.canForceDeallocate(), "force deallocate should default to enabled");
+        assertFalse(strategy.canForceDeallocate(), "force deallocate should default to disabled");
 
         vm.prank(newOwner);
         strategy.setCanForceDeallocate(false);

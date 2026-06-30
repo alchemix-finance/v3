@@ -333,14 +333,18 @@ contract DeployNewStrategyScript is Script {
 After the deployer broadcasts the strategy, the curator must register and configure it:
 
 1. Submit and execute strategy registration with the target MYT:
-   `curator.submitSetStrategy(strategy, myt)` and `curator.setStrategy(strategy, myt)`.
+  `curator.submitSetStrategy(strategy, myt)` and `curator.setStrategy(strategy, myt)`.
 2. Submit and execute the absolute cap:
-   `curator.submitIncreaseAbsoluteCap(strategy, cap)` and `curator.increaseAbsoluteCap(strategy, cap)`.
+  `curator.submitIncreaseAbsoluteCap(strategy, cap)` and `curator.increaseAbsoluteCap(strategy, cap)`.
 3. Submit and execute the relative cap:
-   `curator.submitIncreaseRelativeCap(strategy, globalCap)` and `curator.increaseRelativeCap(strategy, globalCap)`.
+  `curator.submitIncreaseRelativeCap(strategy, globalCap)` and `curator.increaseRelativeCap(strategy, globalCap)`.
 4. Submit and execute the force-deallocation penalty:
-   `curator.submitSetForceDeallocatePenalty(strategy, myt, 0.02e18)`, then execute `IVaultV2.setForceDeallocatePenalty(strategy, 0.02e18)` through the configured vault curator path.
-5. After registration, cap, penalty, ownership, source verification, and smoke-test checks are complete, the multisig owner should call `strategy.setKillSwitch(false)`.
+  `curator.submitSetForceDeallocatePenalty(strategy, myt, 0.02e18)`, then execute `IVaultV2.setForceDeallocatePenalty(strategy, 0.02e18)` through the configured vault curator path.
+5. From the Alchemist strategy classifier admin, assign the strategy's enforced risk class:
+  `classifier.assignStrategyRiskLevel(uint256(IMYTStrategy(strategy).adapterId()), uint8(riskClass))`.
+   This should match the strategy metadata `params.riskClass`; allocator cap enforcement reads from `AlchemistStrategyClassifier`, not from the strategy metadata.
+   Note : This multisig action can also be done via the official dashboard `https://control.alchemix.fi/` via : "vault" tab -> selected vault -> "Strategies" section -> specific strategy -> "Controls" section -> "Classifier Risk" section. You may also adjust the strategy metadata before any respective classifier update in the paired "Param Risk" section. 
+6. After registration, cap, penalty, classifier assignment, ownership, source verification, and smoke-test checks are complete, the myt owner should call `strategy.setKillSwitch(false)`.
 
 For live deployments with nonzero timelocks, split submission and execution into separate transactions after the timelock expires. If the vault curator is the `AlchemistCurator` proxy, allowlist `IVaultV2.setForceDeallocatePenalty.selector` and execute the penalty call with `curator.proxy(...)`.
 
@@ -354,6 +358,7 @@ After broadcasting, verify:
 - `strategy.getIdData()` maps to the expected cap entries.
 - MYT absolute and relative caps match the intended values.
 - `forceDeallocatePenalty(strategy) == 0.02e18`.
+- `classifier.getStrategyRiskLevel(uint256(IMYTStrategy(strategy).adapterId()))` matches the strategy metadata risk class.
 - `realAssets()` returns the expected value before any allocation.
 - The strategy source is verified on the target explorer.
 - `strategy.killSwitch() == false` after the multisig enables allocation.
