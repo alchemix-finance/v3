@@ -910,6 +910,7 @@ contract MultiStrategyUSDCInvariantTest is Test {
     address public constant TOKE_AUTO_USD_VAULT = 0xa7569A44f348d3D70d8ad5889e50F78E33d80D35;
     address public constant TOKE_REWARDER_USD = 0x726104CfBd7ece2d1f5b3654a19109A9e2b6c27B;
     address public constant TOKE = 0x2e9d63788249371f1DFC918a52f8d799F4a38C94;
+    address public constant TOKE_AUTOPILOT_ROUTER = 0x39ff6d21204B919441d17bef61D19181870835A2;
     
     uint256 public constant INITIAL_VAULT_DEPOSIT = 10_000_000e6; // 10M USDC
     uint256 public constant ABSOLUTE_CAP = 50_000_000e6; // 50M USDC per strategy
@@ -1064,7 +1065,9 @@ contract MultiStrategyUSDCInvariantTest is Test {
             USDC,
             TOKE_AUTO_USD_VAULT,
             TOKE_REWARDER_USD,
-            TOKE
+            TOKE,
+            TOKE_AUTOPILOT_ROUTER,
+            600
         ));
     }
     

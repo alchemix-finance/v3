@@ -44,7 +44,7 @@ contract DeployEtherfiEETHStrategyScript is Script {
             globalCap: 0.3e18,
             estimatedYield: 500,
             additionalIncentives: false,
-            slippageBPS: 10
+            slippageBPS: 125
         });
     }
 

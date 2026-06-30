@@ -72,6 +72,7 @@ contract DeployV3ETHScript is Script {
     address public tokeAutoEth = 0x0A2b94F6871c1D7A32Fe58E1ab5e6deA2f114E56;
     address public tokeAutoRewarder = 0x60882D6f70857606Cdd37729ccCe882015d1755E;
     address public tokeRewardsToken = 0x2e9d63788249371f1DFC918a52f8d799F4a38C94; // TOKE token on Mainnet
+    address public tokeAutopilotRouter = 0x39ff6d21204B919441d17bef61D19181870835A2;
     address public tokeAutoUsd = 0xa7569A44f348d3D70d8ad5889e50F78E33d80D35;
     address public tokeAutoUsdRewarder = 0x726104CfBd7ece2d1f5b3654a19109A9e2b6c27B;
     address public wstETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
@@ -245,7 +246,9 @@ contract DeployV3ETHScript is Script {
             wethETH,
             tokeAutoEth,
             tokeAutoRewarder,
-            tokeRewardsToken
+            tokeRewardsToken,
+            tokeAutopilotRouter,
+            25 // DEFAULT_EXEC_TOLERANCE_BPS: per-redeem execution slippage tolerance
         );
         strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));
@@ -267,7 +270,9 @@ contract DeployV3ETHScript is Script {
             USDC,
             tokeAutoUsd,
             tokeAutoUsdRewarder,
-            tokeRewardsToken
+            tokeRewardsToken,
+            tokeAutopilotRouter,
+            25 // DEFAULT_EXEC_TOLERANCE_BPS: per-redeem execution slippage tolerance
         );
         strategy.setKillSwitch(true);
         curator.submitSetStrategy(address(strategy), address(myt));

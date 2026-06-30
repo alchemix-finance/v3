@@ -7,6 +7,7 @@ import {BaseStrategyTest} from "../BaseStrategyTest.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
 /// @notice Replaces the Tokemak MainRewarder via vm.etch so that
@@ -59,6 +60,25 @@ contract MockSwapExecutor {
     }
 }
 
+contract MockAutopilotRouter {
+    IERC20 public immutable asset;
+
+    constructor(address _asset) {
+        asset = IERC20(_asset);
+    }
+
+    function redeem(
+        IERC4626 vault,
+        address to,
+        uint256 shares,
+        uint256 minAmountOut
+    ) external returns (uint256 amountOut) {
+        IERC20(address(vault)).transferFrom(msg.sender, address(this), shares);
+        asset.transfer(to, minAmountOut);
+        return minAmountOut;
+    }
+}
+
 contract MockTokeAutoUSDStrategy is TokeAutoStrategy {
     constructor(
         address _myt,
@@ -66,14 +86,20 @@ contract MockTokeAutoUSDStrategy is TokeAutoStrategy {
         address _usdc,
         address _autoUSD,
         address _rewarder,
-        address _tokeRewardsToken
-    ) TokeAutoStrategy(_myt, _params, _usdc, _autoUSD, _rewarder, _tokeRewardsToken) {}
+        address _tokeRewardsToken,
+        address _autopilotRouter
+    )
+        // Mocked-oracle suite: widen the execution tolerance so the artificial NAV/proceeds gap
+        // does not trip Tokemak's MinAmountError on legitimate deallocations (see ETH suite note).
+        TokeAutoStrategy(_myt, _params, _usdc, _autoUSD, _rewarder, _tokeRewardsToken, _autopilotRouter, 600)
+    {}
 }
 
 contract TokeAutoUSDStrategyTest is BaseStrategyTest {
     address public constant TOKE_AUTO_USD_VAULT = 0xa7569A44f348d3D70d8ad5889e50F78E33d80D35;
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address public constant REWARDER = 0x726104CfBd7ece2d1f5b3654a19109A9e2b6c27B;
+    address public constant AUTOPILOT_ROUTER = 0x39ff6d21204B919441d17bef61D19181870835A2;
     address public constant TOKE = 0x2e9d63788249371f1DFC918a52f8d799F4a38C94;
 
     function getStrategyConfig() internal pure override returns (IMYTStrategy.StrategyParams memory) {
@@ -95,7 +121,9 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
     }
 
     function createStrategy(address vault, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
-        return address(new MockTokeAutoUSDStrategy(vault, params, USDC, TOKE_AUTO_USD_VAULT, REWARDER, TOKE));
+        MockAutopilotRouter router = new MockAutopilotRouter(USDC);
+        deal(USDC, address(router), type(uint128).max);
+        return address(new MockTokeAutoUSDStrategy(vault, params, USDC, TOKE_AUTO_USD_VAULT, REWARDER, TOKE, address(router)));
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {
@@ -104,6 +132,22 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
 
     function getRpcUrl() internal view override returns (string memory) {
         return vm.envString("MAINNET_RPC_URL");
+    }
+
+    function test_forceDeallocate_direct_disabled_by_default_and_owner_can_enable() public {
+        assertFalse(TokeAutoStrategy(strategy).canForceDeallocate(), "force deallocate should default disabled");
+
+        vm.prank(vault);
+        vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
+
+        vm.prank(address(1));
+        TokeAutoStrategy(strategy).setCanForceDeallocate(true);
+        assertTrue(TokeAutoStrategy(strategy).canForceDeallocate(), "force deallocate should be enabled");
+
+        deal(USDC, strategy, 1);
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
     }
 
     // Test that full deallocation completes without reverting
@@ -115,7 +159,8 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
         IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
         uint256 initialRealAssets = IMYTStrategy(strategy).realAssets();
         require(initialRealAssets > 0, "Initial real assets is 0");
-        IMYTStrategy(strategy).deallocate(params, amountToAllocate, "", address(vault));
+        uint256 amountToDeallocate = IMYTStrategy(strategy).previewAdjustedWithdraw(initialRealAssets);
+        IMYTStrategy(strategy).deallocate(params, amountToDeallocate, "", address(vault));
         uint256 finalRealAssets = IMYTStrategy(strategy).realAssets();
         uint256 idleUsdc = IERC20(USDC).balanceOf(strategy);
         assertGt(idleUsdc, 0, "Idle USDC should remain on strategy after direct deallocate");

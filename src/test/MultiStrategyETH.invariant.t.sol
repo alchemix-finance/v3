@@ -939,6 +939,7 @@ contract MultiStrategyETHInvariantTest is Test {
     address public constant TOKE_AUTO_ETH_VAULT = 0x0A2b94F6871c1D7A32Fe58E1ab5e6deA2f114E56;
     address public constant TOKE_REWARDER_ETH = 0x60882D6f70857606Cdd37729ccCe882015d1755E;
     address public constant TOKE = 0x2e9d63788249371f1DFC918a52f8d799F4a38C94;
+    address public constant TOKE_AUTOPILOT_ROUTER = 0x39ff6d21204B919441d17bef61D19181870835A2;
     address public constant TOKE_ORACLE = 0x61F8BE7FD721e80C0249829eaE6f0DAf21bc2CaC;
     address public constant AAVE_V3_ETH_WETH_ATOKEN = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
     address public constant AAVE_V3_ETH_POOL_ADDRESS_PROVIDER = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
@@ -1084,7 +1085,9 @@ contract MultiStrategyETHInvariantTest is Test {
             WETH,
             TOKE_AUTO_ETH_VAULT,
             TOKE_REWARDER_ETH,
-            TOKE
+            TOKE,
+            TOKE_AUTOPILOT_ROUTER,
+            600
         ));
     }
     
