@@ -97,6 +97,7 @@ contract TokeAutoStrategy is MYTStrategy {
     uint256 public execToleranceBps;
 
     event ExecToleranceBpsUpdated(uint256 newExecToleranceBps);
+    event CanForceDeallocateUpdated(bool newCanForceDeallocate);
 
     constructor(
         address _myt,
@@ -130,6 +131,7 @@ contract TokeAutoStrategy is MYTStrategy {
 
     function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
         canForceDeallocate = canForceDeallocate_;
+        emit CanForceDeallocateUpdated(canForceDeallocate_);
     }
 
     function _allocate(uint256 amount) internal virtual override returns (uint256) {
