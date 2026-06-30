@@ -63,6 +63,8 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
     uint256 public grossRedeemAmountBuffer = 1;
 
     event GrossRedeemAmountBufferUpdated(uint256 grossRedeemAmountBuffer);
+    event CanForceDeallocateUpdated(bool newCanForceDeallocate);
+
 
     constructor(
         address _myt,
@@ -181,6 +183,7 @@ contract EtherfiEETHMYTStrategy is OraclePricedSwapStrategy {
 
     function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
         canForceDeallocate = canForceDeallocate_;
+        emit CanForceDeallocateUpdated(canForceDeallocate_);
     }
 
     function setGrossRedeemAmountBuffer(uint256 grossRedeemAmountBuffer_) external onlyOwner {
