@@ -1,0 +1,31 @@
+{
+  "generated": false,
+  "chainId": "1",
+  "blockNumber": "25454018",
+  "rpcUrl": "https://mainnet.gateway.tenderly.co",
+  "strategyAddress": "0x705d7dB00e7E0294f090F38DC2775F46Ec861B6e",
+  "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+  "rewardVault": "0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C",
+  "ensoRouter": "0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf",
+  "slippageBps": 125,
+  "allocate": {
+    "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "tokenOut": "0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C",
+    "amountIn": "1000000000000000000",
+    "amountOut": "0",
+    "tx": {
+      "to": "0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf",
+      "data": "0x"
+    }
+  },
+  "deallocate": {
+    "tokenIn": "0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C",
+    "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "amountIn": "0",
+    "amountOut": "500000000000000000",
+    "tx": {
+      "to": "0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf",
+      "data": "0x"
+    }
+  }
+}

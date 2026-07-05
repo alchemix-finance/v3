@@ -1,0 +1,422 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.28;
+
+import "forge-std/Test.sol";
+import {StakeDAOWETHStrategy} from "../../strategies/StakeDAOWETHStrategy.sol";
+import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
+import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
+import {VaultV2} from "lib/vault-v2/src/VaultV2.sol";
+import {AlchemistAllocator} from "../../AlchemistAllocator.sol";
+import {IAllocator} from "../../interfaces/IAllocator.sol";
+import {AlchemistStrategyClassifier} from "../../AlchemistStrategyClassifier.sol";
+import {TokenUtils} from "../../libraries/TokenUtils.sol";
+import {MYTTestHelper} from "../libraries/MYTTestHelper.sol";
+import {BaseStrategyTest} from "../BaseStrategyTest.sol";
+
+contract MockEnsoBidirectional {
+    IERC20 public immutable weth;
+    IERC20 public immutable rewardVaultShares;
+
+    constructor(address _weth, address _rewardVaultShares) {
+        weth = IERC20(_weth);
+        rewardVaultShares = IERC20(_rewardVaultShares);
+    }
+
+    fallback() external {
+        uint256 wethAllowance = weth.allowance(msg.sender, address(this));
+        if (wethAllowance > 0) {
+            uint256 wethBalance = weth.balanceOf(msg.sender);
+            uint256 wethAmount = wethAllowance < wethBalance ? wethAllowance : wethBalance;
+            weth.transferFrom(msg.sender, address(this), wethAmount);
+            rewardVaultShares.transfer(msg.sender, wethAmount);
+            return;
+        }
+
+        uint256 shareAllowance = rewardVaultShares.allowance(msg.sender, address(this));
+        require(shareAllowance > 0, "No Enso allowance");
+
+        uint256 shareBalance = rewardVaultShares.balanceOf(msg.sender);
+        uint256 shareAmount = shareAllowance < shareBalance ? shareAllowance : shareBalance;
+        rewardVaultShares.transferFrom(msg.sender, address(this), shareAmount);
+        weth.transfer(msg.sender, shareAmount);
+    }
+}
+
+contract MockCurvePool is IERC20 {
+    string public name = "Curve ETH+/WETH LP";
+    string public symbol = "crvETH+WETH";
+    uint8 public decimals = 18;
+
+    IERC20 public immutable weth;
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    uint256 public totalSupply;
+
+    constructor(address _weth) {
+        weth = IERC20(_weth);
+    }
+
+    function add_liquidity(uint256[] calldata amounts, uint256 minMintAmount, address receiver) external returns (uint256) {
+        require(amounts.length == 2 && amounts[1] > 0, "WETH amount required");
+        weth.transferFrom(msg.sender, address(this), amounts[1]);
+        uint256 lpMinted = amounts[1];
+        require(lpMinted >= minMintAmount, "Slippage");
+        balanceOf[receiver] += lpMinted;
+        totalSupply += lpMinted;
+        return lpMinted;
+    }
+
+    function remove_liquidity_one_coin(uint256 burnAmount, int128, uint256 minReceived, address receiver)
+        external
+        returns (uint256)
+    {
+        balanceOf[msg.sender] -= burnAmount;
+        totalSupply -= burnAmount;
+        require(burnAmount >= minReceived, "Slippage");
+        weth.transfer(receiver, burnAmount);
+        return burnAmount;
+    }
+
+    function calc_token_amount(uint256[] calldata amounts, bool) external view returns (uint256) {
+        require(amounts.length == 2 && amounts[1] > 0, "WETH amount required");
+        return amounts[1];
+    }
+
+    function calc_withdraw_one_coin(uint256 tokenAmount, int128) external pure returns (uint256) {
+        return tokenAmount;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        allowance[from][msg.sender] -= amount;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+}
+
+contract MockRewardVault is IERC20 {
+    string public name = "sd-ETH+ETH-vault";
+    string public symbol = "sdETH+ETH";
+    uint8 public decimals = 18;
+
+    address public immutable asset;
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    uint256 public totalSupply;
+
+    constructor(address _asset) {
+        asset = _asset;
+    }
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+        totalSupply += amount;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        allowance[from][msg.sender] -= amount;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        return true;
+    }
+
+    function getRewardTokens() external pure returns (address[] memory tokens) {
+        return tokens;
+    }
+
+    function claim(address[] calldata, address) external pure returns (uint256[] memory amounts) {
+        return amounts;
+    }
+}
+
+contract MockStakeDAOWETHStrategy is StakeDAOWETHStrategy {
+    constructor(
+        address _myt,
+        StrategyParams memory _params,
+        address _rewardVault,
+        address _curvePool,
+        address _ensoRouter,
+        int128 _wethCoinIndex
+    ) StakeDAOWETHStrategy(_myt, _params, _rewardVault, _curvePool, _ensoRouter, _wethCoinIndex) {}
+}
+
+contract StakeDAOWETHStrategyEnsoTest is Test {
+    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+
+    address public admin = address(1);
+    address public curator = address(2);
+    address public vault;
+    address public strategy;
+    address public allocator;
+
+    MockEnsoBidirectional public ensoRouter;
+    MockCurvePool public curvePool;
+    MockRewardVault public rewardVault;
+
+    function setUp() public {
+        string memory rpc = vm.envOr("MAINNET_RPC_URL", string("https://mainnet.gateway.tenderly.co"));
+        vm.createSelectFork(rpc);
+
+        vm.startPrank(admin);
+        vault = address(MYTTestHelper._setupVault(WETH, admin, curator));
+
+        curvePool = new MockCurvePool(WETH);
+        rewardVault = new MockRewardVault(address(curvePool));
+        ensoRouter = new MockEnsoBidirectional(WETH, address(rewardVault));
+        rewardVault.mint(address(ensoRouter), 1_000_000e18);
+        deal(WETH, address(ensoRouter), 1_000_000e18);
+
+        IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({
+            owner: admin,
+            name: "StakeDAOWETH",
+            protocol: "StakeDAO",
+            riskClass: IMYTStrategy.RiskClass.MEDIUM,
+            cap: 10_000e18,
+            globalCap: 1e18,
+            estimatedYield: 100e18,
+            additionalIncentives: true,
+            slippageBPS: 125
+        });
+
+        strategy = address(
+            new MockStakeDAOWETHStrategy(
+                vault, params, address(rewardVault), address(curvePool), address(ensoRouter), int128(1)
+            )
+        );
+
+        address classifier = address(new AlchemistStrategyClassifier(admin));
+        AlchemistStrategyClassifier(classifier).setRiskClass(0, 1e18, 1e18);
+        AlchemistStrategyClassifier(classifier).setRiskClass(1, 0.4e18, 0.25e18);
+        AlchemistStrategyClassifier(classifier).setRiskClass(2, 0.1e18, 0.1e18);
+        AlchemistStrategyClassifier(classifier).assignStrategyRiskLevel(
+            uint256(IMYTStrategy(strategy).adapterId()), uint8(IMYTStrategy.RiskClass.MEDIUM)
+        );
+        allocator = address(new AlchemistAllocator(vault, admin, curator, classifier));
+        vm.stopPrank();
+
+        vm.startPrank(curator);
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.setIsAllocator, (allocator, true)));
+        IVaultV2(vault).setIsAllocator(allocator, true);
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.addAdapter, (strategy)));
+        IVaultV2(vault).addAdapter(strategy);
+
+        bytes memory idData = IMYTStrategy(strategy).getIdData();
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseAbsoluteCap, (idData, 10_000e18)));
+        IVaultV2(vault).increaseAbsoluteCap(idData, 10_000e18);
+        _vaultSubmitAndFastForward(abi.encodeCall(IVaultV2.increaseRelativeCap, (idData, 1e18)));
+        IVaultV2(vault).increaseRelativeCap(idData, 1e18);
+        vm.stopPrank();
+
+        _magicDepositToVault(1000e18);
+
+        vm.prank(admin);
+        AlchemistAllocator(allocator).setMaxRate(200e16 / uint256(365 days));
+    }
+
+    function _magicDepositToVault(uint256 amount) internal {
+        deal(WETH, admin, amount);
+        vm.startPrank(admin);
+        TokenUtils.safeApprove(WETH, vault, amount);
+        IVaultV2(vault).deposit(amount, admin);
+        vm.stopPrank();
+    }
+
+    function _vaultSubmitAndFastForward(bytes memory data) internal {
+        IVaultV2(vault).submit(data);
+        bytes4 selector = bytes4(data);
+        vm.warp(block.timestamp + IVaultV2(vault).timelock(selector));
+    }
+
+    function _swapParams(bytes memory txData) internal pure returns (bytes memory) {
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.swap;
+        params.swapParams = IMYTStrategy.SwapParams({txData: txData, minIntermediateOut: 0});
+        return abi.encode(params);
+    }
+
+    function test_allocate_with_enso_mints_reward_vault_shares() public {
+        uint256 amount = 5e18;
+
+        vm.startPrank(vault);
+        deal(WETH, strategy, amount);
+        IMYTStrategy(strategy).allocate(_swapParams(hex"01"), amount, "", address(vault));
+        vm.stopPrank();
+
+        assertEq(IERC20(address(rewardVault)).balanceOf(strategy), amount);
+        assertEq(IMYTStrategy(strategy).realAssets(), amount);
+    }
+
+    function test_deallocate_with_enso_returns_weth() public {
+        uint256 allocAmount = 5e18;
+        uint256 deallocAmount = 3e18;
+
+        vm.startPrank(vault);
+        deal(WETH, strategy, allocAmount);
+        IMYTStrategy(strategy).allocate(_swapParams(hex"01"), allocAmount, "", address(vault));
+
+        uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(deallocAmount);
+        IMYTStrategy(strategy).deallocate(_swapParams(hex"02"), preview, "", address(vault));
+        vm.stopPrank();
+
+        assertGe(TokenUtils.safeBalanceOf(WETH, strategy), preview);
+        assertLt(IERC20(address(rewardVault)).balanceOf(strategy), allocAmount);
+    }
+
+    function test_allocator_allocateWithSwap() public {
+        uint256 amount = 2e18;
+
+        vm.startPrank(admin);
+        IAllocator(allocator).allocateWithSwap(strategy, amount, hex"01");
+        assertGt(IMYTStrategy(strategy).realAssets(), 0);
+        vm.stopPrank();
+    }
+
+    function test_allocator_deallocateWithSwap() public {
+        uint256 amount = 2e18;
+
+        vm.startPrank(admin);
+        IAllocator(allocator).allocateWithSwap(strategy, amount, hex"01");
+
+        uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(amount);
+        IAllocator(allocator).deallocateWithSwap(strategy, preview, hex"02");
+        vm.stopPrank();
+
+        assertGt(TokenUtils.safeBalanceOf(WETH, vault), 0);
+    }
+
+    function test_force_deallocate_swap_reverts() public {
+        vm.startPrank(vault);
+        vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
+        IMYTStrategy(strategy).deallocate(_swapParams(hex"02"), 1, IVaultV2.forceDeallocate.selector, address(vault));
+        vm.stopPrank();
+    }
+
+    function test_allocate_reverts_when_enso_under_delivers_shares() public {
+        uint256 amount = 5e18;
+        uint256 minShares = amount * (10_000 - 125) / 10_000;
+        uint256 underDeliveredShares = minShares - 1;
+
+        MockEnsoUnderDeliver underDeliver = new MockEnsoUnderDeliver(WETH, address(rewardVault), underDeliveredShares);
+        rewardVault.mint(address(underDeliver), amount);
+
+        StakeDAOWETHStrategy underDeliverStrategy = new MockStakeDAOWETHStrategy(
+            vault,
+            IMYTStrategy.StrategyParams({
+                owner: admin,
+                name: "StakeDAOWETH",
+                protocol: "StakeDAO",
+                riskClass: IMYTStrategy.RiskClass.MEDIUM,
+                cap: 10_000e18,
+                globalCap: 1e18,
+                estimatedYield: 100e18,
+                additionalIncentives: true,
+                slippageBPS: 125
+            }),
+            address(rewardVault),
+            address(curvePool),
+            address(underDeliver),
+            int128(1)
+        );
+
+        vm.startPrank(vault);
+        deal(WETH, address(underDeliverStrategy), amount);
+        vm.expectRevert(abi.encodeWithSelector(IMYTStrategy.InvalidAmount.selector, minShares, underDeliveredShares));
+        IMYTStrategy(address(underDeliverStrategy)).allocate(_swapParams(hex"01"), amount, "", address(vault));
+        vm.stopPrank();
+    }
+}
+
+contract MockEnsoUnderDeliver {
+    IERC20 public immutable weth;
+    IERC20 public immutable rewardVaultShares;
+    uint256 public immutable sharesToMint;
+
+    constructor(address _weth, address _rewardVaultShares, uint256 _sharesToMint) {
+        weth = IERC20(_weth);
+        rewardVaultShares = IERC20(_rewardVaultShares);
+        sharesToMint = _sharesToMint;
+    }
+
+    fallback() external {
+        uint256 wethAllowance = weth.allowance(msg.sender, address(this));
+        if (wethAllowance > 0) {
+            uint256 wethBalance = weth.balanceOf(msg.sender);
+            uint256 wethAmount = wethAllowance < wethBalance ? wethAllowance : wethBalance;
+            weth.transferFrom(msg.sender, address(this), wethAmount);
+            rewardVaultShares.transfer(msg.sender, sharesToMint);
+        }
+    }
+}
+
+/// @notice Mainnet fork tests for direct allocate/deallocate against real Curve + RewardVault contracts.
+contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
+    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public constant REWARD_VAULT = 0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C;
+    address public constant ETH_PLUS_WETH_POOL = 0x2c683fAd51da2cd17793219CC86439C1875c353e;
+    address public constant ENSO_ROUTER = 0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf;
+
+    function getStrategyConfig() internal pure override returns (IMYTStrategy.StrategyParams memory) {
+        return IMYTStrategy.StrategyParams({
+            owner: address(1),
+            name: "StakeDAOWETH",
+            protocol: "StakeDAO",
+            riskClass: IMYTStrategy.RiskClass.MEDIUM,
+            cap: 10_000e18,
+            globalCap: 1e18,
+            estimatedYield: 100e18,
+            additionalIncentives: true,
+            slippageBPS: 125
+        });
+    }
+
+    function getTestConfig() internal pure override returns (TestConfig memory) {
+        return TestConfig({
+            vaultAsset: WETH,
+            vaultInitialDeposit: 50_000e18,
+            absoluteCap: 10_000e18,
+            relativeCap: 1e18,
+            decimals: 18
+        });
+    }
+
+    function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
+        return address(
+            new StakeDAOWETHStrategy(vault_, params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, int128(1))
+        );
+    }
+
+    function getForkBlockNumber() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function getRpcUrl() internal view override returns (string memory) {
+        return vm.envOr("MAINNET_RPC_URL", string("https://mainnet.gateway.tenderly.co"));
+    }
+
+    function _getMinAllocateAmount() internal pure override returns (uint256) {
+        return 0.01e18;
+    }
+}
