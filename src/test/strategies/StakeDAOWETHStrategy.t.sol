@@ -13,6 +13,7 @@ import {AlchemistStrategyClassifier} from "../../AlchemistStrategyClassifier.sol
 import {TokenUtils} from "../../libraries/TokenUtils.sol";
 import {MYTTestHelper} from "../libraries/MYTTestHelper.sol";
 import {BaseStrategyTest} from "../BaseStrategyTest.sol";
+import {IStakeDAORewardVault, ICurveStableSwapPool} from "../../strategies/interfaces/IStakeDAO.sol";
 
 contract MockEnsoBidirectional {
     IERC20 public immutable weth;
@@ -149,6 +150,14 @@ contract MockRewardVault is IERC20 {
 
     function claim(address[] calldata, address) external pure returns (uint256[] memory amounts) {
         return amounts;
+    }
+
+    function convertToAssets(uint256 shares) external pure returns (uint256 assets) {
+        return shares;
+    }
+
+    function previewWithdraw(uint256 assets) external pure returns (uint256 shares) {
+        return assets;
     }
 }
 
@@ -377,6 +386,95 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
     address public constant REWARD_VAULT = 0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C;
     address public constant ETH_PLUS_WETH_POOL = 0x2c683fAd51da2cd17793219CC86439C1875c353e;
     address public constant ENSO_ROUTER = 0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf;
+
+    function testFuzz_forceDeallocate_direct_succeeds(uint256 rawAllocateAmount, uint256 rawForceDeallocateAmount) public {
+        uint256 minAllocateAmount = _getMinAllocateAmount();
+        (, uint256 maxAllocateAmount) = _getAllocationBounds();
+        uint256 allocateAmount = bound(rawAllocateAmount, minAllocateAmount * 2, maxAllocateAmount);
+        uint256 forceDeallocateAmount = bound(rawForceDeallocateAmount, minAllocateAmount, allocateAmount / 2);
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, allocateAmount);
+
+        uint256 strategyAssetsAfterAllocate = IMYTStrategy(strategy).realAssets();
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
+        uint256 allocationBefore = IVaultV2(vault).allocation(IMYTStrategy(strategy).adapterId());
+        uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(strategy);
+
+        vm.prank(vaultDepositor);
+        IVaultV2(vault).forceDeallocate(strategy, getVaultParams(), forceDeallocateAmount, vaultDepositor);
+
+        assertLt(IMYTStrategy(strategy).realAssets(), strategyAssetsAfterAllocate, "strategy assets should decrease");
+        assertLt(IVaultV2(vault).allocation(IMYTStrategy(strategy).adapterId()), allocationBefore, "allocation should decrease");
+        assertLt(IERC20(REWARD_VAULT).balanceOf(strategy), sharesBefore, "RewardVault shares should decrease");
+        assertGt(IERC20(WETH).balanceOf(vault), vaultWethBefore, "vault should receive WETH");
+    }
+
+    function testFuzz_deallocate_uses_idle_weth_before_reward_vault_shares(
+        uint256 rawAllocateAmount,
+        uint256 rawIdleAmount,
+        uint256 rawDeallocateAmount
+    ) public {
+        uint256 minAllocateAmount = _getMinAllocateAmount();
+        (, uint256 maxAllocateAmount) = _getAllocationBounds();
+        uint256 allocateAmount = bound(rawAllocateAmount, minAllocateAmount * 2, maxAllocateAmount);
+        uint256 idleAmount = bound(rawIdleAmount, minAllocateAmount, allocateAmount / 2);
+        uint256 deallocateAmount = bound(rawDeallocateAmount, minAllocateAmount, idleAmount);
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, allocateAmount);
+
+        uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(strategy);
+        uint256 strategyWethBefore = IERC20(WETH).balanceOf(strategy);
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
+
+        deal(WETH, strategy, strategyWethBefore + idleAmount);
+
+        vm.prank(admin);
+        IAllocator(allocator).deallocate(strategy, deallocateAmount);
+
+        assertEq(IERC20(REWARD_VAULT).balanceOf(strategy), sharesBefore, "RewardVault shares should remain untouched");
+        assertEq(IERC20(WETH).balanceOf(strategy), strategyWethBefore + idleAmount - deallocateAmount, "idle WETH should fund deallocate");
+        assertEq(IERC20(WETH).balanceOf(vault), vaultWethBefore + deallocateAmount, "vault should receive idle WETH");
+    }
+
+    function testFuzz_accounting_uses_reward_vault_assets_after_lp_accrual(uint256 rawAllocateAmount, uint256 rawAccruedLp) public {
+        uint256 minAllocateAmount = _getMinAllocateAmount();
+        uint256 allocateAmount = bound(rawAllocateAmount, minAllocateAmount * 20, 100e18);
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, allocateAmount);
+
+        uint256 shares = IERC20(REWARD_VAULT).balanceOf(strategy);
+        uint256 assetsBeforeAccrual = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(shares);
+        uint256 accruedLp = bound(rawAccruedLp, minAllocateAmount, allocateAmount / 10);
+        uint256 accruedAssets = assetsBeforeAccrual + accruedLp;
+        vm.mockCall(
+            REWARD_VAULT,
+            abi.encodeWithSelector(bytes4(keccak256("convertToAssets(uint256)")), shares),
+            abi.encode(accruedAssets)
+        );
+        vm.warp(block.timestamp + 7 days);
+
+        uint256 lpAssets = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(shares);
+        uint256 expectedPositionValue = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).calc_withdraw_one_coin(lpAssets, int128(1));
+        uint256 idleAssets = IERC20(WETH).balanceOf(strategy);
+        uint256 expectedRealAssets = idleAssets + expectedPositionValue;
+        uint256 previewTarget = expectedRealAssets / 2;
+        uint256 previewFromIdle = previewTarget <= idleAssets ? previewTarget : idleAssets;
+        uint256 previewFromPosition = previewTarget - previewFromIdle;
+        (,,,,,,,, uint256 slippageBPS) = IMYTStrategy(strategy).params();
+        uint256 expectedPreview = previewFromIdle + (previewFromPosition * (10_000 - slippageBPS)) / 10_000;
+
+        assertEq(lpAssets, accruedAssets, "RewardVault LP assets should accrue");
+        assertEq(IMYTStrategy(strategy).realAssets(), expectedRealAssets, "realAssets should use convertToAssets");
+        assertEq(
+            IMYTStrategy(strategy).previewAdjustedWithdraw(previewTarget),
+            expectedPreview,
+            "previewAdjustedWithdraw should use convertToAssets"
+        );
+        vm.clearMockedCalls();
+    }
 
     function getStrategyConfig() internal pure override returns (IMYTStrategy.StrategyParams memory) {
         return IMYTStrategy.StrategyParams({

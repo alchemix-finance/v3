@@ -96,12 +96,13 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         require(shares > 0, "No RewardVault shares");
 
         uint256 lpToExit = _lpRequiredForWeth(shortfall, shares);
-        uint256 sharesToRedeem = lpToExit;
+        uint256 sharesToRedeem = rewardVault.previewWithdraw(lpToExit);
+        if (sharesToRedeem > shares) sharesToRedeem = shares;
 
-        rewardVault.redeem(sharesToRedeem, address(this), address(this));
+        uint256 lpRedeemed = rewardVault.redeem(sharesToRedeem, address(this), address(this));
 
-        TokenUtils.safeApprove(address(curvePool), address(curvePool), lpToExit);
-        curvePool.remove_liquidity_one_coin(lpToExit, wethCoinIndex, shortfall, address(this));
+        TokenUtils.safeApprove(address(curvePool), address(curvePool), lpRedeemed);
+        curvePool.remove_liquidity_one_coin(lpRedeemed, wethCoinIndex, shortfall, address(this));
         TokenUtils.safeApprove(address(curvePool), address(curvePool), 0);
 
         require(_idleAssets() >= amount, "Withdraw amount insufficient");
@@ -179,7 +180,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
 
     function _sharesToWeth(uint256 shares) internal view returns (uint256) {
         if (shares == 0) return 0;
-        return curvePool.calc_withdraw_one_coin(shares, wethCoinIndex);
+        return curvePool.calc_withdraw_one_coin(rewardVault.convertToAssets(shares), wethCoinIndex);
     }
 
     function _minWethAfterSlippage(uint256 wethAmount) internal view returns (uint256) {
@@ -197,14 +198,17 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     }
 
     /// @dev LP estimate from the full-position Curve quote, rounded up.
-    function _lpRequiredForWeth(uint256 wethOut, uint256 maxLp) internal view returns (uint256) {
-        if (maxLp == 0 || wethOut == 0) return 0;
+    function _lpRequiredForWeth(uint256 wethOut, uint256 maxShares) internal view returns (uint256) {
+        if (maxShares == 0 || wethOut == 0) return 0;
 
+        uint256 maxLp = rewardVault.convertToAssets(maxShares);
         uint256 maxWeth = curvePool.calc_withdraw_one_coin(maxLp, wethCoinIndex);
         if (wethOut >= maxWeth) return maxLp;
 
         uint256 estimated = (wethOut * maxLp + maxWeth - 1) / maxWeth;
-        return estimated == 0 ? 1 : estimated;
+        uint256 buffered = (estimated * 10_000 + (10_000 - params.slippageBPS) - 1) / (10_000 - params.slippageBPS);
+        if (buffered > maxLp) return maxLp;
+        return buffered == 0 ? 1 : buffered;
     }
 
     function _ensoRoute(address outputToken, uint256 minOut, bytes memory ensoCalldata) internal {
