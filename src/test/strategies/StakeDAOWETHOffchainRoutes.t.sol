@@ -13,10 +13,7 @@ import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 import {IStakeDAORewardVault} from "../../strategies/interfaces/IStakeDAO.sol";
 
 /// @notice Fork tests that replay pinned Enso route calldata from static JSON fixtures.
-contract StakeDAOWETHOffchainRoutesTest is Test {
-    string internal constant FIXTURE_PATH =
-        "src/test/strategies/utils/offchain/quotes/stakeDaoWethLifecycle1Eth.json";
-
+abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
     address internal constant DEPLOYER = address(uint160(0xC0FFEE));
     address internal constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address internal constant REWARD_VAULT = 0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C;
@@ -35,7 +32,7 @@ contract StakeDAOWETHOffchainRoutesTest is Test {
     address internal classifier;
 
     function setUp() public {
-        fixture = vm.readFile(FIXTURE_PATH);
+        fixture = vm.readFile(_fixturePath());
         _requireGeneratedFixture();
         uint256 blockNumber = _readUint(".blockNumber");
         vm.createSelectFork(_readString(".rpcUrl"), blockNumber);
@@ -59,6 +56,7 @@ contract StakeDAOWETHOffchainRoutesTest is Test {
         assertGt(sharesReceived, 0, "no RewardVault shares received");
         assertEq(IERC20(WETH).balanceOf(address(strategy)), wethBefore, "WETH should be fully routed");
         assertGe(IMYTStrategy(address(strategy)).realAssets(), allocateAmount * 99 / 100, "realAssets underallocated");
+        _assertEnsoAllowancesCleared();
     }
 
     function test_deallocateWithSwap_usesStaticEnsoRoute() public {
@@ -80,6 +78,83 @@ contract StakeDAOWETHOffchainRoutesTest is Test {
 
         assertGe(IERC20(WETH).balanceOf(address(strategy)) - wethBefore, preview, "insufficient WETH out");
         assertLt(IERC20(REWARD_VAULT).balanceOf(address(strategy)), sharesAfterAllocate, "shares should decrease");
+        _assertEnsoAllowancesCleared();
+    }
+
+    function test_partialDeallocateWithSwap_preservesRemainingShares() public {
+        uint256 allocateAmount = _readUint(".allocate.amountIn");
+        uint256 quotedSharesIn = _readUint(".deallocate.amountIn");
+        uint256 quotedWethOut = _readUint(".deallocate.amountOut");
+        bytes memory allocateCalldata = vm.parseJsonBytes(fixture, ".allocate.tx.data");
+        bytes memory deallocateCalldata = vm.parseJsonBytes(fixture, ".deallocate.tx.data");
+
+        deal(WETH, address(strategy), allocateAmount);
+        vm.prank(address(vault));
+        IMYTStrategy(address(strategy)).allocate(_swapParams(allocateCalldata), allocateAmount, "", address(vault));
+
+        uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(address(strategy));
+        uint256 preview = IMYTStrategy(address(strategy)).previewAdjustedWithdraw(quotedWethOut);
+        uint256 wethBefore = IERC20(WETH).balanceOf(address(strategy));
+
+        vm.prank(address(vault));
+        IMYTStrategy(address(strategy)).deallocate(_swapParams(deallocateCalldata), preview, "", address(vault));
+
+        uint256 sharesAfter = IERC20(REWARD_VAULT).balanceOf(address(strategy));
+        assertEq(sharesBefore - sharesAfter, quotedSharesIn, "route consumed unexpected shares");
+        assertGt(sharesAfter, 0, "partial deallocation consumed full position");
+        assertGe(IERC20(WETH).balanceOf(address(strategy)) - wethBefore, preview, "insufficient WETH out");
+        _assertEnsoAllowancesCleared();
+    }
+
+    function test_fullDeallocateWithSwap_redeemsAllShares() public {
+        uint256 allocateAmount = _readUint(".allocate.amountIn");
+        uint256 quotedSharesIn = _readUint(".deallocateFull.amountIn");
+        uint256 quotedWethOut = _readUint(".deallocateFull.amountOut");
+        bytes memory allocateCalldata = vm.parseJsonBytes(fixture, ".allocate.tx.data");
+        bytes memory deallocateCalldata = vm.parseJsonBytes(fixture, ".deallocateFull.tx.data");
+
+        deal(WETH, address(strategy), allocateAmount);
+        vm.prank(address(vault));
+        IMYTStrategy(address(strategy)).allocate(_swapParams(allocateCalldata), allocateAmount, "", address(vault));
+
+        uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(address(strategy));
+        assertEq(sharesBefore, quotedSharesIn, "full route input should match position");
+        uint256 preview = IMYTStrategy(address(strategy)).previewAdjustedWithdraw(quotedWethOut);
+        uint256 wethBefore = IERC20(WETH).balanceOf(address(strategy));
+
+        vm.prank(address(vault));
+        IMYTStrategy(address(strategy)).deallocate(_swapParams(deallocateCalldata), preview, "", address(vault));
+
+        assertEq(IERC20(REWARD_VAULT).balanceOf(address(strategy)), 0, "full deallocation should redeem all shares");
+        assertGe(IERC20(WETH).balanceOf(address(strategy)) - wethBefore, preview, "insufficient WETH out");
+        _assertEnsoAllowancesCleared();
+    }
+
+    function test_mixedIdleAndEnsoDeallocate_usesIdleBeforeRoutingShortfall() public {
+        uint256 allocateAmount = _readUint(".allocate.amountIn");
+        uint256 quotedSharesIn = _readUint(".deallocate.amountIn");
+        uint256 quotedWethOut = _readUint(".deallocate.amountOut");
+        bytes memory allocateCalldata = vm.parseJsonBytes(fixture, ".allocate.tx.data");
+        bytes memory deallocateCalldata = vm.parseJsonBytes(fixture, ".deallocate.tx.data");
+
+        deal(WETH, address(strategy), allocateAmount);
+        vm.prank(address(vault));
+        IMYTStrategy(address(strategy)).allocate(_swapParams(allocateCalldata), allocateAmount, "", address(vault));
+
+        uint256 idleAmount = allocateAmount / 10;
+        deal(WETH, address(strategy), idleAmount);
+        uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(address(strategy));
+        uint256 preview = IMYTStrategy(address(strategy)).previewAdjustedWithdraw(idleAmount + quotedWethOut);
+        assertGt(preview, idleAmount, "position should cover a shortfall");
+
+        vm.prank(address(vault));
+        IMYTStrategy(address(strategy)).deallocate(_swapParams(deallocateCalldata), preview, "", address(vault));
+
+        uint256 sharesAfter = IERC20(REWARD_VAULT).balanceOf(address(strategy));
+        assertEq(sharesBefore - sharesAfter, quotedSharesIn, "route consumed unexpected shares");
+        assertGt(sharesAfter, 0, "mixed deallocation consumed full position");
+        assertGe(IERC20(WETH).balanceOf(address(strategy)), preview, "idle plus routed WETH should cover withdrawal");
+        _assertEnsoAllowancesCleared();
     }
 
     function test_allocator_allocateAndDeallocateWithSwap_usesStaticEnsoRoutes() public {
@@ -104,6 +179,7 @@ contract StakeDAOWETHOffchainRoutesTest is Test {
         vm.stopPrank();
 
         assertGe(IERC20(WETH).balanceOf(address(vault)) - vaultBalanceBefore, preview, "vault should receive WETH");
+        _assertEnsoAllowancesCleared();
     }
 
     function test_fixtureAssumptions() public view {
@@ -111,6 +187,7 @@ contract StakeDAOWETHOffchainRoutesTest is Test {
         assertEq(vm.parseJsonAddress(fixture, ".ensoRouter"), ENSO_ROUTER, "enso router mismatch");
         assertEq(vm.parseJsonAddress(fixture, ".allocate.tx.to"), ENSO_ROUTER, "allocate tx.to mismatch");
         assertEq(vm.parseJsonAddress(fixture, ".deallocate.tx.to"), ENSO_ROUTER, "deallocate tx.to mismatch");
+        assertEq(vm.parseJsonAddress(fixture, ".deallocateFull.tx.to"), ENSO_ROUTER, "full deallocate tx.to mismatch");
         assertEq(IStakeDAORewardVault(REWARD_VAULT).asset(), ETH_PLUS_WETH_POOL, "reward vault asset mismatch");
     }
 
@@ -135,7 +212,7 @@ contract StakeDAOWETHOffchainRoutesTest is Test {
         });
 
         strategy = new StakeDAOWETHStrategy(
-            address(vault), params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, int128(1)
+            address(vault), params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, int128(1), 125
         );
         vm.stopPrank();
 
@@ -192,9 +269,32 @@ contract StakeDAOWETHOffchainRoutesTest is Test {
         return vm.parseJsonString(fixture, key);
     }
 
+    function _fixturePath() internal pure virtual returns (string memory);
+
+    function _assertEnsoAllowancesCleared() internal view {
+        assertEq(IERC20(WETH).allowance(address(strategy), ENSO_ROUTER), 0, "WETH allowance should be cleared");
+        assertEq(
+            IERC20(REWARD_VAULT).allowance(address(strategy), ENSO_ROUTER),
+            0,
+            "RewardVault allowance should be cleared"
+        );
+    }
+
     function _submitAndExecute(bytes memory data) internal {
         vault.submit(data);
         bytes4 selector = bytes4(data);
         vm.warp(block.timestamp + vault.timelock(selector));
+    }
+}
+
+contract StakeDAOWETHOffchainRoutesTest is StakeDAOWETHOffchainRoutesBaseTest {
+    function _fixturePath() internal pure override returns (string memory) {
+        return "src/test/strategies/utils/offchain/quotes/stakeDaoWethLifecycle1Eth.json";
+    }
+}
+
+contract StakeDAOWETH300WETHOffchainRoutesTest is StakeDAOWETHOffchainRoutesBaseTest {
+    function _fixturePath() internal pure override returns (string memory) {
+        return "src/test/strategies/utils/offchain/quotes/stakeDaoWethLifecycle300Weth.json";
     }
 }

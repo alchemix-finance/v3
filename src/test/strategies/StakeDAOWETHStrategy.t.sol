@@ -162,6 +162,10 @@ contract MockRewardVault is IERC20 {
         return shares;
     }
 
+    function previewDeposit(uint256 assets) external pure returns (uint256 shares) {
+        return assets;
+    }
+
     function previewWithdraw(uint256 assets) external pure returns (uint256 shares) {
         return assets;
     }
@@ -195,7 +199,7 @@ contract MockStakeDAOWETHStrategy is StakeDAOWETHStrategy {
         address _curvePool,
         address _ensoRouter,
         int128 _wethCoinIndex
-    ) StakeDAOWETHStrategy(_myt, _params, _rewardVault, _curvePool, _ensoRouter, _wethCoinIndex) {}
+    ) StakeDAOWETHStrategy(_myt, _params, _rewardVault, _curvePool, _ensoRouter, _wethCoinIndex, 125) {}
 }
 
 contract StakeDAOWETHStrategyEnsoTest is Test {
@@ -349,6 +353,41 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
         vm.stopPrank();
     }
 
+    function test_allocate_succeeds_at_exact_enso_slippage_boundary() public {
+        uint256 amount = 5e18;
+        uint256 minShares = amount * (10_000 - 125) / 10_000;
+
+        MockEnsoUnderDeliver exactOutputRouter = new MockEnsoUnderDeliver(WETH, address(rewardVault), minShares);
+        rewardVault.mint(address(exactOutputRouter), minShares);
+
+        StakeDAOWETHStrategy exactOutputStrategy = new MockStakeDAOWETHStrategy(
+            vault,
+            IMYTStrategy.StrategyParams({
+                owner: admin,
+                name: "StakeDAOWETH",
+                protocol: "StakeDAO",
+                riskClass: IMYTStrategy.RiskClass.MEDIUM,
+                cap: 10_000e18,
+                globalCap: 1e18,
+                estimatedYield: 100e18,
+                additionalIncentives: true,
+                slippageBPS: 125
+            }),
+            address(rewardVault),
+            address(curvePool),
+            address(exactOutputRouter),
+            int128(1)
+        );
+
+        vm.startPrank(vault);
+        deal(WETH, address(exactOutputStrategy), amount);
+        IMYTStrategy(address(exactOutputStrategy)).allocate(_swapParams(hex"01"), amount, "", address(vault));
+        vm.stopPrank();
+
+        assertEq(rewardVault.balanceOf(address(exactOutputStrategy)), minShares);
+        assertEq(IERC20(WETH).balanceOf(address(exactOutputStrategy)), 0);
+    }
+
     function test_allocate_reverts_when_enso_under_delivers_shares() public {
         uint256 amount = 5e18;
         uint256 minShares = amount * (10_000 - 125) / 10_000;
@@ -413,6 +452,35 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
     address public constant REWARD_VAULT = 0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C;
     address public constant ETH_PLUS_WETH_POOL = 0x2c683fAd51da2cd17793219CC86439C1875c353e;
     address public constant ENSO_ROUTER = 0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf;
+
+    function test_owner_can_set_direct_exit_buffer_independently_from_slippage() public {
+        uint256 newDirectExitBufferBps = 200;
+        (,,,,,,,, uint256 slippageBefore) = IMYTStrategy(strategy).params();
+
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setDirectExitBufferBps(newDirectExitBufferBps);
+
+        (,,,,,,,, uint256 slippageAfter) = IMYTStrategy(strategy).params();
+        assertEq(StakeDAOWETHStrategy(strategy).directExitBufferBps(), newDirectExitBufferBps);
+        assertEq(slippageAfter, slippageBefore, "direct exit buffer should not change slippage");
+    }
+
+    function test_set_direct_exit_buffer_reverts_above_cap() public {
+        uint256 maxDirectExitBufferBps = StakeDAOWETHStrategy(strategy).MAX_DIRECT_EXIT_BUFFER_BPS();
+
+        vm.prank(admin);
+        vm.expectRevert("Direct exit buffer too high");
+        StakeDAOWETHStrategy(strategy).setDirectExitBufferBps(maxDirectExitBufferBps);
+    }
+
+    function test_force_deallocate_defaults_disabled_and_owner_can_enable() public {
+        assertFalse(StakeDAOWETHStrategy(strategy).canForceDeallocate(), "force deallocate should default disabled");
+
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setCanForceDeallocate(true);
+
+        assertTrue(StakeDAOWETHStrategy(strategy).canForceDeallocate(), "force deallocate should be enabled");
+    }
 
     function test_claimRewards_uses_real_reward_vault_and_swaps_cvx_to_weth() public {
         uint256 cvxWethPrice = 0.5e18;
@@ -513,6 +581,9 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
         uint256 allocationBefore = IVaultV2(vault).allocation(IMYTStrategy(strategy).adapterId());
         uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(strategy);
+
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setCanForceDeallocate(true);
 
         vm.prank(vaultDepositor);
         IVaultV2(vault).forceDeallocate(strategy, getVaultParams(), forceDeallocateAmount, vaultDepositor);
@@ -647,7 +718,7 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
 
     function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
         return address(
-            new StakeDAOWETHStrategy(vault_, params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, int128(1))
+            new StakeDAOWETHStrategy(vault_, params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, int128(1), 125)
         );
     }
 

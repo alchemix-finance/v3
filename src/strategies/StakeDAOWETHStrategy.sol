@@ -13,11 +13,18 @@ import {IStakeDAORewardVault, ICurveStableSwapPool} from "./interfaces/IStakeDAO
  *      Swap path: single Enso route each way via `ActionType.swap`.
  */
 contract StakeDAOWETHStrategy is MYTStrategy {
+    uint256 public constant MAX_DIRECT_EXIT_BUFFER_BPS = 650;
+
     IERC20 public immutable weth;
     IStakeDAORewardVault public immutable rewardVault;
     ICurveStableSwapPool public immutable curvePool;
     address public immutable ensoRouter;
     int128 public immutable wethCoinIndex;
+    uint256 public directExitBufferBps;
+    bool public canForceDeallocate;
+
+    event DirectExitBufferBpsUpdated(uint256 newDirectExitBufferBps);
+    event CanForceDeallocateUpdated(bool newCanForceDeallocate);
 
     constructor(
         address _myt,
@@ -25,19 +32,33 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         address _rewardVault,
         address _curvePool,
         address _ensoRouter,
-        int128 _wethCoinIndex
+        int128 _wethCoinIndex,
+        uint256 _directExitBufferBps
     ) MYTStrategy(_myt, _params) {
         require(_rewardVault != address(0), "Zero reward vault");
         require(_curvePool != address(0), "Zero curve pool");
         require(_ensoRouter != address(0), "Zero enso router");
+        require(_directExitBufferBps < MAX_DIRECT_EXIT_BUFFER_BPS, "Direct exit buffer too high");
 
         weth = IERC20(MYT.asset());
         rewardVault = IStakeDAORewardVault(_rewardVault);
         curvePool = ICurveStableSwapPool(_curvePool);
         ensoRouter = _ensoRouter;
         wethCoinIndex = _wethCoinIndex;
+        directExitBufferBps = _directExitBufferBps;
 
         require(rewardVault.asset() == _curvePool, "Vault asset != curve LP");
+    }
+
+    function setDirectExitBufferBps(uint256 newDirectExitBufferBps) external onlyOwner {
+        require(newDirectExitBufferBps < MAX_DIRECT_EXIT_BUFFER_BPS, "Direct exit buffer too high");
+        directExitBufferBps = newDirectExitBufferBps;
+        emit DirectExitBufferBpsUpdated(newDirectExitBufferBps);
+    }
+
+    function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
+        canForceDeallocate = canForceDeallocate_;
+        emit CanForceDeallocateUpdated(canForceDeallocate_);
     }
 
     function _allocate(uint256 amount) internal override returns (uint256) {
@@ -78,7 +99,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
 
         uint256 sharesReceived = rewardVault.balanceOf(address(this)) - sharesBefore;
         uint256 wethValueReceived = _sharesToWeth(sharesReceived);
-        uint256 minWethValue = _minWethAfterSlippage(amount);
+        uint256 minWethValue = _sharesToWeth(minSharesOut);
         if (wethValueReceived < minWethValue) revert InvalidAmount(minWethValue, wethValueReceived);
 
         return amount;
@@ -177,8 +198,8 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         return token == address(weth);
     }
 
-    function _canForceDeallocate() internal pure override returns (bool) {
-        return true;
+    function _canForceDeallocate() internal view override returns (bool) {
+        return canForceDeallocate;
     }
 
     function _sharesToWeth(uint256 shares) internal view returns (uint256) {
@@ -195,9 +216,12 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         return minAmount == 0 ? 1 : minAmount;
     }
 
-    /// @dev Conservative lower bound on RewardVault shares expected from a WETH deposit under the 1:1 LP assumption.
+    /// @dev Lower bound on RewardVault shares expected from the quoted Curve LP deposit.
     function _minSharesForWethIn(uint256 wethAmount) internal view returns (uint256) {
-        return _minWethAfterSlippage(wethAmount);
+        uint256[] memory amounts = new uint256[](2);
+        amounts[uint256(uint128(wethCoinIndex))] = wethAmount;
+        uint256 expectedLp = curvePool.calc_token_amount(amounts, true);
+        return _minAmountAfterSlippage(rewardVault.previewDeposit(expectedLp));
     }
 
     /// @dev LP estimate from the full-position Curve quote, rounded up.
@@ -209,7 +233,8 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         if (wethOut >= maxWeth) return maxLp;
 
         uint256 estimated = (wethOut * maxLp + maxWeth - 1) / maxWeth;
-        uint256 buffered = (estimated * 10_000 + (10_000 - params.slippageBPS) - 1) / (10_000 - params.slippageBPS);
+        uint256 buffered =
+            (estimated * 10_000 + (10_000 - directExitBufferBps) - 1) / (10_000 - directExitBufferBps);
         if (buffered > maxLp) return maxLp;
         return buffered == 0 ? 1 : buffered;
     }

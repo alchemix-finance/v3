@@ -30,7 +30,7 @@ Optional overrides:
 
 ```bash
 ALLOCATE_AMOUNT=1000000000000000000 \
-DEALLOCATE_AMOUNT_OUT=500000000000000000 \
+DEALLOCATE_SHARE_BPS=5000 \
 SLIPPAGE_BPS=125 \
 bash src/test/strategies/utils/offchain/fetch-stakedao-enso-routes.sh
 ```

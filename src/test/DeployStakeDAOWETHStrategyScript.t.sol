@@ -79,6 +79,7 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
                 curvePool: curvePool,
                 ensoRouter: ensoRouter,
                 wethCoinIndex: deployScript.WETH_COIN_INDEX(),
+                directExitBufferBps: deployScript.DIRECT_EXIT_BUFFER_BPS(),
                 params: _buildParams("StakeDAO Mainnet ETH+/WETH", "StakeDAO")
             });
 
@@ -91,6 +92,12 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
         assertEq(address(strategy.curvePool()), curvePool, "unexpected curve pool");
         assertEq(strategy.ensoRouter(), ensoRouter, "unexpected enso router");
         assertEq(strategy.wethCoinIndex(), deployScript.WETH_COIN_INDEX(), "unexpected WETH coin index");
+        assertEq(
+            strategy.directExitBufferBps(),
+            deployScript.DIRECT_EXIT_BUFFER_BPS(),
+            "unexpected direct exit buffer"
+        );
+        assertFalse(strategy.canForceDeallocate(), "force deallocate should default disabled");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
         assertEq(curator.adapterToMYT(strategyAddr), address(0), "deploy script should not register with curator");
@@ -107,6 +114,7 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
                 curvePool: curvePool,
                 ensoRouter: ensoRouter,
                 wethCoinIndex: deployScript.WETH_COIN_INDEX(),
+                directExitBufferBps: deployScript.DIRECT_EXIT_BUFFER_BPS(),
                 params: _buildParams("StakeDAO Mainnet ETH+/WETH", "StakeDAO")
             });
 
@@ -139,6 +147,12 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
         assertEq(address(strategy.curvePool()), MAINNET_ETH_PLUS_WETH_POOL, "unexpected curve pool");
         assertEq(strategy.ensoRouter(), MAINNET_ENSO_ROUTER, "unexpected enso router");
         assertEq(strategy.wethCoinIndex(), forkDeployScript.WETH_COIN_INDEX(), "unexpected WETH coin index");
+        assertEq(
+            strategy.directExitBufferBps(),
+            forkDeployScript.DIRECT_EXIT_BUFFER_BPS(),
+            "unexpected direct exit buffer"
+        );
+        assertFalse(strategy.canForceDeallocate(), "force deallocate should default disabled");
         assertEq(strategy.owner(), MAINNET_NEW_OWNER, "unexpected strategy owner");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled after deploy");
         assertFalse(vault.isAdapter(strategyAddr), "deploy script should not register strategy");
@@ -208,6 +222,7 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
         assertEq(deployScript.ETH_PLUS_WETH_POOL(), MAINNET_ETH_PLUS_WETH_POOL, "unexpected curve pool");
         assertEq(deployScript.ENSO_ROUTER(), MAINNET_ENSO_ROUTER, "unexpected enso router");
         assertEq(deployScript.WETH_COIN_INDEX(), 1, "unexpected WETH coin index");
+        assertEq(deployScript.DIRECT_EXIT_BUFFER_BPS(), 125, "unexpected direct exit buffer");
         assertEq(params.owner, DEPLOYER, "unexpected owner");
         assertEq(params.name, "StakeDAO Mainnet ETH+/WETH", "unexpected name");
         assertEq(params.protocol, "StakeDAO", "unexpected protocol");
