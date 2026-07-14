@@ -11,6 +11,7 @@ import {AlchemistAllocator} from "../../AlchemistAllocator.sol";
 import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {AlchemistStrategyClassifier} from "../../AlchemistStrategyClassifier.sol";
 import {TokenUtils} from "../../libraries/TokenUtils.sol";
+import {MYTStrategy} from "../../MYTStrategy.sol";
 import {MYTTestHelper} from "../libraries/MYTTestHelper.sol";
 import {BaseStrategyTest} from "../BaseStrategyTest.sol";
 import {IStakeDAORewardVault, ICurveStableSwapPool} from "../../strategies/interfaces/IStakeDAO.sol";
@@ -126,6 +127,10 @@ contract MockRewardVault is IERC20 {
         totalSupply += amount;
     }
 
+    function earned(address, address) external pure returns (uint128) {
+        return 0;
+    }
+
     function transfer(address to, uint256 amount) external returns (bool) {
         balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
@@ -148,7 +153,8 @@ contract MockRewardVault is IERC20 {
         return tokens;
     }
 
-    function claim(address[] calldata, address) external pure returns (uint256[] memory amounts) {
+    function claim(address[] calldata tokens, address) external pure returns (uint256[] memory amounts) {
+        amounts = new uint256[](tokens.length);
         return amounts;
     }
 
@@ -158,6 +164,26 @@ contract MockRewardVault is IERC20 {
 
     function previewWithdraw(uint256 assets) external pure returns (uint256 shares) {
         return assets;
+    }
+}
+
+contract Mock0xRouter {
+    IERC20 public immutable sellToken;
+    IERC20 public immutable buyToken;
+    uint256 public immutable priceWad;
+
+    constructor(address _sellToken, address _buyToken, uint256 _priceWad) {
+        sellToken = IERC20(_sellToken);
+        buyToken = IERC20(_buyToken);
+        priceWad = _priceWad;
+    }
+
+    function swap(address sellToken_, address buyToken_, uint256 amountIn) external returns (uint256 amountOut) {
+        require(sellToken_ == address(sellToken) && buyToken_ == address(buyToken), "unsupported pair");
+        sellToken.transferFrom(msg.sender, address(this), amountIn);
+        amountOut = amountIn * priceWad / 1e18;
+        buyToken.transfer(msg.sender, amountOut);
+        return amountOut;
     }
 }
 
@@ -383,9 +409,96 @@ contract MockEnsoUnderDeliver {
 /// @notice Mainnet fork tests for direct allocate/deallocate against real Curve + RewardVault contracts.
 contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public constant CVX = 0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B;
     address public constant REWARD_VAULT = 0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C;
     address public constant ETH_PLUS_WETH_POOL = 0x2c683fAd51da2cd17793219CC86439C1875c353e;
     address public constant ENSO_ROUTER = 0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf;
+
+    function test_claimRewards_uses_real_reward_vault_and_swaps_cvx_to_weth() public {
+        uint256 cvxWethPrice = 0.5e18;
+        uint256 earnedRewards = _accrueCvxRewards();
+        Mock0xRouter mock0xRouter = _setUp0xRouter(cvxWethPrice);
+
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
+        uint256 vaultCvxBefore = IERC20(CVX).balanceOf(vault);
+        uint256 routerCvxBefore = IERC20(CVX).balanceOf(address(mock0xRouter));
+        bytes memory quote = abi.encodeCall(Mock0xRouter.swap, (CVX, WETH, earnedRewards));
+
+        vm.prank(admin);
+        uint256 wethReceived = IMYTStrategy(strategy).claimRewards(CVX, quote, 1);
+
+        uint256 cvxSwapped = IERC20(CVX).balanceOf(address(mock0xRouter)) - routerCvxBefore;
+        uint256 expectedWeth = cvxSwapped * cvxWethPrice / 1e18;
+        assertGt(cvxSwapped, 0, "real RewardVault should transfer CVX");
+        assertEq(wethReceived, expectedWeth, "claimRewards should return fixed-price WETH output");
+        assertEq(IERC20(WETH).balanceOf(vault), vaultWethBefore + expectedWeth, "MYT should receive WETH");
+        assertEq(IERC20(CVX).balanceOf(vault), vaultCvxBefore, "MYT should not receive CVX");
+        assertEq(IERC20(CVX).balanceOf(strategy), 0, "strategy should not retain CVX");
+    }
+
+    function test_claimRewards_can_sell_half_cvx_and_leave_remainder_in_strategy() public {
+        uint256 cvxWethPrice = 0.5e18;
+        uint256 earnedRewards = _accrueCvxRewards();
+        uint256 sellAmount = earnedRewards / 2;
+        Mock0xRouter mock0xRouter = _setUp0xRouter(cvxWethPrice);
+
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
+        bytes memory quote = abi.encodeCall(Mock0xRouter.swap, (CVX, WETH, sellAmount));
+
+        vm.prank(admin);
+        uint256 wethReceived = IMYTStrategy(strategy).claimRewards(CVX, quote, 1);
+
+        uint256 expectedWeth = sellAmount * cvxWethPrice / 1e18;
+        uint256 unsoldCvx = earnedRewards - sellAmount;
+        assertEq(wethReceived, expectedWeth, "claimRewards should return WETH from half the CVX");
+        assertEq(IERC20(WETH).balanceOf(vault), vaultWethBefore + expectedWeth, "MYT should receive swapped WETH");
+        assertEq(IERC20(CVX).balanceOf(strategy), unsoldCvx, "strategy should retain unsold CVX");
+        assertEq(IERC20(CVX).balanceOf(address(mock0xRouter)), sellAmount, "router should pull only half the CVX");
+    }
+
+    function test_owner_can_rescue_unsold_cvx_after_partial_reward_swap() public {
+        uint256 earnedRewards = _accrueCvxRewards();
+        uint256 sellAmount = earnedRewards / 2;
+        _setUp0xRouter(0.5e18);
+        bytes memory quote = abi.encodeCall(Mock0xRouter.swap, (CVX, WETH, sellAmount));
+
+        vm.prank(admin);
+        IMYTStrategy(strategy).claimRewards(CVX, quote, 1);
+
+        uint256 unsoldCvx = IERC20(CVX).balanceOf(strategy);
+        address recipient = makeAddr("cvx-rescue-recipient");
+        vm.prank(admin);
+        MYTStrategy(strategy).rescueTokens(CVX, recipient, unsoldCvx);
+
+        assertEq(unsoldCvx, earnedRewards - sellAmount, "unexpected unsold CVX");
+        assertEq(IERC20(CVX).balanceOf(strategy), 0, "strategy CVX should be rescued");
+        assertEq(IERC20(CVX).balanceOf(recipient), unsoldCvx, "recipient should receive rescued CVX");
+    }
+
+    function _accrueCvxRewards() internal returns (uint256 earnedRewards) {
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, 100e18);
+
+        IStakeDAORewardVault liveRewardVault = IStakeDAORewardVault(REWARD_VAULT);
+        address rewardsDistributor = liveRewardVault.getRewardsDistributor(CVX);
+        uint128 rewardAmount = 100e18;
+        deal(CVX, rewardsDistributor, rewardAmount);
+        vm.startPrank(rewardsDistributor);
+        IERC20(CVX).approve(REWARD_VAULT, rewardAmount);
+        liveRewardVault.depositRewards(CVX, rewardAmount);
+        vm.stopPrank();
+
+        vm.warp(block.timestamp + 1 days);
+        earnedRewards = liveRewardVault.earned(strategy, CVX);
+        assertGt(earnedRewards, 1, "real RewardVault should accrue CVX");
+    }
+
+    function _setUp0xRouter(uint256 cvxWethPrice) internal returns (Mock0xRouter mock0xRouter) {
+        mock0xRouter = new Mock0xRouter(CVX, WETH, cvxWethPrice);
+        deal(WETH, address(mock0xRouter), 1_000_000e18);
+        vm.prank(admin);
+        MYTStrategy(strategy).setAllowanceHolder(address(mock0xRouter));
+    }
 
     function testFuzz_forceDeallocate_direct_succeeds(uint256 rawAllocateAmount, uint256 rawForceDeallocateAmount) public {
         uint256 minAllocateAmount = _getMinAllocateAmount();
@@ -436,6 +549,38 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         assertEq(IERC20(REWARD_VAULT).balanceOf(strategy), sharesBefore, "RewardVault shares should remain untouched");
         assertEq(IERC20(WETH).balanceOf(strategy), strategyWethBefore + idleAmount - deallocateAmount, "idle WETH should fund deallocate");
         assertEq(IERC20(WETH).balanceOf(vault), vaultWethBefore + deallocateAmount, "vault should receive idle WETH");
+    }
+
+    function testFuzz_deallocate_uses_idle_weth_then_reward_vault_shares_for_shortfall(
+        uint256 rawAllocateAmount,
+        uint256 rawIdleAmount,
+        uint256 rawShortfallAmount
+    ) public {
+        uint256 minAllocateAmount = _getMinAllocateAmount();
+        uint256 allocateAmount = bound(rawAllocateAmount, minAllocateAmount * 20, 100e18);
+        uint256 idleAmount = bound(rawIdleAmount, minAllocateAmount, allocateAmount / 10);
+        uint256 shortfallAmount = bound(rawShortfallAmount, minAllocateAmount, allocateAmount / 10);
+        uint256 deallocateAmount = idleAmount + shortfallAmount;
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, allocateAmount);
+
+        uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(strategy);
+        uint256 strategyAssetsBefore = IMYTStrategy(strategy).realAssets();
+        uint256 strategyWethBefore = IERC20(WETH).balanceOf(strategy);
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
+
+        deal(WETH, strategy, strategyWethBefore + idleAmount);
+
+        vm.prank(admin);
+        IAllocator(allocator).deallocate(strategy, deallocateAmount);
+
+        uint256 sharesAfter = IERC20(REWARD_VAULT).balanceOf(strategy);
+        assertLt(sharesAfter, sharesBefore, "RewardVault shares should cover the shortfall");
+        assertGt(sharesAfter, 0, "deallocate should only partially redeem the position");
+        assertGe(IMYTStrategy(strategy).realAssets(), strategyWethBefore, "strategy should remain solvent after mixed deallocate");
+        assertLt(IMYTStrategy(strategy).realAssets(), strategyAssetsBefore + idleAmount, "strategy assets should decrease");
+        assertGe(IERC20(WETH).balanceOf(vault), vaultWethBefore + deallocateAmount, "vault should receive requested WETH");
     }
 
     function testFuzz_accounting_uses_reward_vault_assets_after_lp_accrual(uint256 rawAllocateAmount, uint256 rawAccruedLp) public {

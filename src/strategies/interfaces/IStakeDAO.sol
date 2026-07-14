@@ -10,6 +10,12 @@ interface IStakeDAORewardVault is IERC4626 {
     function claim(address[] calldata tokens, address receiver) external returns (uint256[] memory amounts);
 
     function getRewardTokens() external view returns (address[] memory);
+
+    function earned(address account, address token) external view returns (uint128);
+
+    function getRewardsDistributor(address token) external view returns (address);
+
+    function depositRewards(address rewardToken, uint128 amount) external;
 }
 
 interface ICurveStableSwapPool is IERC20 {

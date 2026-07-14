@@ -151,27 +151,30 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         return fromIdle + (fundableFromPosition * (10_000 - params.slippageBPS)) / 10_000;
     }
 
-    function _claimRewards(address token, bytes memory, uint256 minAmountOut)
+    function _claimRewards(address token, bytes memory quote, uint256 minAmountOut)
         internal
         override
         returns (uint256 rewardsClaimed)
     {
-        address[] memory rewardTokens = rewardVault.getRewardTokens();
+        if (rewardVault.earned(address(this), token) == 0) return 0;
+        require(quote.length > 0, "params");
+
+        address[] memory rewardTokens = new address[](1);
+        rewardTokens[0] = token;
         uint256 balanceBefore = TokenUtils.safeBalanceOf(token, address(this));
 
         rewardVault.claim(rewardTokens, address(this));
 
         uint256 rewardsReceived = TokenUtils.safeBalanceOf(token, address(this)) - balanceBefore;
         if (rewardsReceived == 0) return 0;
-        require(rewardsReceived >= minAmountOut, "Insufficient rewards");
-
         emit RewardsClaimed(token, rewardsReceived);
-        TokenUtils.safeTransfer(token, address(MYT), rewardsReceived);
-        return rewardsReceived;
+        uint256 amountOut = dexSwap(MYT.asset(), token, IERC20(token).balanceOf(address(this)), minAmountOut, quote);
+        TokenUtils.safeTransfer(address(MYT.asset()), address(MYT), amountOut);
+        return amountOut;
     }
 
     function _isProtectedToken(address token) internal view override returns (bool) {
-        return token == address(weth) || token == address(rewardVault) || token == rewardVault.asset();
+        return token == address(weth);
     }
 
     function _canForceDeallocate() internal pure override returns (bool) {
