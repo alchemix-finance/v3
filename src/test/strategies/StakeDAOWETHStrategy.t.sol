@@ -197,9 +197,8 @@ contract MockStakeDAOWETHStrategy is StakeDAOWETHStrategy {
         StrategyParams memory _params,
         address _rewardVault,
         address _curvePool,
-        address _ensoRouter,
-        int128 _wethCoinIndex
-    ) StakeDAOWETHStrategy(_myt, _params, _rewardVault, _curvePool, _ensoRouter, _wethCoinIndex, 125) {}
+        address _ensoRouter
+    ) StakeDAOWETHStrategy(_myt, _params, _rewardVault, _curvePool, _ensoRouter, 125) {}
 }
 
 contract StakeDAOWETHStrategyEnsoTest is Test {
@@ -241,9 +240,7 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
         });
 
         strategy = address(
-            new MockStakeDAOWETHStrategy(
-                vault, params, address(rewardVault), address(curvePool), address(ensoRouter), int128(1)
-            )
+            new MockStakeDAOWETHStrategy(vault, params, address(rewardVault), address(curvePool), address(ensoRouter))
         );
 
         address classifier = address(new AlchemistStrategyClassifier(admin));
@@ -375,8 +372,7 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
             }),
             address(rewardVault),
             address(curvePool),
-            address(exactOutputRouter),
-            int128(1)
+            address(exactOutputRouter)
         );
 
         vm.startPrank(vault);
@@ -411,8 +407,7 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
             }),
             address(rewardVault),
             address(curvePool),
-            address(underDeliver),
-            int128(1)
+            address(underDeliver)
         );
 
         vm.startPrank(vault);
@@ -453,24 +448,24 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
     address public constant ETH_PLUS_WETH_POOL = 0x2c683fAd51da2cd17793219CC86439C1875c353e;
     address public constant ENSO_ROUTER = 0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf;
 
-    function test_owner_can_set_direct_exit_buffer_independently_from_slippage() public {
-        uint256 newDirectExitBufferBps = 200;
+    function test_owner_can_set_withdraw_buffer_independently_from_slippage() public {
+        uint256 newWithdrawBufferBps = 200;
         (,,,,,,,, uint256 slippageBefore) = IMYTStrategy(strategy).params();
 
         vm.prank(admin);
-        StakeDAOWETHStrategy(strategy).setDirectExitBufferBps(newDirectExitBufferBps);
+        StakeDAOWETHStrategy(strategy).setWithdrawBufferBps(newWithdrawBufferBps);
 
         (,,,,,,,, uint256 slippageAfter) = IMYTStrategy(strategy).params();
-        assertEq(StakeDAOWETHStrategy(strategy).directExitBufferBps(), newDirectExitBufferBps);
-        assertEq(slippageAfter, slippageBefore, "direct exit buffer should not change slippage");
+        assertEq(StakeDAOWETHStrategy(strategy).withdrawBufferBps(), newWithdrawBufferBps);
+        assertEq(slippageAfter, slippageBefore, "withdraw buffer should not change slippage");
     }
 
-    function test_set_direct_exit_buffer_reverts_above_cap() public {
-        uint256 maxDirectExitBufferBps = StakeDAOWETHStrategy(strategy).MAX_DIRECT_EXIT_BUFFER_BPS();
+    function test_set_withdraw_buffer_reverts_above_cap() public {
+        uint256 maxWithdrawBufferBps = StakeDAOWETHStrategy(strategy).MAX_WITHDRAW_BUFFER_BPS();
 
         vm.prank(admin);
-        vm.expectRevert("Direct exit buffer too high");
-        StakeDAOWETHStrategy(strategy).setDirectExitBufferBps(maxDirectExitBufferBps);
+        vm.expectRevert("Withdraw buffer too high");
+        StakeDAOWETHStrategy(strategy).setWithdrawBufferBps(maxWithdrawBufferBps);
     }
 
     function test_force_deallocate_defaults_disabled_and_owner_can_enable() public {
@@ -628,7 +623,7 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         uint256 rawShortfallAmount
     ) public {
         uint256 minAllocateAmount = _getMinAllocateAmount();
-        uint256 allocateAmount = bound(rawAllocateAmount, minAllocateAmount * 20, 100e18);
+        uint256 allocateAmount = bound(rawAllocateAmount, minAllocateAmount * 20, 1000e18);
         uint256 idleAmount = bound(rawIdleAmount, minAllocateAmount, allocateAmount / 10);
         uint256 shortfallAmount = bound(rawShortfallAmount, minAllocateAmount, allocateAmount / 10);
         uint256 deallocateAmount = idleAmount + shortfallAmount;
@@ -656,7 +651,7 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
 
     function testFuzz_accounting_uses_reward_vault_assets_after_lp_accrual(uint256 rawAllocateAmount, uint256 rawAccruedLp) public {
         uint256 minAllocateAmount = _getMinAllocateAmount();
-        uint256 allocateAmount = bound(rawAllocateAmount, minAllocateAmount * 20, 100e18);
+        uint256 allocateAmount = bound(rawAllocateAmount, minAllocateAmount * 20, 1000e18);
 
         vm.prank(admin);
         IAllocator(allocator).allocate(strategy, allocateAmount);
@@ -718,7 +713,7 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
 
     function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
         return address(
-            new StakeDAOWETHStrategy(vault_, params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, int128(1), 125)
+            new StakeDAOWETHStrategy(vault_, params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, 125)
         );
     }
 

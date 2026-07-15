@@ -18,16 +18,14 @@ contract DeployStakeDAOWETHStrategyScript is Script {
     address public constant REWARD_VAULT = 0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C;
     address public constant ETH_PLUS_WETH_POOL = 0x2c683fAd51da2cd17793219CC86439C1875c353e;
     address public constant ENSO_ROUTER = 0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf;
-    int128 public constant WETH_COIN_INDEX = 1;
-    uint256 public constant DIRECT_EXIT_BUFFER_BPS = 125;
+    uint256 public constant WITHDRAW_BUFFER_BPS = 125;
 
     struct StakeDAOWETHDeployConfig {
         address myt;
         address rewardVault;
         address curvePool;
         address ensoRouter;
-        int128 wethCoinIndex;
-        uint256 directExitBufferBps;
+        uint256 withdrawBufferBps;
         IMYTStrategy.StrategyParams params;
     }
 
@@ -56,8 +54,7 @@ contract DeployStakeDAOWETHStrategyScript is Script {
             config.rewardVault,
             config.curvePool,
             config.ensoRouter,
-            config.wethCoinIndex,
-            config.directExitBufferBps
+            config.withdrawBufferBps
         );
         strategyAddr = address(strategy);
         MYTStrategy(strategyAddr).setKillSwitch(true);
@@ -72,8 +69,7 @@ contract DeployStakeDAOWETHStrategyScript is Script {
             rewardVault: REWARD_VAULT,
             curvePool: ETH_PLUS_WETH_POOL,
             ensoRouter: ENSO_ROUTER,
-            wethCoinIndex: WETH_COIN_INDEX,
-            directExitBufferBps: DIRECT_EXIT_BUFFER_BPS,
+            withdrawBufferBps: WITHDRAW_BUFFER_BPS,
             params: defaultParams()
         });
 

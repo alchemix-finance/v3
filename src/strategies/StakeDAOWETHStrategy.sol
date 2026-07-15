@@ -13,17 +13,17 @@ import {IStakeDAORewardVault, ICurveStableSwapPool} from "./interfaces/IStakeDAO
  *      Swap path: single Enso route each way via `ActionType.swap`.
  */
 contract StakeDAOWETHStrategy is MYTStrategy {
-    uint256 public constant MAX_DIRECT_EXIT_BUFFER_BPS = 650;
+    uint256 public constant MAX_WITHDRAW_BUFFER_BPS = 650;
+    int128 internal constant WETH_COIN_INDEX = 1;
 
     IERC20 public immutable weth;
     IStakeDAORewardVault public immutable rewardVault;
     ICurveStableSwapPool public immutable curvePool;
     address public immutable ensoRouter;
-    int128 public immutable wethCoinIndex;
-    uint256 public directExitBufferBps;
+    uint256 public withdrawBufferBps;
     bool public canForceDeallocate;
 
-    event DirectExitBufferBpsUpdated(uint256 newDirectExitBufferBps);
+    event WithdrawBufferBpsUpdated(uint256 newWithdrawBufferBps);
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
 
     constructor(
@@ -32,28 +32,26 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         address _rewardVault,
         address _curvePool,
         address _ensoRouter,
-        int128 _wethCoinIndex,
-        uint256 _directExitBufferBps
+        uint256 _withdrawBufferBps
     ) MYTStrategy(_myt, _params) {
         require(_rewardVault != address(0), "Zero reward vault");
         require(_curvePool != address(0), "Zero curve pool");
         require(_ensoRouter != address(0), "Zero enso router");
-        require(_directExitBufferBps < MAX_DIRECT_EXIT_BUFFER_BPS, "Direct exit buffer too high");
+        require(_withdrawBufferBps < MAX_WITHDRAW_BUFFER_BPS, "Withdraw buffer too high");
 
         weth = IERC20(MYT.asset());
         rewardVault = IStakeDAORewardVault(_rewardVault);
         curvePool = ICurveStableSwapPool(_curvePool);
         ensoRouter = _ensoRouter;
-        wethCoinIndex = _wethCoinIndex;
-        directExitBufferBps = _directExitBufferBps;
+        withdrawBufferBps = _withdrawBufferBps;
 
         require(rewardVault.asset() == _curvePool, "Vault asset != curve LP");
     }
 
-    function setDirectExitBufferBps(uint256 newDirectExitBufferBps) external onlyOwner {
-        require(newDirectExitBufferBps < MAX_DIRECT_EXIT_BUFFER_BPS, "Direct exit buffer too high");
-        directExitBufferBps = newDirectExitBufferBps;
-        emit DirectExitBufferBpsUpdated(newDirectExitBufferBps);
+    function setWithdrawBufferBps(uint256 newWithdrawBufferBps) external onlyOwner {
+        require(newWithdrawBufferBps < MAX_WITHDRAW_BUFFER_BPS, "Withdraw buffer too high");
+        withdrawBufferBps = newWithdrawBufferBps;
+        emit WithdrawBufferBpsUpdated(newWithdrawBufferBps);
     }
 
     function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
@@ -67,7 +65,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         uint256 sharesBefore = rewardVault.balanceOf(address(this));
 
         uint256[] memory amounts = new uint256[](2);
-        amounts[uint256(uint128(wethCoinIndex))] = amount;
+        amounts[uint256(uint128(WETH_COIN_INDEX))] = amount;
         uint256 expectedLp = curvePool.calc_token_amount(amounts, true);
         uint256 minLpOut = _minAmountAfterSlippage(expectedLp);
 
@@ -123,7 +121,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         uint256 lpRedeemed = rewardVault.redeem(sharesToRedeem, address(this), address(this));
 
         TokenUtils.safeApprove(address(curvePool), address(curvePool), lpRedeemed);
-        curvePool.remove_liquidity_one_coin(lpRedeemed, wethCoinIndex, shortfall, address(this));
+        curvePool.remove_liquidity_one_coin(lpRedeemed, WETH_COIN_INDEX, shortfall, address(this));
         TokenUtils.safeApprove(address(curvePool), address(curvePool), 0);
 
         require(_idleAssets() >= amount, "Withdraw amount insufficient");
@@ -204,7 +202,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
 
     function _sharesToWeth(uint256 shares) internal view returns (uint256) {
         if (shares == 0) return 0;
-        return curvePool.calc_withdraw_one_coin(rewardVault.convertToAssets(shares), wethCoinIndex);
+        return curvePool.calc_withdraw_one_coin(rewardVault.convertToAssets(shares), WETH_COIN_INDEX);
     }
 
     function _minWethAfterSlippage(uint256 wethAmount) internal view returns (uint256) {
@@ -219,7 +217,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     /// @dev Lower bound on RewardVault shares expected from the quoted Curve LP deposit.
     function _minSharesForWethIn(uint256 wethAmount) internal view returns (uint256) {
         uint256[] memory amounts = new uint256[](2);
-        amounts[uint256(uint128(wethCoinIndex))] = wethAmount;
+        amounts[uint256(uint128(WETH_COIN_INDEX))] = wethAmount;
         uint256 expectedLp = curvePool.calc_token_amount(amounts, true);
         return _minAmountAfterSlippage(rewardVault.previewDeposit(expectedLp));
     }
@@ -229,12 +227,12 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         if (maxShares == 0 || wethOut == 0) return 0;
 
         uint256 maxLp = rewardVault.convertToAssets(maxShares);
-        uint256 maxWeth = curvePool.calc_withdraw_one_coin(maxLp, wethCoinIndex);
+        uint256 maxWeth = curvePool.calc_withdraw_one_coin(maxLp, WETH_COIN_INDEX);
         if (wethOut >= maxWeth) return maxLp;
 
         uint256 estimated = (wethOut * maxLp + maxWeth - 1) / maxWeth;
         uint256 buffered =
-            (estimated * 10_000 + (10_000 - directExitBufferBps) - 1) / (10_000 - directExitBufferBps);
+            (estimated * 10_000 + (10_000 - withdrawBufferBps) - 1) / (10_000 - withdrawBufferBps);
         if (buffered > maxLp) return maxLp;
         return buffered == 0 ? 1 : buffered;
     }

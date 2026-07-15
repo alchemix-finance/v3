@@ -211,9 +211,7 @@ abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
             slippageBPS: 125
         });
 
-        strategy = new StakeDAOWETHStrategy(
-            address(vault), params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, int128(1), 125
-        );
+        strategy = new StakeDAOWETHStrategy(address(vault), params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, 125);
         vm.stopPrank();
 
         assertEq(address(vault), vm.computeCreateAddress(DEPLOYER, 0), "vault address mismatch");
