@@ -662,7 +662,8 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
         if (liveEarmarked != 0 && amount != 0) {
             // ratioWanted = (liveEarmarked - amount) / liveEarmarked in Q128.128
-            uint256 ratioWanted = (amount == liveEarmarked) ? 0 : FixedPointMath.divQ128(liveEarmarked - amount, liveEarmarked);
+            uint256 remaining = liveEarmarked - amount;
+            uint256 ratioWanted = (remaining <= 5_256_001) ? 0 : FixedPointMath.divQ128(remaining, liveEarmarked);
 
             // Snapshot old packed
             uint256 packedOld = _redemptionWeight;
@@ -671,7 +672,6 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
             // Normalize uninitialized / zero index
             if (packedOld == 0) {
-                oldEpoch = 0;
                 oldIndex = ONE_Q128;
             }
             if (oldIndex == 0) {
@@ -687,7 +687,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
                 newEpoch += 1;
                 newIndex = ONE_Q128;
             } else {
-                newIndex = FixedPointMath.mulQ128(oldIndex, ratioWanted);
+                newIndex = FixedPointMath.mulDiv(oldIndex, ratioWanted, ONE_Q128);
             }
 
             _redemptionWeight = _packRed(newEpoch, newIndex);
@@ -702,6 +702,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             // Derive effective redeemed amount using the SAME applied ratio
             uint256 remainingEarmarked = FixedPointMath.mulQ128(liveEarmarked, ratioApplied);
             effectiveRedeemed = liveEarmarked - remainingEarmarked;
+            if (amount > effectiveRedeemed + 5_256_001) revert IllegalState();
 
             cumulativeEarmarked = remainingEarmarked;
             totalDebt -= effectiveRedeemed;
@@ -825,18 +826,10 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
     ///@inheritdoc IAlchemistV3Actions
     function setTransmuterTokenBalance(uint256 amount) external onlyTransmuter {
-        uint256 last = lastTransmuterTokenBalance;
-        uint256 cover = _pendingCoverShares;
-
-        if (amount > last) {
-            cover += amount - last;
+        if (amount > lastTransmuterTokenBalance) {
+            _pendingCoverShares += amount - lastTransmuterTokenBalance;
         }
 
-        if (cover > amount) {
-            cover = amount;
-        }
-
-        _pendingCoverShares = cover;
         lastTransmuterTokenBalance = amount;
     }
 
@@ -1837,7 +1830,6 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         oldIndex = packedOld & _EARMARK_INDEX_MASK;
 
         if (packedOld == 0) {
-            oldEpoch = 0;
             oldIndex = ONE_Q128;
         }
         if (oldIndex == 0) {
@@ -1852,7 +1844,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             newEpoch += 1;
             newIndex = ONE_Q128;
         } else {
-            newIndex = FixedPointMath.mulQ128(oldIndex, ratioWanted);
+            newIndex = FixedPointMath.mulDiv(oldIndex, ratioWanted, ONE_Q128);
         }
 
         epochAdvanced = newEpoch > oldEpoch;
