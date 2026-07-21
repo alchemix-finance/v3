@@ -11,6 +11,7 @@ import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {MockMYTVault} from "../mocks/MockMYTVault.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 import {IStakeDAORewardVault} from "../../strategies/interfaces/IStakeDAO.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /// @notice Fork tests that replay pinned Enso route calldata from static JSON fixtures.
 abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
@@ -59,6 +60,44 @@ abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
         _assertEnsoAllowancesCleared();
     }
 
+    function test_allocateWithSwap_succeedsAtLpPerWethFloorBoundary() public {
+        uint256 allocateAmount = _readUint(".allocate.amountIn");
+        uint256 quotedSharesOut = _readUint(".allocate.amountOut");
+        bytes memory allocateCalldata = vm.parseJsonBytes(fixture, ".allocate.tx.data");
+        uint256 quotedLpOut = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(quotedSharesOut);
+        uint256 boundaryFloor = Math.mulDiv(quotedLpOut, 1e18, allocateAmount);
+
+        vm.prank(admin);
+        strategy.setMinCurveLpPerWeth(boundaryFloor);
+
+        deal(WETH, address(strategy), allocateAmount);
+        vm.prank(address(vault));
+        IMYTStrategy(address(strategy)).allocate(_swapParams(allocateCalldata), allocateAmount, "", address(vault));
+
+        assertEq(IERC20(REWARD_VAULT).balanceOf(address(strategy)), quotedSharesOut, "unexpected shares at floor boundary");
+        _assertEnsoAllowancesCleared();
+    }
+
+    function test_allocateWithSwap_revertsBelowLpPerWethFloor() public {
+        uint256 allocateAmount = _readUint(".allocate.amountIn");
+        uint256 quotedSharesOut = _readUint(".allocate.amountOut");
+        bytes memory allocateCalldata = vm.parseJsonBytes(fixture, ".allocate.tx.data");
+        uint256 quotedLpOut = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(quotedSharesOut);
+        uint256 floorAboveRoute = Math.mulDiv(quotedLpOut, 1e18, allocateAmount, Math.Rounding.Ceil) + 1;
+
+        vm.prank(admin);
+        strategy.setMinCurveLpPerWeth(floorAboveRoute);
+
+        deal(WETH, address(strategy), allocateAmount);
+        vm.prank(address(vault));
+        vm.expectPartialRevert(StakeDAOWETHStrategy.CurveLpOutputBelowFloor.selector);
+        IMYTStrategy(address(strategy)).allocate(_swapParams(allocateCalldata), allocateAmount, "", address(vault));
+
+        assertEq(IERC20(WETH).balanceOf(address(strategy)), allocateAmount, "WETH changed after reverted allocation");
+        assertEq(IERC20(REWARD_VAULT).balanceOf(address(strategy)), 0, "shares changed after reverted allocation");
+        _assertEnsoAllowancesCleared();
+    }
+
     function test_deallocateWithSwap_usesStaticEnsoRoute() public {
         uint256 allocateAmount = _readUint(".allocate.amountIn");
         uint256 withdrawAmount = _readUint(".deallocate.amountOut");
@@ -78,6 +117,62 @@ abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
 
         assertGe(IERC20(WETH).balanceOf(address(strategy)) - wethBefore, preview, "insufficient WETH out");
         assertLt(IERC20(REWARD_VAULT).balanceOf(address(strategy)), sharesAfterAllocate, "shares should decrease");
+        _assertEnsoAllowancesCleared();
+    }
+
+    function test_deallocateWithSwap_succeedsAtWethPerLpFloorBoundary() public {
+        uint256 allocateAmount = _readUint(".allocate.amountIn");
+        uint256 quotedSharesIn = _readUint(".deallocate.amountIn");
+        uint256 quotedWethOut = _readUint(".deallocate.amountOut");
+        bytes memory allocateCalldata = vm.parseJsonBytes(fixture, ".allocate.tx.data");
+        bytes memory deallocateCalldata = vm.parseJsonBytes(fixture, ".deallocate.tx.data");
+
+        deal(WETH, address(strategy), allocateAmount);
+        vm.prank(address(vault));
+        IMYTStrategy(address(strategy)).allocate(_swapParams(allocateCalldata), allocateAmount, "", address(vault));
+
+        uint256 shares = IERC20(REWARD_VAULT).balanceOf(address(strategy));
+        uint256 lpValueBefore = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(shares);
+        uint256 quotedLpSpent = Math.mulDiv(quotedSharesIn, lpValueBefore, shares, Math.Rounding.Ceil);
+        uint256 boundaryFloor = Math.mulDiv(quotedWethOut, 1e18, quotedLpSpent);
+        vm.prank(admin);
+        strategy.setMinWethPerCurveLp(boundaryFloor);
+
+        uint256 preview = IMYTStrategy(address(strategy)).previewAdjustedWithdraw(quotedWethOut);
+        vm.prank(address(vault));
+        IMYTStrategy(address(strategy)).deallocate(_swapParams(deallocateCalldata), preview, "", address(vault));
+
+        assertEq(shares - IERC20(REWARD_VAULT).balanceOf(address(strategy)), quotedSharesIn, "unexpected shares spent at floor boundary");
+        assertGe(IERC20(WETH).balanceOf(address(strategy)), preview, "insufficient WETH at floor boundary");
+        _assertEnsoAllowancesCleared();
+    }
+
+    function test_deallocateWithSwap_revertsBelowWethPerLpFloor() public {
+        uint256 allocateAmount = _readUint(".allocate.amountIn");
+        uint256 quotedSharesIn = _readUint(".deallocate.amountIn");
+        uint256 quotedWethOut = _readUint(".deallocate.amountOut");
+        bytes memory allocateCalldata = vm.parseJsonBytes(fixture, ".allocate.tx.data");
+        bytes memory deallocateCalldata = vm.parseJsonBytes(fixture, ".deallocate.tx.data");
+
+        deal(WETH, address(strategy), allocateAmount);
+        vm.prank(address(vault));
+        IMYTStrategy(address(strategy)).allocate(_swapParams(allocateCalldata), allocateAmount, "", address(vault));
+
+        uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(address(strategy));
+        uint256 wethBefore = IERC20(WETH).balanceOf(address(strategy));
+        uint256 lpValueBefore = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(sharesBefore);
+        uint256 quotedLpSpent = Math.mulDiv(quotedSharesIn, lpValueBefore, sharesBefore, Math.Rounding.Ceil);
+        uint256 floorAboveRoute = Math.mulDiv(quotedWethOut, 1e18, quotedLpSpent) + 1e15;
+        vm.prank(admin);
+        strategy.setMinWethPerCurveLp(floorAboveRoute);
+
+        uint256 preview = IMYTStrategy(address(strategy)).previewAdjustedWithdraw(quotedWethOut);
+        vm.prank(address(vault));
+        vm.expectPartialRevert(StakeDAOWETHStrategy.CurveLpPriceBelowFloor.selector);
+        IMYTStrategy(address(strategy)).deallocate(_swapParams(deallocateCalldata), preview, "", address(vault));
+
+        assertEq(IERC20(REWARD_VAULT).balanceOf(address(strategy)), sharesBefore, "shares changed after reverted deallocation");
+        assertEq(IERC20(WETH).balanceOf(address(strategy)), wethBefore, "WETH changed after reverted deallocation");
         _assertEnsoAllowancesCleared();
     }
 
@@ -211,7 +306,7 @@ abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
             slippageBPS: 125
         });
 
-        strategy = new StakeDAOWETHStrategy(address(vault), params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, 125);
+        strategy = new StakeDAOWETHStrategy(address(vault), params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, 125, 1e18, 0.95e18);
         vm.stopPrank();
 
         assertEq(address(vault), vm.computeCreateAddress(DEPLOYER, 0), "vault address mismatch");
@@ -226,9 +321,7 @@ abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
         vm.startPrank(admin);
         classifier = address(new AlchemistStrategyClassifier(admin));
         AlchemistStrategyClassifier(classifier).setRiskClass(uint8(IMYTStrategy.RiskClass.MEDIUM), 1e18, 1e18);
-        AlchemistStrategyClassifier(classifier).assignStrategyRiskLevel(
-            uint256(strategy.adapterId()), uint8(IMYTStrategy.RiskClass.MEDIUM)
-        );
+        AlchemistStrategyClassifier(classifier).assignStrategyRiskLevel(uint256(strategy.adapterId()), uint8(IMYTStrategy.RiskClass.MEDIUM));
         allocator = address(new AlchemistAllocator(address(vault), admin, operator, classifier));
         vm.stopPrank();
 
@@ -247,8 +340,7 @@ abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
 
     function _swapParams(bytes memory txData) internal pure returns (bytes memory) {
         IMYTStrategy.VaultAdapterParams memory params = IMYTStrategy.VaultAdapterParams({
-            action: IMYTStrategy.ActionType.swap,
-            swapParams: IMYTStrategy.SwapParams({txData: txData, minIntermediateOut: 0})
+            action: IMYTStrategy.ActionType.swap, swapParams: IMYTStrategy.SwapParams({txData: txData, minIntermediateOut: 0})
         });
         return abi.encode(params);
     }
@@ -271,11 +363,7 @@ abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
 
     function _assertEnsoAllowancesCleared() internal view {
         assertEq(IERC20(WETH).allowance(address(strategy), ENSO_ROUTER), 0, "WETH allowance should be cleared");
-        assertEq(
-            IERC20(REWARD_VAULT).allowance(address(strategy), ENSO_ROUTER),
-            0,
-            "RewardVault allowance should be cleared"
-        );
+        assertEq(IERC20(REWARD_VAULT).allowance(address(strategy), ENSO_ROUTER), 0, "RewardVault allowance should be cleared");
     }
 
     function _submitAndExecute(bytes memory data) internal {

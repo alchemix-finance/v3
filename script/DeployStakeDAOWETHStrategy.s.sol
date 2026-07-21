@@ -19,6 +19,8 @@ contract DeployStakeDAOWETHStrategyScript is Script {
     address public constant ETH_PLUS_WETH_POOL = 0x2c683fAd51da2cd17793219CC86439C1875c353e;
     address public constant ENSO_ROUTER = 0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf;
     uint256 public constant WITHDRAW_BUFFER_BPS = 125;
+    uint256 public constant MIN_WETH_PER_CURVE_LP = 1e18;
+    uint256 public constant MIN_CURVE_LP_PER_WETH = 0.95e18;
 
     struct StakeDAOWETHDeployConfig {
         address myt;
@@ -26,6 +28,8 @@ contract DeployStakeDAOWETHStrategyScript is Script {
         address curvePool;
         address ensoRouter;
         uint256 withdrawBufferBps;
+        uint256 minWethPerCurveLp;
+        uint256 minCurveLpPerWeth;
         IMYTStrategy.StrategyParams params;
     }
 
@@ -43,18 +47,19 @@ contract DeployStakeDAOWETHStrategyScript is Script {
         });
     }
 
-    function deployStakeDAOWETHStrategy(
-        AlchemistCurator curator,
-        address targetOwner,
-        StakeDAOWETHDeployConfig memory config
-    ) public returns (address strategyAddr) {
+    function deployStakeDAOWETHStrategy(AlchemistCurator curator, address targetOwner, StakeDAOWETHDeployConfig memory config)
+        public
+        returns (address strategyAddr)
+    {
         StakeDAOWETHStrategy strategy = new StakeDAOWETHStrategy(
             config.myt,
             config.params,
             config.rewardVault,
             config.curvePool,
             config.ensoRouter,
-            config.withdrawBufferBps
+            config.withdrawBufferBps,
+            config.minWethPerCurveLp,
+            config.minCurveLpPerWeth
         );
         strategyAddr = address(strategy);
         MYTStrategy(strategyAddr).setKillSwitch(true);
@@ -70,6 +75,8 @@ contract DeployStakeDAOWETHStrategyScript is Script {
             curvePool: ETH_PLUS_WETH_POOL,
             ensoRouter: ENSO_ROUTER,
             withdrawBufferBps: WITHDRAW_BUFFER_BPS,
+            minWethPerCurveLp: MIN_WETH_PER_CURVE_LP,
+            minCurveLpPerWeth: MIN_CURVE_LP_PER_WETH,
             params: defaultParams()
         });
 

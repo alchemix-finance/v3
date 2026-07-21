@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {MYTStrategy} from "../MYTStrategy.sol";
 import {TokenUtils} from "../libraries/TokenUtils.sol";
 import {IStakeDAORewardVault, ICurveStableSwapPool} from "./interfaces/IStakeDAO.sol";
@@ -14,6 +15,8 @@ import {IStakeDAORewardVault, ICurveStableSwapPool} from "./interfaces/IStakeDAO
  */
 contract StakeDAOWETHStrategy is MYTStrategy {
     uint256 public constant MAX_WITHDRAW_BUFFER_BPS = 650;
+    uint256 internal constant PRICE_SCALE = 1e18;
+    uint256 internal constant LP_ROUNDING_TOLERANCE = 1e6; // 1e-12 LP
     int128 internal constant WETH_COIN_INDEX = 1;
 
     IERC20 public immutable weth;
@@ -21,10 +24,16 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     ICurveStableSwapPool public immutable curvePool;
     address public immutable ensoRouter;
     uint256 public withdrawBufferBps;
+    uint256 public minWethPerCurveLp;
+    uint256 public minCurveLpPerWeth;
     bool public canForceDeallocate;
 
     event WithdrawBufferBpsUpdated(uint256 newWithdrawBufferBps);
+    event MinWethPerCurveLpUpdated(uint256 newMinWethPerCurveLp);
+    event MinCurveLpPerWethUpdated(uint256 newMinCurveLpPerWeth);
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
+    error CurveLpPriceBelowFloor(uint256 lpAmount, uint256 maxLpAmount);
+    error CurveLpOutputBelowFloor(uint256 lpReceived, uint256 minLpReceived);
 
     constructor(
         address _myt,
@@ -32,18 +41,24 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         address _rewardVault,
         address _curvePool,
         address _ensoRouter,
-        uint256 _withdrawBufferBps
+        uint256 _withdrawBufferBps,
+        uint256 _minWethPerCurveLp,
+        uint256 _minCurveLpPerWeth
     ) MYTStrategy(_myt, _params) {
         require(_rewardVault != address(0), "Zero reward vault");
         require(_curvePool != address(0), "Zero curve pool");
         require(_ensoRouter != address(0), "Zero enso router");
         require(_withdrawBufferBps < MAX_WITHDRAW_BUFFER_BPS, "Withdraw buffer too high");
+        require(_minWethPerCurveLp > 0, "Zero Curve LP floor");
+        require(_minCurveLpPerWeth > 0, "Zero allocation floor");
 
         weth = IERC20(MYT.asset());
         rewardVault = IStakeDAORewardVault(_rewardVault);
         curvePool = ICurveStableSwapPool(_curvePool);
         ensoRouter = _ensoRouter;
         withdrawBufferBps = _withdrawBufferBps;
+        minWethPerCurveLp = _minWethPerCurveLp;
+        minCurveLpPerWeth = _minCurveLpPerWeth;
 
         require(rewardVault.asset() == _curvePool, "Vault asset != curve LP");
     }
@@ -52,6 +67,18 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         require(newWithdrawBufferBps < MAX_WITHDRAW_BUFFER_BPS, "Withdraw buffer too high");
         withdrawBufferBps = newWithdrawBufferBps;
         emit WithdrawBufferBpsUpdated(newWithdrawBufferBps);
+    }
+
+    function setMinWethPerCurveLp(uint256 newMinWethPerCurveLp) external onlyOwner {
+        require(newMinWethPerCurveLp > 0, "Zero Curve LP floor");
+        minWethPerCurveLp = newMinWethPerCurveLp;
+        emit MinWethPerCurveLpUpdated(newMinWethPerCurveLp);
+    }
+
+    function setMinCurveLpPerWeth(uint256 newMinCurveLpPerWeth) external onlyOwner {
+        require(newMinCurveLpPerWeth > 0, "Zero allocation floor");
+        minCurveLpPerWeth = newMinCurveLpPerWeth;
+        emit MinCurveLpPerWethUpdated(newMinCurveLpPerWeth);
     }
 
     function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
@@ -68,10 +95,13 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         amounts[uint256(uint128(WETH_COIN_INDEX))] = amount;
         uint256 expectedLp = curvePool.calc_token_amount(amounts, true);
         uint256 minLpOut = _minAmountAfterSlippage(expectedLp);
+        uint256 floorLpOut = _minLpForWeth(amount);
+        if (floorLpOut > minLpOut) minLpOut = floorLpOut;
 
         TokenUtils.safeApprove(address(weth), address(curvePool), amount);
         uint256 lpMinted = curvePool.add_liquidity(amounts, minLpOut, address(this));
         TokenUtils.safeApprove(address(weth), address(curvePool), 0);
+        if (lpMinted < floorLpOut) revert CurveLpOutputBelowFloor(lpMinted, floorLpOut);
 
         TokenUtils.safeApprove(address(curvePool), address(rewardVault), lpMinted);
         rewardVault.deposit(lpMinted, address(this), address(0));
@@ -88,6 +118,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     function _allocate(uint256 amount, bytes memory ensoCalldata) internal override returns (uint256) {
         _ensureIdleBalance(address(weth), amount);
 
+        uint256 wethBefore = _idleAssets();
         uint256 sharesBefore = rewardVault.balanceOf(address(this));
         uint256 minSharesOut = _minSharesForWethIn(amount);
 
@@ -96,6 +127,11 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         TokenUtils.safeApprove(address(weth), ensoRouter, 0);
 
         uint256 sharesReceived = rewardVault.balanceOf(address(this)) - sharesBefore;
+        uint256 wethSpent = wethBefore - _idleAssets();
+        uint256 lpReceived = rewardVault.convertToAssets(sharesReceived);
+        uint256 floorLpOut = _minLpForWeth(wethSpent);
+        if (lpReceived < floorLpOut) revert CurveLpOutputBelowFloor(lpReceived, floorLpOut);
+
         uint256 wethValueReceived = _sharesToWeth(sharesReceived);
         uint256 minWethValue = _sharesToWeth(minSharesOut);
         if (wethValueReceived < minWethValue) revert InvalidAmount(minWethValue, wethValueReceived);
@@ -115,10 +151,14 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         require(shares > 0, "No RewardVault shares");
 
         uint256 lpToExit = _lpRequiredForWeth(shortfall, shares);
+        uint256 maxLpToExit = _maxLpForWeth(shortfall);
+        if (lpToExit > maxLpToExit) revert CurveLpPriceBelowFloor(lpToExit, maxLpToExit);
+
         uint256 sharesToRedeem = rewardVault.previewWithdraw(lpToExit);
         if (sharesToRedeem > shares) sharesToRedeem = shares;
 
         uint256 lpRedeemed = rewardVault.redeem(sharesToRedeem, address(this), address(this));
+        if (lpRedeemed > maxLpToExit) revert CurveLpPriceBelowFloor(lpRedeemed, maxLpToExit);
 
         TokenUtils.safeApprove(address(curvePool), address(curvePool), lpRedeemed);
         curvePool.remove_liquidity_one_coin(lpRedeemed, WETH_COIN_INDEX, shortfall, address(this));
@@ -139,10 +179,16 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         uint256 shortfall = amount - idleBalance;
         uint256 shares = rewardVault.balanceOf(address(this));
         require(shares > 0, "No RewardVault shares");
+        uint256 lpValueBefore = rewardVault.convertToAssets(shares);
 
         TokenUtils.safeApprove(address(rewardVault), ensoRouter, shares);
-        _ensoRoute(address(weth), shortfall, ensoCalldata);
+        uint256 wethReceived = _ensoRoute(address(weth), shortfall, ensoCalldata);
         TokenUtils.safeApprove(address(rewardVault), ensoRouter, 0);
+
+        uint256 sharesSpent = shares - rewardVault.balanceOf(address(this));
+        uint256 lpSpent = Math.mulDiv(sharesSpent, lpValueBefore, shares, Math.Rounding.Ceil);
+        uint256 maxLpToSpend = _maxLpForWeth(wethReceived);
+        if (lpSpent > maxLpToSpend) revert CurveLpPriceBelowFloor(lpSpent, maxLpToSpend);
 
         require(_idleAssets() >= amount, "Withdraw amount insufficient");
         TokenUtils.safeApprove(address(weth), msg.sender, amount);
@@ -150,13 +196,16 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     }
 
     function _totalValue() internal view override returns (uint256) {
-        return _idleAssets() + _sharesToWeth(rewardVault.balanceOf(address(this)));
+        uint256 lpAssets = rewardVault.convertToAssets(rewardVault.balanceOf(address(this)));
+        uint256 lpValue = Math.mulDiv(lpAssets, curvePool.get_virtual_price(), PRICE_SCALE);
+        return _idleAssets() + lpValue;
     }
 
     function _idleAssets() internal view override returns (uint256) {
         return TokenUtils.safeBalanceOf(address(weth), address(this));
     }
 
+    /// @dev Floor-priced capacity only; callers must quote route-specific liquidity and price impact.
     function _previewAdjustedWithdraw(uint256 amount) internal view override returns (uint256) {
         uint256 idleBalance = _idleAssets();
         uint256 fromIdle = amount <= idleBalance ? amount : idleBalance;
@@ -165,16 +214,13 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         }
 
         uint256 remaining = amount - fromIdle;
-        uint256 maxWethFromShares = _sharesToWeth(rewardVault.balanceOf(address(this)));
+        uint256 lpAssets = rewardVault.convertToAssets(rewardVault.balanceOf(address(this)));
+        uint256 maxWethFromShares = Math.mulDiv(lpAssets, minWethPerCurveLp, PRICE_SCALE);
         uint256 fundableFromPosition = remaining <= maxWethFromShares ? remaining : maxWethFromShares;
         return fromIdle + (fundableFromPosition * (10_000 - params.slippageBPS)) / 10_000;
     }
 
-    function _claimRewards(address token, bytes memory quote, uint256 minAmountOut)
-        internal
-        override
-        returns (uint256 rewardsClaimed)
-    {
+    function _claimRewards(address token, bytes memory quote, uint256 minAmountOut) internal override returns (uint256 rewardsClaimed) {
         if (rewardVault.earned(address(this), token) == 0) return 0;
         require(quote.length > 0, "params");
 
@@ -231,20 +277,27 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         if (wethOut >= maxWeth) return maxLp;
 
         uint256 estimated = (wethOut * maxLp + maxWeth - 1) / maxWeth;
-        uint256 buffered =
-            (estimated * 10_000 + (10_000 - withdrawBufferBps) - 1) / (10_000 - withdrawBufferBps);
+        uint256 buffered = (estimated * 10_000 + (10_000 - withdrawBufferBps) - 1) / (10_000 - withdrawBufferBps);
         if (buffered > maxLp) return maxLp;
         return buffered == 0 ? 1 : buffered;
     }
 
-    function _ensoRoute(address outputToken, uint256 minOut, bytes memory ensoCalldata) internal {
+    function _maxLpForWeth(uint256 wethAmount) internal view returns (uint256) {
+        return Math.mulDiv(wethAmount, PRICE_SCALE, minWethPerCurveLp, Math.Rounding.Ceil) + LP_ROUNDING_TOLERANCE;
+    }
+
+    function _minLpForWeth(uint256 wethAmount) internal view returns (uint256) {
+        return Math.mulDiv(wethAmount, minCurveLpPerWeth, PRICE_SCALE, Math.Rounding.Ceil);
+    }
+
+    function _ensoRoute(address outputToken, uint256 minOut, bytes memory ensoCalldata) internal returns (uint256 received) {
         require(ensoCalldata.length > 0, "Empty Enso calldata");
 
         uint256 balanceBefore = TokenUtils.safeBalanceOf(outputToken, address(this));
         (bool success,) = ensoRouter.call(ensoCalldata);
         require(success, "Enso route failed");
 
-        uint256 received = TokenUtils.safeBalanceOf(outputToken, address(this)) - balanceBefore;
+        received = TokenUtils.safeBalanceOf(outputToken, address(this)) - balanceBefore;
         if (received < minOut) revert InvalidAmount(minOut, received);
     }
 }

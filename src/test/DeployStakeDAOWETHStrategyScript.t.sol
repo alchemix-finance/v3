@@ -72,15 +72,16 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
     }
 
     function test_deployStakeDAOWETHStrategy_setsCoreAddressesAndDefaults() public {
-        DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig memory config =
-            DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig({
-                myt: address(myt),
-                rewardVault: rewardVault,
-                curvePool: curvePool,
-                ensoRouter: ensoRouter,
-                withdrawBufferBps: deployScript.WITHDRAW_BUFFER_BPS(),
-                params: _buildParams("StakeDAO Mainnet ETH+/WETH", "StakeDAO")
-            });
+        DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig memory config = DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig({
+            myt: address(myt),
+            rewardVault: rewardVault,
+            curvePool: curvePool,
+            ensoRouter: ensoRouter,
+            withdrawBufferBps: deployScript.WITHDRAW_BUFFER_BPS(),
+            minWethPerCurveLp: deployScript.MIN_WETH_PER_CURVE_LP(),
+            minCurveLpPerWeth: deployScript.MIN_CURVE_LP_PER_WETH(),
+            params: _buildParams("StakeDAO Mainnet ETH+/WETH", "StakeDAO")
+        });
 
         address strategyAddr = deployScript.deployStakeDAOWETHStrategy(curator, newOwner, config);
         StakeDAOWETHStrategy strategy = StakeDAOWETHStrategy(strategyAddr);
@@ -90,11 +91,9 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
         assertEq(address(strategy.rewardVault()), rewardVault, "unexpected reward vault");
         assertEq(address(strategy.curvePool()), curvePool, "unexpected curve pool");
         assertEq(strategy.ensoRouter(), ensoRouter, "unexpected enso router");
-        assertEq(
-            strategy.withdrawBufferBps(),
-            deployScript.WITHDRAW_BUFFER_BPS(),
-            "unexpected withdraw buffer"
-        );
+        assertEq(strategy.withdrawBufferBps(), deployScript.WITHDRAW_BUFFER_BPS(), "unexpected withdraw buffer");
+        assertEq(strategy.minWethPerCurveLp(), deployScript.MIN_WETH_PER_CURVE_LP(), "unexpected Curve LP floor");
+        assertEq(strategy.minCurveLpPerWeth(), deployScript.MIN_CURVE_LP_PER_WETH(), "unexpected allocation floor");
         assertFalse(strategy.canForceDeallocate(), "force deallocate should default disabled");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
@@ -105,15 +104,16 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
     }
 
     function test_deployStakeDAOWETHStrategy_blocksForceDeallocateSwap() public {
-        DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig memory config =
-            DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig({
-                myt: address(myt),
-                rewardVault: rewardVault,
-                curvePool: curvePool,
-                ensoRouter: ensoRouter,
-                withdrawBufferBps: deployScript.WITHDRAW_BUFFER_BPS(),
-                params: _buildParams("StakeDAO Mainnet ETH+/WETH", "StakeDAO")
-            });
+        DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig memory config = DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig({
+            myt: address(myt),
+            rewardVault: rewardVault,
+            curvePool: curvePool,
+            ensoRouter: ensoRouter,
+            withdrawBufferBps: deployScript.WITHDRAW_BUFFER_BPS(),
+            minWethPerCurveLp: deployScript.MIN_WETH_PER_CURVE_LP(),
+            minCurveLpPerWeth: deployScript.MIN_CURVE_LP_PER_WETH(),
+            params: _buildParams("StakeDAO Mainnet ETH+/WETH", "StakeDAO")
+        });
 
         address strategyAddr = deployScript.deployStakeDAOWETHStrategy(curator, newOwner, config);
         StakeDAOWETHStrategy strategy = StakeDAOWETHStrategy(strategyAddr);
@@ -128,15 +128,16 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
     }
 
     function test_deployStakeDAOWETHStrategy_blocksDirectForceDeallocateByDefault() public {
-        DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig memory config =
-            DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig({
-                myt: address(myt),
-                rewardVault: rewardVault,
-                curvePool: curvePool,
-                ensoRouter: ensoRouter,
-                withdrawBufferBps: deployScript.WITHDRAW_BUFFER_BPS(),
-                params: _buildParams("StakeDAO Mainnet ETH+/WETH", "StakeDAO")
-            });
+        DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig memory config = DeployStakeDAOWETHStrategyScript.StakeDAOWETHDeployConfig({
+            myt: address(myt),
+            rewardVault: rewardVault,
+            curvePool: curvePool,
+            ensoRouter: ensoRouter,
+            withdrawBufferBps: deployScript.WITHDRAW_BUFFER_BPS(),
+            minWethPerCurveLp: deployScript.MIN_WETH_PER_CURVE_LP(),
+            minCurveLpPerWeth: deployScript.MIN_CURVE_LP_PER_WETH(),
+            params: _buildParams("StakeDAO Mainnet ETH+/WETH", "StakeDAO")
+        });
 
         address strategyAddr = deployScript.deployStakeDAOWETHStrategy(curator, newOwner, config);
         StakeDAOWETHStrategy strategy = StakeDAOWETHStrategy(strategyAddr);
@@ -165,11 +166,9 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
         assertEq(address(strategy.rewardVault()), MAINNET_REWARD_VAULT, "unexpected reward vault");
         assertEq(address(strategy.curvePool()), MAINNET_ETH_PLUS_WETH_POOL, "unexpected curve pool");
         assertEq(strategy.ensoRouter(), MAINNET_ENSO_ROUTER, "unexpected enso router");
-        assertEq(
-            strategy.withdrawBufferBps(),
-            forkDeployScript.WITHDRAW_BUFFER_BPS(),
-            "unexpected withdraw buffer"
-        );
+        assertEq(strategy.withdrawBufferBps(), forkDeployScript.WITHDRAW_BUFFER_BPS(), "unexpected withdraw buffer");
+        assertEq(strategy.minWethPerCurveLp(), forkDeployScript.MIN_WETH_PER_CURVE_LP(), "unexpected Curve LP floor");
+        assertEq(strategy.minCurveLpPerWeth(), forkDeployScript.MIN_CURVE_LP_PER_WETH(), "unexpected allocation floor");
         assertFalse(strategy.canForceDeallocate(), "force deallocate should default disabled");
         assertEq(strategy.owner(), MAINNET_NEW_OWNER, "unexpected strategy owner");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled after deploy");
@@ -240,6 +239,8 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
         assertEq(deployScript.ETH_PLUS_WETH_POOL(), MAINNET_ETH_PLUS_WETH_POOL, "unexpected curve pool");
         assertEq(deployScript.ENSO_ROUTER(), MAINNET_ENSO_ROUTER, "unexpected enso router");
         assertEq(deployScript.WITHDRAW_BUFFER_BPS(), 125, "unexpected withdraw buffer");
+        assertEq(deployScript.MIN_WETH_PER_CURVE_LP(), 1e18, "unexpected Curve LP floor");
+        assertEq(deployScript.MIN_CURVE_LP_PER_WETH(), 0.95e18, "unexpected allocation floor");
         assertEq(params.owner, DEPLOYER, "unexpected owner");
         assertEq(params.name, "StakeDAO Mainnet ETH+/WETH", "unexpected name");
         assertEq(params.protocol, "StakeDAO", "unexpected protocol");
@@ -251,11 +252,7 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
         assertEq(params.slippageBPS, 125, "unexpected slippage");
     }
 
-    function _buildParams(string memory name, string memory protocol)
-        internal
-        view
-        returns (IMYTStrategy.StrategyParams memory)
-    {
+    function _buildParams(string memory name, string memory protocol) internal view returns (IMYTStrategy.StrategyParams memory) {
         return IMYTStrategy.StrategyParams({
             owner: address(deployScript),
             name: name,

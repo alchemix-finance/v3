@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import "forge-std/Test.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {StakeDAOWETHStrategy} from "../../strategies/StakeDAOWETHStrategy.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
@@ -15,6 +16,15 @@ import {MYTStrategy} from "../../MYTStrategy.sol";
 import {MYTTestHelper} from "../libraries/MYTTestHelper.sol";
 import {BaseStrategyTest} from "../BaseStrategyTest.sol";
 import {IStakeDAORewardVault, ICurveStableSwapPool} from "../../strategies/interfaces/IStakeDAO.sol";
+
+interface ICurvePoolManipulation {
+    function balances(uint256 index) external view returns (uint256);
+    function exchange(int128 i, int128 j, uint256 dx, uint256 minDy, address receiver) external returns (uint256);
+}
+
+interface IExchangeRateProvider {
+    function exchangeRate() external view returns (uint256);
+}
 
 contract MockEnsoBidirectional {
     IERC20 public immutable weth;
@@ -69,10 +79,7 @@ contract MockCurvePool is IERC20 {
         return lpMinted;
     }
 
-    function remove_liquidity_one_coin(uint256 burnAmount, int128, uint256 minReceived, address receiver)
-        external
-        returns (uint256)
-    {
+    function remove_liquidity_one_coin(uint256 burnAmount, int128, uint256 minReceived, address receiver) external returns (uint256) {
         balanceOf[msg.sender] -= burnAmount;
         totalSupply -= burnAmount;
         require(burnAmount >= minReceived, "Slippage");
@@ -87,6 +94,10 @@ contract MockCurvePool is IERC20 {
 
     function calc_withdraw_one_coin(uint256 tokenAmount, int128) external pure returns (uint256) {
         return tokenAmount;
+    }
+
+    function get_virtual_price() external pure returns (uint256) {
+        return 1e18;
     }
 
     function transfer(address to, uint256 amount) external returns (bool) {
@@ -192,13 +203,9 @@ contract Mock0xRouter {
 }
 
 contract MockStakeDAOWETHStrategy is StakeDAOWETHStrategy {
-    constructor(
-        address _myt,
-        StrategyParams memory _params,
-        address _rewardVault,
-        address _curvePool,
-        address _ensoRouter
-    ) StakeDAOWETHStrategy(_myt, _params, _rewardVault, _curvePool, _ensoRouter, 125) {}
+    constructor(address _myt, StrategyParams memory _params, address _rewardVault, address _curvePool, address _ensoRouter)
+        StakeDAOWETHStrategy(_myt, _params, _rewardVault, _curvePool, _ensoRouter, 125, 0.98e18, 0.95e18)
+    {}
 }
 
 contract StakeDAOWETHStrategyEnsoTest is Test {
@@ -239,17 +246,13 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
             slippageBPS: 125
         });
 
-        strategy = address(
-            new MockStakeDAOWETHStrategy(vault, params, address(rewardVault), address(curvePool), address(ensoRouter))
-        );
+        strategy = address(new MockStakeDAOWETHStrategy(vault, params, address(rewardVault), address(curvePool), address(ensoRouter)));
 
         address classifier = address(new AlchemistStrategyClassifier(admin));
         AlchemistStrategyClassifier(classifier).setRiskClass(0, 1e18, 1e18);
         AlchemistStrategyClassifier(classifier).setRiskClass(1, 0.4e18, 0.25e18);
         AlchemistStrategyClassifier(classifier).setRiskClass(2, 0.1e18, 0.1e18);
-        AlchemistStrategyClassifier(classifier).assignStrategyRiskLevel(
-            uint256(IMYTStrategy(strategy).adapterId()), uint8(IMYTStrategy.RiskClass.MEDIUM)
-        );
+        AlchemistStrategyClassifier(classifier).assignStrategyRiskLevel(uint256(IMYTStrategy(strategy).adapterId()), uint8(IMYTStrategy.RiskClass.MEDIUM));
         allocator = address(new AlchemistAllocator(vault, admin, curator, classifier));
         vm.stopPrank();
 
@@ -305,6 +308,19 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
         assertEq(IMYTStrategy(strategy).realAssets(), amount);
     }
 
+    function test_allocate_with_enso_reverts_below_lp_per_weth_floor() public {
+        uint256 amount = 5e18;
+
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setMinCurveLpPerWeth(2e18);
+
+        vm.startPrank(vault);
+        deal(WETH, strategy, amount);
+        vm.expectPartialRevert(StakeDAOWETHStrategy.CurveLpOutputBelowFloor.selector);
+        IMYTStrategy(strategy).allocate(_swapParams(hex"01"), amount, "", address(vault));
+        vm.stopPrank();
+    }
+
     function test_deallocate_with_enso_returns_weth() public {
         uint256 allocAmount = 5e18;
         uint256 deallocAmount = 3e18;
@@ -319,6 +335,24 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
 
         assertGe(TokenUtils.safeBalanceOf(WETH, strategy), preview);
         assertLt(IERC20(address(rewardVault)).balanceOf(strategy), allocAmount);
+    }
+
+    function test_deallocate_with_enso_reverts_below_curve_lp_floor() public {
+        uint256 allocAmount = 5e18;
+
+        vm.startPrank(vault);
+        deal(WETH, strategy, allocAmount);
+        IMYTStrategy(strategy).allocate(_swapParams(hex"01"), allocAmount, "", address(vault));
+        vm.stopPrank();
+
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setMinWethPerCurveLp(2e18);
+
+        uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(3e18);
+        vm.startPrank(vault);
+        vm.expectPartialRevert(StakeDAOWETHStrategy.CurveLpPriceBelowFloor.selector);
+        IMYTStrategy(strategy).deallocate(_swapParams(hex"02"), preview, "", address(vault));
+        vm.stopPrank();
     }
 
     function test_allocator_allocateWithSwap() public {
@@ -443,6 +477,8 @@ contract MockEnsoUnderDeliver {
 /// @notice Mainnet fork tests for direct allocate/deallocate against real Curve + RewardVault contracts.
 contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public constant ETH_PLUS = 0xE72B141DF173b999AE7c1aDcbF60Cc9833Ce56a8;
+    address public constant ETH_PLUS_RATE_PROVIDER = 0x0cAA3EB22Aa22eFB7886308942870ba81aaa05C6;
     address public constant CVX = 0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B;
     address public constant REWARD_VAULT = 0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C;
     address public constant ETH_PLUS_WETH_POOL = 0x2c683fAd51da2cd17793219CC86439C1875c353e;
@@ -466,6 +502,215 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         vm.prank(admin);
         vm.expectRevert("Withdraw buffer too high");
         StakeDAOWETHStrategy(strategy).setWithdrawBufferBps(maxWithdrawBufferBps);
+    }
+
+    function test_owner_can_set_curve_lp_floor() public {
+        uint256 newFloor = 0.99e18;
+
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setMinWethPerCurveLp(newFloor);
+
+        assertEq(StakeDAOWETHStrategy(strategy).minWethPerCurveLp(), newFloor);
+    }
+
+    function test_set_curve_lp_floor_reverts_for_non_owner_or_zero() public {
+        vm.expectRevert();
+        StakeDAOWETHStrategy(strategy).setMinWethPerCurveLp(0.99e18);
+
+        vm.prank(admin);
+        vm.expectRevert("Zero Curve LP floor");
+        StakeDAOWETHStrategy(strategy).setMinWethPerCurveLp(0);
+    }
+
+    function test_owner_can_set_lp_per_weth_allocation_floor() public {
+        uint256 newFloor = 0.94e18;
+
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setMinCurveLpPerWeth(newFloor);
+
+        assertEq(StakeDAOWETHStrategy(strategy).minCurveLpPerWeth(), newFloor);
+    }
+
+    function test_set_lp_per_weth_allocation_floor_reverts_for_non_owner_or_zero() public {
+        vm.expectRevert();
+        StakeDAOWETHStrategy(strategy).setMinCurveLpPerWeth(0.94e18);
+
+        vm.prank(admin);
+        vm.expectRevert("Zero allocation floor");
+        StakeDAOWETHStrategy(strategy).setMinCurveLpPerWeth(0);
+    }
+
+    function test_direct_allocate_reverts_when_curve_manipulation_pushes_lp_output_below_floor() public {
+        uint256 allocationAmount = 1e18;
+        uint256 floor = StakeDAOWETHStrategy(strategy).minCurveLpPerWeth();
+        uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(strategy);
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
+
+        _swapCurveCoin(WETH, 1, 0, ICurvePoolManipulation(ETH_PLUS_WETH_POOL).balances(1) * 2);
+
+        uint256[] memory amounts = new uint256[](2);
+        amounts[1] = allocationAmount;
+        uint256 manipulatedLpQuote = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).calc_token_amount(amounts, true);
+        assertLt(manipulatedLpQuote, allocationAmount * floor / 1e18, "manipulation did not breach allocation floor");
+
+        vm.prank(admin);
+        vm.expectRevert();
+        IAllocator(allocator).allocate(strategy, allocationAmount);
+
+        assertEq(IERC20(REWARD_VAULT).balanceOf(strategy), sharesBefore, "shares changed after reverted allocation");
+        assertEq(IERC20(WETH).balanceOf(vault), vaultWethBefore, "vault WETH changed after reverted allocation");
+        assertEq(IERC20(WETH).allowance(strategy, ETH_PLUS_WETH_POOL), 0, "Curve WETH allowance not cleared");
+    }
+
+    function test_direct_deallocate_reverts_when_curve_manipulation_pushes_weth_output_below_floor() public {
+        uint256 allocationAmount = 100e18;
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, allocationAmount);
+
+        uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(strategy);
+        uint256 strategyWethBefore = IERC20(WETH).balanceOf(strategy);
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
+        uint256 floor = StakeDAOWETHStrategy(strategy).minWethPerCurveLp();
+
+        _swapCurveCoin(ETH_PLUS, 0, 1, ICurvePoolManipulation(ETH_PLUS_WETH_POOL).balances(0) * 2);
+
+        uint256 manipulatedWethQuote = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).calc_withdraw_one_coin(1e18, int128(1));
+        assertLt(manipulatedWethQuote, floor, "manipulation did not breach withdrawal floor");
+
+        vm.prank(admin);
+        vm.expectPartialRevert(StakeDAOWETHStrategy.CurveLpPriceBelowFloor.selector);
+        IAllocator(allocator).deallocate(strategy, 1e18);
+
+        assertEq(IERC20(REWARD_VAULT).balanceOf(strategy), sharesBefore, "shares changed after reverted deallocation");
+        assertEq(IERC20(WETH).balanceOf(strategy), strategyWethBefore, "strategy WETH changed after reverted deallocation");
+        assertEq(IERC20(WETH).balanceOf(vault), vaultWethBefore, "vault WETH changed after reverted deallocation");
+        assertEq(IERC20(ETH_PLUS_WETH_POOL).allowance(strategy, ETH_PLUS_WETH_POOL), 0, "Curve LP allowance not cleared");
+    }
+
+    function test_total_value_uses_reward_vault_lp_assets_and_virtual_price() public {
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, 100e18);
+
+        uint256 shares = IERC20(REWARD_VAULT).balanceOf(strategy);
+        uint256 lpAssets = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(shares);
+        uint256 expectedLpValue = Math.mulDiv(lpAssets, ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price(), 1e18);
+        uint256 expectedTotalValue = IERC20(WETH).balanceOf(strategy) + expectedLpValue;
+
+        assertEq(IMYTStrategy(strategy).realAssets(), expectedTotalValue, "unexpected virtual-price total value");
+    }
+
+    function test_total_value_resists_single_block_curve_exit_price_manipulation() public {
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, 100e18);
+
+        uint256 shares = IERC20(REWARD_VAULT).balanceOf(strategy);
+        uint256 lpAssets = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(shares);
+        uint256 totalValueBefore = IMYTStrategy(strategy).realAssets();
+        uint256 executableWethBefore = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).calc_withdraw_one_coin(lpAssets, int128(1));
+
+        _swapCurveCoin(ETH_PLUS, 0, 1, ICurvePoolManipulation(ETH_PLUS_WETH_POOL).balances(0) * 2);
+
+        uint256 executableWethAfter = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).calc_withdraw_one_coin(lpAssets, int128(1));
+        uint256 expectedTotalValue =
+            IERC20(WETH).balanceOf(strategy) + Math.mulDiv(lpAssets, ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price(), 1e18);
+
+        assertLt(executableWethAfter, executableWethBefore, "manipulation did not reduce executable WETH quote");
+        assertEq(IMYTStrategy(strategy).realAssets(), expectedTotalValue, "total value should use virtual price");
+        assertGe(IMYTStrategy(strategy).realAssets(), totalValueBefore, "single-block swap should not reduce total value");
+    }
+
+    function test_total_value_resists_direct_token_donations_to_curve_pool() public {
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, 100e18);
+
+        uint256 virtualPriceBefore = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price();
+        uint256 totalValueBefore = IMYTStrategy(strategy).realAssets();
+        address donor = makeAddr("curve-donor");
+
+        deal(WETH, donor, 1000e18);
+        deal(ETH_PLUS, donor, 1000e18);
+        vm.startPrank(donor);
+        IERC20(WETH).transfer(ETH_PLUS_WETH_POOL, 1000e18);
+        IERC20(ETH_PLUS).transfer(ETH_PLUS_WETH_POOL, 1000e18);
+        vm.stopPrank();
+
+        assertEq(ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price(), virtualPriceBefore, "direct donations changed virtual price");
+        assertEq(IMYTStrategy(strategy).realAssets(), totalValueBefore, "direct donations changed total value");
+    }
+
+    function test_total_value_resists_imbalanced_liquidity_addition_and_removal() public {
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, 100e18);
+
+        uint256 virtualPriceBefore = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price();
+        uint256 totalValueBefore = IMYTStrategy(strategy).realAssets();
+        address manipulator = makeAddr("liquidity-manipulator");
+        uint256 wethAmount = 1000e18;
+        uint256[] memory amounts = new uint256[](2);
+        amounts[1] = wethAmount;
+
+        deal(WETH, manipulator, wethAmount);
+        vm.startPrank(manipulator);
+        IERC20(WETH).approve(ETH_PLUS_WETH_POOL, wethAmount);
+        uint256 lpMinted = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).add_liquidity(amounts, 0, manipulator);
+
+        uint256 virtualPriceAfterAdd = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price();
+        assertGe(virtualPriceAfterAdd, virtualPriceBefore, "imbalanced addition reduced virtual price");
+
+        IERC20(ETH_PLUS_WETH_POOL).approve(ETH_PLUS_WETH_POOL, lpMinted);
+        ICurveStableSwapPool(ETH_PLUS_WETH_POOL).remove_liquidity_one_coin(lpMinted, int128(1), 0, manipulator);
+        vm.stopPrank();
+
+        uint256 virtualPriceAfterRemove = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price();
+        assertGe(virtualPriceAfterRemove, virtualPriceBefore, "imbalanced removal reduced virtual price");
+        assertGe(IMYTStrategy(strategy).realAssets(), totalValueBefore, "liquidity imbalance reduced total value");
+    }
+
+    function test_total_value_tracks_eth_plus_rate_provider_changes() public {
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, 100e18);
+
+        uint256 totalValueBefore = IMYTStrategy(strategy).realAssets();
+        uint256 currentRate = IExchangeRateProvider(ETH_PLUS_RATE_PROVIDER).exchangeRate();
+        vm.mockCall(ETH_PLUS_RATE_PROVIDER, abi.encodeCall(IExchangeRateProvider.exchangeRate, ()), abi.encode(currentRate / 2));
+
+        uint256 shares = IERC20(REWARD_VAULT).balanceOf(strategy);
+        uint256 lpAssets = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(shares);
+        uint256 expectedTotalValue =
+            IERC20(WETH).balanceOf(strategy) + Math.mulDiv(lpAssets, ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price(), 1e18);
+
+        assertEq(IMYTStrategy(strategy).realAssets(), expectedTotalValue, "total value ignored rate-provider change");
+        assertLt(IMYTStrategy(strategy).realAssets(), totalValueBefore, "lower ETH+ rate did not reduce total value");
+        vm.clearMockedCalls();
+    }
+
+    function test_direct_deallocate_reverts_when_curve_lp_price_is_below_floor() public {
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, 1e18);
+
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setMinWethPerCurveLp(2e18);
+
+        vm.prank(admin);
+        vm.expectPartialRevert(StakeDAOWETHStrategy.CurveLpPriceBelowFloor.selector);
+        IAllocator(allocator).deallocate(strategy, 0.5e18);
+    }
+
+    function test_preview_adjusted_withdraw_caps_position_at_curve_lp_floor() public {
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, 1e18);
+
+        uint256 floor = 0.5e18;
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setMinWethPerCurveLp(floor);
+
+        uint256 shares = IERC20(REWARD_VAULT).balanceOf(strategy);
+        uint256 lpAssets = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(shares);
+        uint256 floorValue = lpAssets * floor / 1e18;
+        (,,,,,,,, uint256 slippageBPS) = IMYTStrategy(strategy).params();
+        uint256 expectedPreview = floorValue * (10_000 - slippageBPS) / 10_000;
+
+        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(type(uint256).max), expectedPreview, "preview should cap position at floor-priced value");
     }
 
     function test_force_deallocate_defaults_disabled_and_owner_can_enable() public {
@@ -563,6 +808,16 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         MYTStrategy(strategy).setAllowanceHolder(address(mock0xRouter));
     }
 
+    function _swapCurveCoin(address tokenIn, int128 i, int128 j, uint256 amountIn) internal {
+        address manipulator = makeAddr("curve-manipulator");
+        deal(tokenIn, manipulator, amountIn);
+
+        vm.startPrank(manipulator);
+        IERC20(tokenIn).approve(ETH_PLUS_WETH_POOL, amountIn);
+        ICurvePoolManipulation(ETH_PLUS_WETH_POOL).exchange(i, j, amountIn, 0, manipulator);
+        vm.stopPrank();
+    }
+
     function testFuzz_forceDeallocate_direct_succeeds(uint256 rawAllocateAmount, uint256 rawForceDeallocateAmount) public {
         uint256 minAllocateAmount = _getMinAllocateAmount();
         (, uint256 maxAllocateAmount) = _getAllocationBounds();
@@ -589,11 +844,9 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         assertGt(IERC20(WETH).balanceOf(vault), vaultWethBefore, "vault should receive WETH");
     }
 
-    function testFuzz_deallocate_uses_idle_weth_before_reward_vault_shares(
-        uint256 rawAllocateAmount,
-        uint256 rawIdleAmount,
-        uint256 rawDeallocateAmount
-    ) public {
+    function testFuzz_deallocate_uses_idle_weth_before_reward_vault_shares(uint256 rawAllocateAmount, uint256 rawIdleAmount, uint256 rawDeallocateAmount)
+        public
+    {
         uint256 minAllocateAmount = _getMinAllocateAmount();
         (, uint256 maxAllocateAmount) = _getAllocationBounds();
         uint256 allocateAmount = bound(rawAllocateAmount, minAllocateAmount * 2, maxAllocateAmount);
@@ -660,15 +913,11 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         uint256 assetsBeforeAccrual = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(shares);
         uint256 accruedLp = bound(rawAccruedLp, minAllocateAmount, allocateAmount / 10);
         uint256 accruedAssets = assetsBeforeAccrual + accruedLp;
-        vm.mockCall(
-            REWARD_VAULT,
-            abi.encodeWithSelector(bytes4(keccak256("convertToAssets(uint256)")), shares),
-            abi.encode(accruedAssets)
-        );
+        vm.mockCall(REWARD_VAULT, abi.encodeWithSelector(bytes4(keccak256("convertToAssets(uint256)")), shares), abi.encode(accruedAssets));
         vm.warp(block.timestamp + 7 days);
 
         uint256 lpAssets = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(shares);
-        uint256 expectedPositionValue = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).calc_withdraw_one_coin(lpAssets, int128(1));
+        uint256 expectedPositionValue = Math.mulDiv(lpAssets, ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price(), 1e18);
         uint256 idleAssets = IERC20(WETH).balanceOf(strategy);
         uint256 expectedRealAssets = idleAssets + expectedPositionValue;
         uint256 previewTarget = expectedRealAssets / 2;
@@ -679,11 +928,7 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
 
         assertEq(lpAssets, accruedAssets, "RewardVault LP assets should accrue");
         assertEq(IMYTStrategy(strategy).realAssets(), expectedRealAssets, "realAssets should use convertToAssets");
-        assertEq(
-            IMYTStrategy(strategy).previewAdjustedWithdraw(previewTarget),
-            expectedPreview,
-            "previewAdjustedWithdraw should use convertToAssets"
-        );
+        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(previewTarget), expectedPreview, "previewAdjustedWithdraw should use convertToAssets");
         vm.clearMockedCalls();
     }
 
@@ -702,19 +947,11 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
     }
 
     function getTestConfig() internal pure override returns (TestConfig memory) {
-        return TestConfig({
-            vaultAsset: WETH,
-            vaultInitialDeposit: 50_000e18,
-            absoluteCap: 10_000e18,
-            relativeCap: 1e18,
-            decimals: 18
-        });
+        return TestConfig({vaultAsset: WETH, vaultInitialDeposit: 50_000e18, absoluteCap: 10_000e18, relativeCap: 1e18, decimals: 18});
     }
 
     function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
-        return address(
-            new StakeDAOWETHStrategy(vault_, params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, 125)
-        );
+        return address(new StakeDAOWETHStrategy(vault_, params, REWARD_VAULT, ETH_PLUS_WETH_POOL, ENSO_ROUTER, 125, 1e18, 0.95e18));
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {
