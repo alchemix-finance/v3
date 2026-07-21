@@ -308,6 +308,21 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
         assertEq(IMYTStrategy(strategy).realAssets(), amount);
     }
 
+    function test_rescue_tokens_reverts_for_stakedao_position_tokens() public {
+        vm.startPrank(admin);
+
+        vm.expectRevert("Protected token");
+        MYTStrategy(strategy).rescueTokens(WETH, admin, 0);
+
+        vm.expectRevert("Protected token");
+        MYTStrategy(strategy).rescueTokens(address(rewardVault), admin, 0);
+
+        vm.expectRevert("Protected token");
+        MYTStrategy(strategy).rescueTokens(address(curvePool), admin, 0);
+
+        vm.stopPrank();
+    }
+
     function test_allocate_with_enso_reverts_below_lp_per_weth_floor() public {
         uint256 amount = 5e18;
 

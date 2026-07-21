@@ -239,7 +239,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     }
 
     function _isProtectedToken(address token) internal view override returns (bool) {
-        return token == address(weth);
+        return token == address(weth) || token == address(rewardVault) || token == address(curvePool);
     }
 
     function _canForceDeallocate() internal view override returns (bool) {
