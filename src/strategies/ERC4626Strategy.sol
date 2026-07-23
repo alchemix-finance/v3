@@ -17,9 +17,9 @@ contract ERC4626Strategy is MYTStrategy {
 
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
 
-    event CanForceDeallocateUpdated(bool newCanForceDeallocate);
-
-    constructor(address _myt, StrategyParams memory _params, address _vault) MYTStrategy(_myt, _params) {
+    constructor(address _myt, StrategyParams memory _params, address _vault)
+        MYTStrategy(_myt, _params)
+    {
         mytAsset = IERC20(MYT.asset());
         vault = IERC4626(_vault);
         require(vault.asset() == MYT.asset(), "Vault asset != MYT asset");
@@ -36,7 +36,7 @@ contract ERC4626Strategy is MYTStrategy {
 
     function _allocate(uint256 amount) internal virtual override returns (uint256) {
         _ensureIdleBalance(address(mytAsset), amount);
-
+        
         TokenUtils.safeApprove(address(mytAsset), address(vault), amount);
         vault.deposit(amount, address(this));
         return amount;
@@ -76,9 +76,5 @@ contract ERC4626Strategy is MYTStrategy {
 
     function _isProtectedToken(address token) internal view virtual override returns (bool) {
         return token == MYT.asset() || token == address(vault);
-    }
-
-    function _canForceDeallocate() internal view virtual override returns (bool) {
-        return canForceDeallocate;
     }
 }
