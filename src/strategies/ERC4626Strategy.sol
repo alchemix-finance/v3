@@ -17,6 +17,8 @@ contract ERC4626Strategy is MYTStrategy {
 
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
 
+    event CanForceDeallocateUpdated(bool newCanForceDeallocate);
+
     constructor(address _myt, StrategyParams memory _params, address _vault) MYTStrategy(_myt, _params) {
         mytAsset = IERC20(MYT.asset());
         vault = IERC4626(_vault);
@@ -26,6 +28,10 @@ contract ERC4626Strategy is MYTStrategy {
     function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
         canForceDeallocate = canForceDeallocate_;
         emit CanForceDeallocateUpdated(canForceDeallocate_);
+    }
+
+    function _canForceDeallocate() internal view virtual override returns (bool) {
+        return canForceDeallocate;
     }
 
     function _allocate(uint256 amount) internal virtual override returns (uint256) {
