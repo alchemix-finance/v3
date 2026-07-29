@@ -29,6 +29,7 @@ interface IExchangeRateProvider {
 contract MockEnsoBidirectional {
     IERC20 public immutable weth;
     IERC20 public immutable rewardVaultShares;
+    uint256 public lastShareAllowance;
 
     constructor(address _weth, address _rewardVaultShares) {
         weth = IERC20(_weth);
@@ -47,6 +48,7 @@ contract MockEnsoBidirectional {
 
         uint256 shareAllowance = rewardVaultShares.allowance(msg.sender, address(this));
         require(shareAllowance > 0, "No Enso allowance");
+        lastShareAllowance = shareAllowance;
 
         uint256 shareBalance = rewardVaultShares.balanceOf(msg.sender);
         uint256 shareAmount = shareAllowance < shareBalance ? shareAllowance : shareBalance;
@@ -362,6 +364,7 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
         IMYTStrategy(strategy).deallocate(_swapParams(hex"02"), preview, "", address(vault));
         vm.stopPrank();
 
+        assertLt(ensoRouter.lastShareAllowance(), allocAmount, "router should not receive the full share balance");
         assertGe(TokenUtils.safeBalanceOf(WETH, strategy), preview);
         assertLt(IERC20(address(rewardVault)).balanceOf(strategy), allocAmount);
     }
@@ -379,7 +382,7 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
 
         uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(3e18);
         vm.startPrank(vault);
-        vm.expectPartialRevert(StakeDAOWETHStrategy.CurveLpPriceBelowFloor.selector);
+        vm.expectPartialRevert(IMYTStrategy.InvalidAmount.selector);
         IMYTStrategy(strategy).deallocate(_swapParams(hex"02"), preview, "", address(vault));
         vm.stopPrank();
     }

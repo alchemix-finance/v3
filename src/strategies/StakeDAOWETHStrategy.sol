@@ -187,7 +187,10 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         require(shares > 0, "No RewardVault shares");
         uint256 lpValueBefore = rewardVault.convertToAssets(shares);
 
-        TokenUtils.safeApprove(address(rewardVault), ensoRouter, shares);
+        uint256 maxWethOut = Math.mulDiv(shortfall, 10_000, 10_000 - params.slippageBPS, Math.Rounding.Ceil);
+        uint256 maxSharesToSpend = rewardVault.previewWithdraw(_maxLpForWeth(maxWethOut));
+        if (maxSharesToSpend > shares) maxSharesToSpend = shares;
+        TokenUtils.safeApprove(address(rewardVault), ensoRouter, maxSharesToSpend);
         uint256 wethReceived = _ensoRoute(address(weth), shortfall, ensoCalldata);
         TokenUtils.safeApprove(address(rewardVault), ensoRouter, 0);
 

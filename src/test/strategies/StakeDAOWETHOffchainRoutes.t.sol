@@ -168,7 +168,7 @@ abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
 
         uint256 preview = IMYTStrategy(address(strategy)).previewAdjustedWithdraw(quotedWethOut);
         vm.prank(address(vault));
-        vm.expectPartialRevert(StakeDAOWETHStrategy.CurveLpPriceBelowFloor.selector);
+        vm.expectRevert("Enso route failed");
         IMYTStrategy(address(strategy)).deallocate(_swapParams(deallocateCalldata), preview, "", address(vault));
 
         assertEq(IERC20(REWARD_VAULT).balanceOf(address(strategy)), sharesBefore, "shares changed after reverted deallocation");
