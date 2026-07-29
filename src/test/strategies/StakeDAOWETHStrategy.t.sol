@@ -15,7 +15,7 @@ import {TokenUtils} from "../../libraries/TokenUtils.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 import {MYTTestHelper} from "../libraries/MYTTestHelper.sol";
 import {BaseStrategyTest} from "../BaseStrategyTest.sol";
-import {IStakeDAORewardVault, ICurveStableSwapPool} from "../../strategies/interfaces/IStakeDAO.sol";
+import {IStakeDAOAccountant, IStakeDAORewardVault, ICurveStableSwapPool} from "../../strategies/interfaces/IStakeDAO.sol";
 
 interface ICurvePoolManipulation {
     function balances(uint256 index) external view returns (uint256);
@@ -124,6 +124,11 @@ contract MockRewardVault is IERC20 {
     string public symbol = "sdETH+ETH";
     uint8 public decimals = 18;
 
+    // Real mainnet Stake DAO Curve Accountant and ETH+/WETH gauge; these tests run on a mainnet fork,
+    // so the strategy constructor resolves REWARD_TOKEN() from the live Accountant.
+    address public constant ACCOUNTANT = 0x93b4B9bd266fFA8AF68e39EDFa8cFe2A62011Ce0;
+    address public constant gauge = 0xAD6D1a4B1B2F33712A8b18BeDc95c0A1f9832269;
+
     address public immutable asset;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
@@ -195,6 +200,15 @@ contract Mock0xRouter {
 
     function swap(address sellToken_, address buyToken_, uint256 amountIn) external returns (uint256 amountOut) {
         require(sellToken_ == address(sellToken) && buyToken_ == address(buyToken), "unsupported pair");
+        sellToken.transferFrom(msg.sender, address(this), amountIn);
+        amountOut = amountIn * priceWad / 1e18;
+        buyToken.transfer(msg.sender, amountOut);
+        return amountOut;
+    }
+
+    function swapAll(address sellToken_, address buyToken_) external returns (uint256 amountOut) {
+        require(sellToken_ == address(sellToken) && buyToken_ == address(buyToken), "unsupported pair");
+        uint256 amountIn = sellToken.allowance(msg.sender, address(this));
         sellToken.transferFrom(msg.sender, address(this), amountIn);
         amountOut = amountIn * priceWad / 1e18;
         buyToken.transfer(msg.sender, amountOut);
@@ -492,6 +506,7 @@ contract MockEnsoUnderDeliver {
 /// @notice Mainnet fork tests for direct allocate/deallocate against real Curve + RewardVault contracts.
 contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public constant CRV = 0xD533a949740bb3306d119CC777fa900bA034cd52;
     address public constant ETH_PLUS = 0xE72B141DF173b999AE7c1aDcbF60Cc9833Ce56a8;
     address public constant ETH_PLUS_RATE_PROVIDER = 0x0cAA3EB22Aa22eFB7886308942870ba81aaa05C6;
     address public constant CVX = 0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B;
@@ -759,6 +774,61 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         assertEq(IERC20(CVX).balanceOf(strategy), 0, "strategy should not retain CVX");
     }
 
+    function test_claimRewards_harvests_live_crv_through_real_accountant() public {
+        _assertLiveCrvClaim(100e18, 7 days);
+    }
+
+    function test_claimRewards_harvests_live_crv_for_larger_longer_position() public {
+        _assertLiveCrvClaim(1000e18, 30 days);
+    }
+
+    function _assertLiveCrvClaim(uint256 allocationAmount, uint256 accrualPeriod) internal {
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, allocationAmount);
+        vm.warp(block.timestamp + accrualPeriod);
+
+        IStakeDAORewardVault liveRewardVault = IStakeDAORewardVault(REWARD_VAULT);
+        IStakeDAOAccountant liveAccountant = liveRewardVault.ACCOUNTANT();
+        address[] memory gauges = new address[](1);
+        gauges[0] = liveRewardVault.gauge();
+        bytes[] memory harvestData = new bytes[](1);
+        harvestData[0] = "";
+        liveAccountant.harvest(gauges, harvestData, address(this));
+        uint256 expectedCrv = _mainRewardClaimable(liveAccountant, strategy);
+        assertGt(expectedCrv, 0, "strategy should have claimable CRV");
+
+        uint256 crvWethPrice = 0.5e18;
+        Mock0xRouter mock0xRouter = new Mock0xRouter(CRV, WETH, crvWethPrice);
+        deal(WETH, address(mock0xRouter), 1_000_000e18);
+        vm.prank(admin);
+        MYTStrategy(strategy).setAllowanceHolder(address(mock0xRouter));
+
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
+        uint256 routerCrvBefore = IERC20(CRV).balanceOf(address(mock0xRouter));
+        bytes memory quote = abi.encodeCall(Mock0xRouter.swapAll, (CRV, WETH));
+
+        assertEq(IStakeDAORewardVault(REWARD_VAULT).earned(strategy, CRV), 0, "CRV must not be a vault extra reward");
+        vm.prank(admin);
+        uint256 wethReceived = IMYTStrategy(strategy).claimRewards(CRV, quote, 1);
+
+        uint256 crvClaimed = IERC20(CRV).balanceOf(address(mock0xRouter)) - routerCrvBefore;
+        uint256 expectedWeth = expectedCrv * crvWethPrice / 1e18;
+        assertApproxEqAbs(crvClaimed, expectedCrv, 1, "CRV claim differs from Accountant state");
+        assertApproxEqAbs(wethReceived, expectedWeth, 1, "unexpected WETH output");
+        assertEq(IERC20(WETH).balanceOf(vault), vaultWethBefore + wethReceived, "MYT should receive WETH");
+        assertEq(IERC20(CRV).balanceOf(strategy), 0, "strategy should not retain CRV");
+    }
+
+    function test_claimRewards_returns_zero_when_real_accountant_has_no_main_rewards() public {
+        assertEq(IERC20(REWARD_VAULT).balanceOf(strategy), 0, "strategy should not have a live position");
+
+        vm.prank(admin);
+        uint256 wethReceived = IMYTStrategy(strategy).claimRewards(CRV, hex"01", 1);
+
+        assertEq(wethReceived, 0);
+        assertEq(IERC20(CRV).balanceOf(strategy), 0);
+    }
+
     function test_claimRewards_can_sell_half_cvx_and_leave_remainder_in_strategy() public {
         uint256 cvxWethPrice = 0.5e18;
         uint256 earnedRewards = _accrueCvxRewards();
@@ -821,6 +891,12 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         deal(WETH, address(mock0xRouter), 1_000_000e18);
         vm.prank(admin);
         MYTStrategy(strategy).setAllowanceHolder(address(mock0xRouter));
+    }
+
+    function _mainRewardClaimable(IStakeDAOAccountant accountant, address account) internal view returns (uint256) {
+        (uint256 vaultIntegral,,,,,,) = accountant.vaults(REWARD_VAULT);
+        (uint128 balance, uint256 accountIntegral, uint256 pendingRewards) = accountant.accounts(REWARD_VAULT, account);
+        return pendingRewards + Math.mulDiv(vaultIntegral - accountIntegral, balance, accountant.SCALING_FACTOR());
     }
 
     function _swapCurveCoin(address tokenIn, int128 i, int128 j, uint256 amountIn) internal {

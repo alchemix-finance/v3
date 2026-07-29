@@ -5,7 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {MYTStrategy} from "../MYTStrategy.sol";
 import {TokenUtils} from "../libraries/TokenUtils.sol";
-import {IStakeDAORewardVault, ICurveStableSwapPool} from "./interfaces/IStakeDAO.sol";
+import {IStakeDAOAccountant, IStakeDAORewardVault, ICurveStableSwapPool} from "./interfaces/IStakeDAO.sol";
 
 /**
  * @title StakeDAOWETHStrategy
@@ -22,6 +22,9 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     IERC20 public immutable weth;
     IStakeDAORewardVault public immutable rewardVault;
     ICurveStableSwapPool public immutable curvePool;
+    IStakeDAOAccountant public immutable accountant;
+    address public immutable mainRewardToken;
+    address public immutable gauge;
     address public immutable ensoRouter;
     uint256 public withdrawBufferBps;
     uint256 public minWethPerCurveLp;
@@ -55,6 +58,9 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         weth = IERC20(MYT.asset());
         rewardVault = IStakeDAORewardVault(_rewardVault);
         curvePool = ICurveStableSwapPool(_curvePool);
+        accountant = rewardVault.ACCOUNTANT();
+        mainRewardToken = accountant.REWARD_TOKEN();
+        gauge = rewardVault.gauge();
         ensoRouter = _ensoRouter;
         withdrawBufferBps = _withdrawBufferBps;
         minWethPerCurveLp = _minWethPerCurveLp;
@@ -221,14 +227,29 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     }
 
     function _claimRewards(address token, bytes memory quote, uint256 minAmountOut) internal override returns (uint256 rewardsClaimed) {
-        if (rewardVault.earned(address(this), token) == 0) return 0;
         require(quote.length > 0, "params");
-
-        address[] memory rewardTokens = new address[](1);
-        rewardTokens[0] = token;
         uint256 balanceBefore = TokenUtils.safeBalanceOf(token, address(this));
 
-        rewardVault.claim(rewardTokens, address(this));
+        if (token == mainRewardToken) {
+            address[] memory gauges = new address[](1);
+            gauges[0] = gauge;
+            bytes[] memory harvestData = new bytes[](1);
+            harvestData[0] = "";
+
+            try accountant.claim(gauges, harvestData, address(this)) {}
+            catch (bytes memory reason) {
+                if (reason.length >= 4 && bytes4(reason) == IStakeDAOAccountant.NoPendingRewards.selector) return 0;
+                assembly ("memory-safe") {
+                    revert(add(reason, 0x20), mload(reason))
+                }
+            }
+        } else {
+            if (rewardVault.earned(address(this), token) == 0) return 0;
+
+            address[] memory rewardTokens = new address[](1);
+            rewardTokens[0] = token;
+            rewardVault.claim(rewardTokens, address(this));
+        }
 
         uint256 rewardsReceived = TokenUtils.safeBalanceOf(token, address(this)) - balanceBefore;
         if (rewardsReceived == 0) return 0;

@@ -24,22 +24,15 @@ contract MockMYTForStakeDAOWETHDeployTest {
     fallback() external payable {}
 }
 
-contract MockCurvePoolForStakeDAOWETHDeploy {}
-
-contract MockRewardVaultForStakeDAOWETHDeploy {
-    address public immutable asset;
-
-    constructor(address _asset) {
-        asset = _asset;
-    }
-}
-
 contract DeployStakeDAOWETHStrategyScriptTest is Test {
     address internal constant DEPLOYER = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
     address internal constant MAINNET_NEW_OWNER = 0xF56D660138815fC5d7a06cd0E1630225E788293D;
     address internal constant MAINNET_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address internal constant MAINNET_REWARD_VAULT = 0x7d3dB01a4AC4aa27534d2951e58d59992686EA5C;
     address internal constant MAINNET_ETH_PLUS_WETH_POOL = 0x2c683fAd51da2cd17793219CC86439C1875c353e;
+    address internal constant MAINNET_STAKEDAO_ACCOUNTANT = 0x93b4B9bd266fFA8AF68e39EDFa8cFe2A62011Ce0;
+    address internal constant MAINNET_ETH_PLUS_WETH_GAUGE = 0xAD6D1a4B1B2F33712A8b18BeDc95c0A1f9832269;
+    address internal constant MAINNET_CRV = 0xD533a949740bb3306d119CC777fa900bA034cd52;
     address internal constant MAINNET_ENSO_ROUTER = 0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf;
     address internal constant CURATOR_ADDR = 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4;
     address internal constant ETH_MYT = 0x29bcfeD246ce37319d94eBa107db90C453D4c43D;
@@ -59,6 +52,10 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
     address internal ensoRouter;
 
     function setUp() public {
+        // The strategy constructor resolves the Accountant, main reward token, and gauge from the
+        // RewardVault, so all tests deploy against the real mainnet contracts on a fork.
+        vm.createSelectFork(vm.envOr("MAINNET_RPC_URL", string("https://mainnet.gateway.tenderly.co")), MAINNET_FORK_BLOCK);
+
         deployScript = new DeployStakeDAOWETHStrategyScript();
         curator = new AlchemistCurator(address(deployScript), address(deployScript));
 
@@ -66,8 +63,8 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
         myt = new MockMYTForStakeDAOWETHDeployTest(address(weth));
 
         newOwner = makeAddr("newOwner");
-        curvePool = address(new MockCurvePoolForStakeDAOWETHDeploy());
-        rewardVault = address(new MockRewardVaultForStakeDAOWETHDeploy(curvePool));
+        curvePool = MAINNET_ETH_PLUS_WETH_POOL;
+        rewardVault = MAINNET_REWARD_VAULT;
         ensoRouter = makeAddr("ensoRouter");
     }
 
@@ -90,6 +87,9 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
         assertEq(address(strategy.weth()), address(weth), "unexpected WETH");
         assertEq(address(strategy.rewardVault()), rewardVault, "unexpected reward vault");
         assertEq(address(strategy.curvePool()), curvePool, "unexpected curve pool");
+        assertEq(address(strategy.accountant()), MAINNET_STAKEDAO_ACCOUNTANT, "unexpected accountant");
+        assertEq(strategy.mainRewardToken(), MAINNET_CRV, "unexpected main reward token");
+        assertEq(strategy.gauge(), MAINNET_ETH_PLUS_WETH_GAUGE, "unexpected gauge");
         assertEq(strategy.ensoRouter(), ensoRouter, "unexpected enso router");
         assertEq(strategy.withdrawBufferBps(), deployScript.WITHDRAW_BUFFER_BPS(), "unexpected withdraw buffer");
         assertEq(strategy.minWethPerCurveLp(), deployScript.MIN_WETH_PER_CURVE_LP(), "unexpected Curve LP floor");
