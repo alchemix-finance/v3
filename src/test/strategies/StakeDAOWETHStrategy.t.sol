@@ -573,6 +573,34 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         StakeDAOWETHStrategy(strategy).setMinCurveLpPerWeth(0);
     }
 
+    function testFuzz_direct_allocate_succeeds_and_accounts_at_virtual_price(uint256 rawAllocationAmount) public {
+        (uint256 minAllocateAmount, uint256 maxAllocateAmount) = _getAllocationBounds();
+        uint256 allocationAmount = bound(rawAllocationAmount, minAllocateAmount, maxAllocateAmount);
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
+        uint256 strategyWethBefore = IERC20(WETH).balanceOf(strategy);
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, allocationAmount);
+
+        uint256 shares = IERC20(REWARD_VAULT).balanceOf(strategy);
+        assertGt(shares, 0, "strategy should receive RewardVault shares");
+        assertEq(IERC20(WETH).balanceOf(vault), vaultWethBefore - allocationAmount, "vault should fund exactly the requested amount");
+        assertEq(IERC20(WETH).balanceOf(strategy), strategyWethBefore, "strategy should not retain idle WETH");
+        assertEq(IERC20(ETH_PLUS_WETH_POOL).balanceOf(strategy), 0, "strategy should not retain raw Curve LP");
+        assertEq(IERC20(WETH).allowance(strategy, ETH_PLUS_WETH_POOL), 0, "Curve WETH allowance not cleared");
+        assertEq(IERC20(ETH_PLUS_WETH_POOL).allowance(strategy, REWARD_VAULT), 0, "RewardVault LP allowance not cleared");
+
+        uint256 lpAssets = IStakeDAORewardVault(REWARD_VAULT).convertToAssets(shares);
+        uint256 expectedRealAssets =
+            IERC20(WETH).balanceOf(strategy) + Math.mulDiv(lpAssets, ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price(), 1e18);
+        assertEq(IMYTStrategy(strategy).realAssets(), expectedRealAssets, "real assets should mark LP at virtual price");
+
+        (,,,,,,,, uint256 slippageBPS) = IMYTStrategy(strategy).params();
+        uint256 allocation = IVaultV2(vault).allocation(IMYTStrategy(strategy).adapterId());
+        assertEq(allocation, IMYTStrategy(strategy).realAssets(), "vault allocation should track strategy real assets");
+        assertApproxEqRel(allocation, allocationAmount, slippageBPS * 1e18 / 10_000, "allocation should stay within slippage of principal");
+    }
+
     function test_direct_allocate_reverts_when_curve_manipulation_pushes_lp_output_below_virtual_price_floor() public {
         uint256 allocationAmount = 1e18;
         vm.prank(admin);

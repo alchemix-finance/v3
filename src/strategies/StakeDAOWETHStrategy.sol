@@ -95,8 +95,6 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     function _allocate(uint256 amount) internal override returns (uint256) {
         _ensureIdleBalance(address(weth), amount);
 
-        uint256 sharesBefore = rewardVault.balanceOf(address(this));
-
         uint256[] memory amounts = new uint256[](2);
         amounts[uint256(uint128(WETH_COIN_INDEX))] = amount;
         uint256 expectedLp = curvePool.calc_token_amount(amounts, true);
@@ -112,11 +110,6 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         TokenUtils.safeApprove(address(curvePool), address(rewardVault), lpMinted);
         rewardVault.deposit(lpMinted, address(this), address(0));
         TokenUtils.safeApprove(address(curvePool), address(rewardVault), 0);
-
-        uint256 sharesReceived = rewardVault.balanceOf(address(this)) - sharesBefore;
-        uint256 wethValueReceived = _sharesToWeth(sharesReceived);
-        uint256 minWethValue = _minWethAfterSlippage(amount);
-        if (wethValueReceived < minWethValue) revert InvalidAmount(minWethValue, wethValueReceived);
 
         return amount;
     }
@@ -137,10 +130,6 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         uint256 lpReceived = rewardVault.convertToAssets(sharesReceived);
         uint256 floorLpOut = _effectiveMinLpForWeth(wethSpent);
         if (lpReceived < floorLpOut) revert CurveLpOutputBelowFloor(lpReceived, floorLpOut);
-
-        uint256 wethValueReceived = _sharesToWeth(sharesReceived);
-        uint256 minWethValue = _sharesToWeth(minSharesOut);
-        if (wethValueReceived < minWethValue) revert InvalidAmount(minWethValue, wethValueReceived);
 
         return amount;
     }
@@ -270,15 +259,6 @@ contract StakeDAOWETHStrategy is MYTStrategy {
 
     function _canForceDeallocate() internal view override returns (bool) {
         return canForceDeallocate;
-    }
-
-    function _sharesToWeth(uint256 shares) internal view returns (uint256) {
-        if (shares == 0) return 0;
-        return curvePool.calc_withdraw_one_coin(rewardVault.convertToAssets(shares), WETH_COIN_INDEX);
-    }
-
-    function _minWethAfterSlippage(uint256 wethAmount) internal view returns (uint256) {
-        return _minAmountAfterSlippage(wethAmount);
     }
 
     function _minAmountAfterSlippage(uint256 amount) internal view returns (uint256) {

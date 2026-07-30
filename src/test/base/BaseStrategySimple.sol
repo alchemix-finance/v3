@@ -9,7 +9,6 @@ import {RevertContext} from "./StrategyTypes.sol";
 import {StrategyOps} from "./StrategyOps.sol";
 import "forge-std/console.sol";
 
-
 /// @notice Simple base tests shared by strategy suites.
 /// @dev Add deterministic or straightforward tests here; keep assertions readable and strategy-agnostic.
 abstract contract BaseStrategySimple is StrategyOps {
@@ -72,18 +71,14 @@ abstract contract BaseStrategySimple is StrategyOps {
     function test_strategy_forceDeallocate_swap_reverts() public {
         vm.startPrank(vault);
         vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
-        IMYTStrategy(strategy).deallocate(
-            _getForceDeallocateSwapParams(), 1, IVaultV2.forceDeallocate.selector, address(vault)
-        );
+        IMYTStrategy(strategy).deallocate(_getForceDeallocateSwapParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
         vm.stopPrank();
     }
 
     function test_strategy_forceDeallocate_unwrapAndSwap_reverts() public {
         vm.startPrank(vault);
         vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
-        IMYTStrategy(strategy).deallocate(
-            _getForceDeallocateUnwrapAndSwapParams(), 1, IVaultV2.forceDeallocate.selector, address(vault)
-        );
+        IMYTStrategy(strategy).deallocate(_getForceDeallocateUnwrapAndSwapParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
         vm.stopPrank();
     }
 
@@ -94,9 +89,9 @@ abstract contract BaseStrategySimple is StrategyOps {
         bytes memory allocParams = getVaultParams();
         vm.startPrank(vault);
         // only allocate if we are whithin caps
-        if(amountToAllocate > 0) {
-                deal(testConfig.vaultAsset, strategy, amountToAllocate);
-                IMYTStrategy(strategy).allocate(allocParams, amountToAllocate, "", address(vault));
+        if (amountToAllocate > 0) {
+            deal(testConfig.vaultAsset, strategy, amountToAllocate);
+            IMYTStrategy(strategy).allocate(allocParams, amountToAllocate, "", address(vault));
         } else {
             console.log("Allocation was skipped due to caps!");
         }
@@ -113,9 +108,8 @@ abstract contract BaseStrategySimple is StrategyOps {
         bytes32 adapterId = IMYTStrategy(strategy).adapterId();
         vm.mockCall(vault, abi.encodeWithSelector(IVaultV2.allocation.selector, adapterId), abi.encode(initialRealAssets));
 
-        (bytes32[] memory strategyIds, int256 change) = IMYTStrategy(strategy).deallocate(
-            getDeallocateVaultParams(amountToDeallocate), amountToDeallocate, "", address(vault)
-        );
+        (bytes32[] memory strategyIds, int256 change) =
+            IMYTStrategy(strategy).deallocate(getDeallocateVaultParams(amountToDeallocate), amountToDeallocate, "", address(vault));
 
         vm.clearMockedCalls();
 
@@ -165,7 +159,7 @@ abstract contract BaseStrategySimple is StrategyOps {
         assertEq(performanceFeeShares, 0);
         assertEq(managementFeeShares, 0);
         assertGe(newTotalAssets, 0, "Vault total assets must remain non-negative");
-        assertLe(IVaultV2(vault).allocation(allocationId), amountToAllocate, "Allocation should not exceed requested amount");
+        assertEq(IVaultV2(vault).allocation(allocationId), directRealAssets, "Allocation should track strategy real assets");
         vm.stopPrank();
     }
 
@@ -206,5 +200,4 @@ abstract contract BaseStrategySimple is StrategyOps {
         assertLe(IVaultV2(vault).allocation(allocationId), amountToAllocate, "Allocation should not increase on deallocation");
         vm.stopPrank();
     }
-
 }
