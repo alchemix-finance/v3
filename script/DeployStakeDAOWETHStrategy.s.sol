@@ -19,7 +19,8 @@ contract DeployStakeDAOWETHStrategyScript is Script {
     address public constant ETH_PLUS_WETH_POOL = 0x2c683fAd51da2cd17793219CC86439C1875c353e;
     address public constant ENSO_ROUTER = 0xF75584eF6673aD213a685a1B58Cc0330B8eA22Cf;
     uint256 public constant WITHDRAW_BUFFER_BPS = 125;
-    uint256 public constant MIN_WETH_PER_CURVE_LP = 1e18;
+    // Loose absolute circuit breakers; virtual-price bounds are the routine execution limits.
+    uint256 public constant MIN_WETH_PER_CURVE_LP = 0.95e18;
     uint256 public constant MIN_CURVE_LP_PER_WETH = 0.95e18;
 
     struct StakeDAOWETHDeployConfig {

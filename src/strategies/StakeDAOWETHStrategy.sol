@@ -101,7 +101,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         amounts[uint256(uint128(WETH_COIN_INDEX))] = amount;
         uint256 expectedLp = curvePool.calc_token_amount(amounts, true);
         uint256 minLpOut = _minAmountAfterSlippage(expectedLp);
-        uint256 floorLpOut = _minLpForWeth(amount);
+        uint256 floorLpOut = _effectiveMinLpForWeth(amount);
         if (floorLpOut > minLpOut) minLpOut = floorLpOut;
 
         TokenUtils.safeApprove(address(weth), address(curvePool), amount);
@@ -135,7 +135,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         uint256 sharesReceived = rewardVault.balanceOf(address(this)) - sharesBefore;
         uint256 wethSpent = wethBefore - _idleAssets();
         uint256 lpReceived = rewardVault.convertToAssets(sharesReceived);
-        uint256 floorLpOut = _minLpForWeth(wethSpent);
+        uint256 floorLpOut = _effectiveMinLpForWeth(wethSpent);
         if (lpReceived < floorLpOut) revert CurveLpOutputBelowFloor(lpReceived, floorLpOut);
 
         uint256 wethValueReceived = _sharesToWeth(sharesReceived);
@@ -157,18 +157,20 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         require(shares > 0, "No RewardVault shares");
 
         uint256 lpToExit = _lpRequiredForWeth(shortfall, shares);
-        uint256 maxLpToExit = _maxLpForWeth(shortfall);
-        if (lpToExit > maxLpToExit) revert CurveLpPriceBelowFloor(lpToExit, maxLpToExit);
 
         uint256 sharesToRedeem = rewardVault.previewWithdraw(lpToExit);
         if (sharesToRedeem > shares) sharesToRedeem = shares;
 
+        uint256 wethBefore = _idleAssets();
         uint256 lpRedeemed = rewardVault.redeem(sharesToRedeem, address(this), address(this));
-        if (lpRedeemed > maxLpToExit) revert CurveLpPriceBelowFloor(lpRedeemed, maxLpToExit);
 
         TokenUtils.safeApprove(address(curvePool), address(curvePool), lpRedeemed);
         curvePool.remove_liquidity_one_coin(lpRedeemed, WETH_COIN_INDEX, shortfall, address(this));
         TokenUtils.safeApprove(address(curvePool), address(curvePool), 0);
+
+        uint256 wethReceived = _idleAssets() - wethBefore;
+        uint256 maxLpToExit = _effectiveMaxLpForWeth(wethReceived);
+        if (lpRedeemed > maxLpToExit) revert CurveLpPriceBelowFloor(lpRedeemed, maxLpToExit);
 
         require(_idleAssets() >= amount, "Withdraw amount insufficient");
         TokenUtils.safeApprove(address(weth), msg.sender, amount);
@@ -196,7 +198,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
 
         uint256 sharesSpent = shares - rewardVault.balanceOf(address(this));
         uint256 lpSpent = Math.mulDiv(sharesSpent, lpValueBefore, shares, Math.Rounding.Ceil);
-        uint256 maxLpToSpend = _maxLpForWeth(wethReceived);
+        uint256 maxLpToSpend = _effectiveMaxLpForWeth(wethReceived);
         if (lpSpent > maxLpToSpend) revert CurveLpPriceBelowFloor(lpSpent, maxLpToSpend);
 
         require(_idleAssets() >= amount, "Withdraw amount insufficient");
@@ -306,12 +308,40 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         return buffered == 0 ? 1 : buffered;
     }
 
+    /// @dev The larger minimum binds: the absolute circuit breaker or the virtual-price bound.
+    function _effectiveMinLpForWeth(uint256 wethAmount) internal view returns (uint256) {
+        uint256 absoluteFloor = _minLpForWeth(wethAmount);
+        uint256 virtualPriceFloor = _minLpForWethVP(wethAmount);
+        return absoluteFloor > virtualPriceFloor ? absoluteFloor : virtualPriceFloor;
+    }
+
+    /// @dev The smaller maximum binds: the absolute circuit breaker or the virtual-price bound.
+    function _effectiveMaxLpForWeth(uint256 wethAmount) internal view returns (uint256) {
+        uint256 absoluteMax = _maxLpForWeth(wethAmount);
+        uint256 virtualPriceMax = _maxLpForWethVP(wethAmount);
+        return absoluteMax < virtualPriceMax ? absoluteMax : virtualPriceMax;
+    }
+
     function _maxLpForWeth(uint256 wethAmount) internal view returns (uint256) {
         return Math.mulDiv(wethAmount, PRICE_SCALE, minWethPerCurveLp, Math.Rounding.Ceil) + LP_ROUNDING_TOLERANCE;
     }
 
     function _minLpForWeth(uint256 wethAmount) internal view returns (uint256) {
         return Math.mulDiv(wethAmount, minCurveLpPerWeth, PRICE_SCALE, Math.Rounding.Ceil);
+    }
+
+    /// @dev Swap-resistant allocation floor using the existing strategy slippage tolerance.
+    function _minLpForWethVP(uint256 wethAmount) internal view returns (uint256) {
+        uint256 virtualPrice = curvePool.get_virtual_price();
+        require(virtualPrice > 0, "Zero virtual price");
+        return Math.mulDiv(wethAmount, PRICE_SCALE * (10_000 - params.slippageBPS), virtualPrice * 10_000);
+    }
+
+    /// @dev Swap-resistant deallocation ceiling using the existing strategy slippage tolerance.
+    function _maxLpForWethVP(uint256 wethAmount) internal view returns (uint256) {
+        uint256 virtualPrice = curvePool.get_virtual_price();
+        require(virtualPrice > 0, "Zero virtual price");
+        return Math.mulDiv(wethAmount, PRICE_SCALE * 10_000, virtualPrice * (10_000 - params.slippageBPS), Math.Rounding.Ceil) + LP_ROUNDING_TOLERANCE;
     }
 
     function _ensoRoute(address outputToken, uint256 minOut, bytes memory ensoCalldata) internal returns (uint256 received) {

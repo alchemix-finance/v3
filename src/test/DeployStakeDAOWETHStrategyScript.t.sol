@@ -239,7 +239,7 @@ contract DeployStakeDAOWETHStrategyScriptTest is Test {
         assertEq(deployScript.ETH_PLUS_WETH_POOL(), MAINNET_ETH_PLUS_WETH_POOL, "unexpected curve pool");
         assertEq(deployScript.ENSO_ROUTER(), MAINNET_ENSO_ROUTER, "unexpected enso router");
         assertEq(deployScript.WITHDRAW_BUFFER_BPS(), 125, "unexpected withdraw buffer");
-        assertEq(deployScript.MIN_WETH_PER_CURVE_LP(), 1e18, "unexpected Curve LP floor");
+        assertEq(deployScript.MIN_WETH_PER_CURVE_LP(), 0.95e18, "unexpected Curve LP floor");
         assertEq(deployScript.MIN_CURVE_LP_PER_WETH(), 0.95e18, "unexpected allocation floor");
         assertEq(params.owner, DEPLOYER, "unexpected owner");
         assertEq(params.name, "StakeDAO Mainnet ETH+/WETH", "unexpected name");

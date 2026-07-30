@@ -573,9 +573,14 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         StakeDAOWETHStrategy(strategy).setMinCurveLpPerWeth(0);
     }
 
-    function test_direct_allocate_reverts_when_curve_manipulation_pushes_lp_output_below_floor() public {
+    function test_direct_allocate_reverts_when_curve_manipulation_pushes_lp_output_below_virtual_price_floor() public {
         uint256 allocationAmount = 1e18;
-        uint256 floor = StakeDAOWETHStrategy(strategy).minCurveLpPerWeth();
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setMinCurveLpPerWeth(0.9e18);
+
+        (,,,,,,,, uint256 slippageBPS) = IMYTStrategy(strategy).params();
+        uint256 virtualPrice = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price();
+        uint256 vpFloor = Math.mulDiv(allocationAmount, 1e18 * (10_000 - slippageBPS), virtualPrice * 10_000);
         uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(strategy);
         uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
 
@@ -584,7 +589,8 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         uint256[] memory amounts = new uint256[](2);
         amounts[1] = allocationAmount;
         uint256 manipulatedLpQuote = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).calc_token_amount(amounts, true);
-        assertLt(manipulatedLpQuote, allocationAmount * floor / 1e18, "manipulation did not breach allocation floor");
+        assertGt(vpFloor, allocationAmount * 0.9e18 / 1e18, "virtual-price floor should bind");
+        assertLt(manipulatedLpQuote, vpFloor, "manipulation did not breach virtual-price floor");
 
         vm.prank(admin);
         vm.expectRevert();
@@ -595,20 +601,26 @@ contract StakeDAOWETHStrategyDirectTest is BaseStrategyTest {
         assertEq(IERC20(WETH).allowance(strategy, ETH_PLUS_WETH_POOL), 0, "Curve WETH allowance not cleared");
     }
 
-    function test_direct_deallocate_reverts_when_curve_manipulation_pushes_weth_output_below_floor() public {
+    function test_direct_deallocate_reverts_when_curve_manipulation_pushes_weth_output_below_virtual_price_floor() public {
         uint256 allocationAmount = 100e18;
         vm.prank(admin);
         IAllocator(allocator).allocate(strategy, allocationAmount);
 
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setMinWethPerCurveLp(0.9e18);
+
         uint256 sharesBefore = IERC20(REWARD_VAULT).balanceOf(strategy);
         uint256 strategyWethBefore = IERC20(WETH).balanceOf(strategy);
         uint256 vaultWethBefore = IERC20(WETH).balanceOf(vault);
-        uint256 floor = StakeDAOWETHStrategy(strategy).minWethPerCurveLp();
+        (,,,,,,,, uint256 slippageBPS) = IMYTStrategy(strategy).params();
+        uint256 virtualPrice = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).get_virtual_price();
+        uint256 vpFloor = Math.mulDiv(virtualPrice, 10_000 - slippageBPS, 10_000);
 
-        _swapCurveCoin(ETH_PLUS, 0, 1, ICurvePoolManipulation(ETH_PLUS_WETH_POOL).balances(0) * 2);
+        _swapCurveCoin(ETH_PLUS, 0, 1, ICurvePoolManipulation(ETH_PLUS_WETH_POOL).balances(0) * 3 / 4);
 
         uint256 manipulatedWethQuote = ICurveStableSwapPool(ETH_PLUS_WETH_POOL).calc_withdraw_one_coin(1e18, int128(1));
-        assertLt(manipulatedWethQuote, floor, "manipulation did not breach withdrawal floor");
+        assertGt(vpFloor, 0.9e18, "virtual-price floor should bind");
+        assertLt(manipulatedWethQuote, vpFloor, "manipulation did not breach virtual-price floor");
 
         vm.prank(admin);
         vm.expectPartialRevert(StakeDAOWETHStrategy.CurveLpPriceBelowFloor.selector);
