@@ -17,6 +17,8 @@ Alchemix strategies inherit from `MYTStrategy`, which implements the Morpho V2 a
 - `_deallocate(uint256 amount, bytes memory callData, uint256 minIntermediateOut)` for unwrap-then-swap-based exits.
 - `_totalValue()` for `realAssets()` accounting.
 
+
+
 ### Minimum Morpho V2 Adapter Interface
 
 Every strategy must satisfy `IAdapter`:
@@ -74,7 +76,11 @@ Good `realAssets()` implementations:
 - Avoid reverting during normal operation; Morpho V2 liveness assumptions expect adapters not to revert on `realAssets()`.
 - Stay reasonably gas bounded because the vault loops through all adapters.
 
+
+
 ## Alchemix MYT Strategy Classes
+
+
 
 ### `MYTStrategy`
 
@@ -104,6 +110,8 @@ Default unsupported hooks revert with `ActionNotSupported()`. Only override the 
 Use it when at least one route needs DEX execution and the strategy can price the held or intermediate token with a reliable oracle.
 
 ## Strategy Types
+
+
 
 ### Direct
 
@@ -154,7 +162,11 @@ Examples:
 - `SFraxETHStrategy`: direct Frax mint, optional `WETH -> frxETH` swap allocation followed by `frxETH -> sfrxETH` deposit, and `sfrxETH -> frxETH -> WETH` unwrap-and-swap deallocation.
 - `EtherfiEETHMYTStrategy`: direct Ether.fi entry/exit plus optional `weETH` market routes.
 
+
+
 ## Building Strategies
+
+
 
 ### 1. Choose The Protocol
 
@@ -167,6 +179,8 @@ Before writing code, document:
 - Any async withdrawals, withdrawal NFTs, cooldowns, queues, fees, or caps.
 - Any rewards tokens and whether claiming can be done safely by the owner.
 - Whether the held token, intermediate token, or receipt shares have reliable pricing.
+
+
 
 ### 2. Map Available Entries And Exits
 
@@ -213,6 +227,8 @@ For every strategy:
 9. Revert unsupported action routes explicitly.
 10. Keep reward claiming owner-only and disabled while the kill switch is active.
 
+
+
 ### 5. DEX And Oracle Best Practices
 
 For 0x routes:
@@ -231,6 +247,8 @@ For oracle routes:
 - Use `params.slippageBPS` to bound swap input or output against oracle value.
 - Add strategy-specific guards when the oracle token and held token are not the same unit.
 
+
+
 ### 6. Test Checklist
 
 Add focused tests before deployment:
@@ -248,7 +266,11 @@ Add focused tests before deployment:
 - Protected tokens cannot be rescued.
 - Deployment script test verifies owner, kill switch, curator registration, caps, and force-deallocation penalty.
 
+
+
 ## Deployment
+
+
 
 ### Required Deployment Inputs
 
@@ -262,6 +284,8 @@ Collect these values before writing the script:
 - Oracle address and max oracle staleness, if applicable.
 - `StrategyParams`: owner, name, protocol, risk class, cap, global cap, estimated yield, additional incentives flag, and slippage.
 - Force-deallocation penalty. Use `0.02e18` for 2%, which is Morpho V2's maximum allowed penalty in this repo.
+
+
 
 ### Minimal Deployment Flow
 
@@ -328,6 +352,8 @@ contract DeployNewStrategyScript is Script {
 }
 ```
 
+
+
 ### Post-Deployment Steps
 
 After the deployer broadcasts the strategy, the curator must register and configure it:
@@ -339,12 +365,13 @@ After the deployer broadcasts the strategy, the curator must register and config
 3. Submit and execute the relative cap:
   `curator.submitIncreaseRelativeCap(strategy, globalCap)` and `curator.increaseRelativeCap(strategy, globalCap)`.
 4. Submit and execute the force-deallocation penalty:
-  `curator.submitSetForceDeallocatePenalty(strategy, myt, 0.02e18)`, then execute `IVaultV2.setForceDeallocatePenalty(strategy, 0.02e18)` through the configured vault curator path.
-5. From the Alchemist strategy classifier admin, assign the strategy's enforced risk class:
+  `curator.submitSetForceDeallocatePenalty(strategy, myt, 0.02e18)`.
+5. Then execute `IVaultV2.setForceDeallocatePenalty(strategy, 0.02e18)`, which is a direct call on the myt. Note : `setForceDeallocatePenalty` can be called by anyone. This is not a permissiioned fuction. It is recommended to `not` include this transaction in the same bundle as submitSetForceDeallocatePenalty.
+6. From the Alchemist strategy classifier admin, assign the strategy's enforced risk class:
   `classifier.assignStrategyRiskLevel(uint256(IMYTStrategy(strategy).adapterId()), uint8(riskClass))`.
    This should match the strategy metadata `params.riskClass`; allocator cap enforcement reads from `AlchemistStrategyClassifier`, not from the strategy metadata.
-   Note : This multisig action can also be done via the official dashboard `https://control.alchemix.fi/` via : "vault" tab -> selected vault -> "Strategies" section -> specific strategy -> "Controls" section -> "Classifier Risk" section. You may also adjust the strategy metadata before any respective classifier update in the paired "Param Risk" section. 
-6. After registration, cap, penalty, classifier assignment, ownership, source verification, and smoke-test checks are complete, the myt owner should call `strategy.setKillSwitch(false)`.
+   Note : This multisig action can also be done via the official dashboard `https://control.alchemix.fi/` via : "vault" tab -> selected vault -> "Strategies" section -> specific strategy -> "Controls" section -> "Classifier Risk" section. You may also adjust the strategy metadata before any respective classifier update in the paired "Param Risk" section.
+7. After registration, cap, penalty, classifier assignment, ownership, source verification, and smoke-test checks are complete, the myt owner should call `strategy.setKillSwitch(false)`.
 
 For live deployments with nonzero timelocks, split submission and execution into separate transactions after the timelock expires. If the vault curator is the `AlchemistCurator` proxy, allowlist `IVaultV2.setForceDeallocatePenalty.selector` and execute the penalty call with `curator.proxy(...)`.
 
@@ -364,3 +391,13 @@ After broadcasting, verify:
 - `strategy.killSwitch() == false` after the multisig enables allocation.
 
 Only disable the kill switch after registration, caps, penalty, ownership, source verification, and a small allocation/deallocation smoke test are complete.
+
+### Allocation/Deallocation Verification
+
+Please start with small amounts to verify allocations and deallocations are functioning as expected. 
+
+- Basic functionality test : Allocate and deallocate with 1k USDC / 1 ETH
+- Slippage test : Allocate and deallocate with 10k USDC / 10 ETH  
+Tester should confirm the losses, if any, associated with each allocate and deallocate action.
+Note : Allocation/deallocation amounts for the USDC MYT is `6 decimals`, ETH MYT is `18 decimals`.
+
