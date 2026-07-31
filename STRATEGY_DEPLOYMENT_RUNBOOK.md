@@ -366,7 +366,7 @@ After the deployer broadcasts the strategy, the curator must register and config
   `curator.submitIncreaseRelativeCap(strategy, globalCap)` and `curator.increaseRelativeCap(strategy, globalCap)`.
 4. Submit and execute the force-deallocation penalty:
   `curator.submitSetForceDeallocatePenalty(strategy, myt, 0.02e18)`.
-5. Then execute `IVaultV2.setForceDeallocatePenalty(strategy, 0.02e18)`, which is a direct call on the myt. Note : `setForceDeallocatePenalty` can be called by anyone. This is not a permissiioned fuction. It is recommended to `not` include this transaction in the same bundle as submitSetForceDeallocatePenalty.
+5. Then execute `IVaultV2.setForceDeallocatePenalty(strategy, 0.02e18)`, which is a direct call on the myt. Note : `setForceDeallocatePenalty` can be called by anyone. This is not a permissioned function. It is recommended to `not` include this transaction in the same bundle as submitSetForceDeallocatePenalty(So separate txn/EOA txn).
 6. From the Alchemist strategy classifier admin, assign the strategy's enforced risk class:
   `classifier.assignStrategyRiskLevel(uint256(IMYTStrategy(strategy).adapterId()), uint8(riskClass))`.
    This should match the strategy metadata `params.riskClass`; allocator cap enforcement reads from `AlchemistStrategyClassifier`, not from the strategy metadata.
