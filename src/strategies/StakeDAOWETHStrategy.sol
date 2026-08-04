@@ -108,7 +108,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
         if (lpMinted < floorLpOut) revert CurveLpOutputBelowFloor(lpMinted, floorLpOut);
 
         TokenUtils.safeApprove(address(curvePool), address(rewardVault), lpMinted);
-        rewardVault.deposit(lpMinted, address(this), address(0));
+        rewardVault.deposit(lpMinted, address(this), address(this));
         TokenUtils.safeApprove(address(curvePool), address(rewardVault), 0);
 
         return amount;

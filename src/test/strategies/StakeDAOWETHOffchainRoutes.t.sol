@@ -279,11 +279,18 @@ abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
 
     function test_fixtureAssumptions() public view {
         assertEq(vm.parseJsonAddress(fixture, ".strategyAddress"), address(strategy), "strategy address mismatch");
+        assertEq(vm.parseJsonAddress(fixture, ".referrer"), address(strategy), "referrer must be strategy");
         assertEq(vm.parseJsonAddress(fixture, ".ensoRouter"), ENSO_ROUTER, "enso router mismatch");
         assertEq(vm.parseJsonAddress(fixture, ".allocate.tx.to"), ENSO_ROUTER, "allocate tx.to mismatch");
         assertEq(vm.parseJsonAddress(fixture, ".deallocate.tx.to"), ENSO_ROUTER, "deallocate tx.to mismatch");
         assertEq(vm.parseJsonAddress(fixture, ".deallocateFull.tx.to"), ENSO_ROUTER, "full deallocate tx.to mismatch");
         assertEq(IStakeDAORewardVault(REWARD_VAULT).asset(), ETH_PLUS_WETH_POOL, "reward vault asset mismatch");
+
+        // Stake DAO 3-arg deposit(uint256,address,address) — encodes referrer = strategy.
+        bytes4 depositWithReferrer = bytes4(keccak256("deposit(uint256,address,address)"));
+        bytes memory allocateCalldata = vm.parseJsonBytes(fixture, ".allocate.tx.data");
+        assertTrue(_containsBytes4(allocateCalldata, depositWithReferrer), "allocate calldata missing deposit(..., referrer)");
+        assertTrue(_containsAddress(allocateCalldata, address(strategy)), "allocate calldata missing strategy referrer/receiver");
     }
 
     function _deployStrategyAtFixtureAddress() internal {
@@ -364,6 +371,32 @@ abstract contract StakeDAOWETHOffchainRoutesBaseTest is Test {
     function _assertEnsoAllowancesCleared() internal view {
         assertEq(IERC20(WETH).allowance(address(strategy), ENSO_ROUTER), 0, "WETH allowance should be cleared");
         assertEq(IERC20(REWARD_VAULT).allowance(address(strategy), ENSO_ROUTER), 0, "RewardVault allowance should be cleared");
+    }
+
+    function _containsBytes4(bytes memory data, bytes4 sel) internal pure returns (bool) {
+        if (data.length < 4) return false;
+        for (uint256 i = 0; i <= data.length - 4; i++) {
+            if (data[i] == sel[0] && data[i + 1] == sel[1] && data[i + 2] == sel[2] && data[i + 3] == sel[3]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function _containsAddress(bytes memory data, address account) internal pure returns (bool) {
+        bytes20 needle = bytes20(account);
+        if (data.length < 20) return false;
+        for (uint256 i = 0; i <= data.length - 20; i++) {
+            bool match_ = true;
+            for (uint256 j = 0; j < 20; j++) {
+                if (data[i + j] != needle[j]) {
+                    match_ = false;
+                    break;
+                }
+            }
+            if (match_) return true;
+        }
+        return false;
     }
 
     function _submitAndExecute(bytes memory data) internal {
