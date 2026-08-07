@@ -11,12 +11,16 @@ import {IVelodromeGauge, IVelodromePool, IVelodromeRouter, IVelodromeVoter} from
  * @title VelodromeMUSDStrategy
  * @notice Allocates USDC into the Velodrome V2 stable USDC/msUSD pool and stakes
  *         the resulting LP tokens in its gauge for VELO emissions.
+ * @dev Allocate: USDC→msUSD swap + addLiquidity + gauge.deposit
+ *      Deallocate: gauge.withdraw + removeLiquidity + msUSD→USDC swap
  */
 contract VelodromeMUSDStrategy is MYTStrategy {
     uint256 internal constant BASIS_POINTS = 10_000;
     uint256 internal constant WAD = 1e18;
     uint256 internal constant USDC_PRECISION = 1e6;
     uint256 internal constant MUSD_PRECISION = 1e18;
+    /// @dev Velodrome observation period is 30 minutes; 2 ≈ 1 hour TWAP window.
+    uint256 internal constant TWAP_GRANULARITY = 2;
 
     IERC20 public immutable usdc;
     IERC20 public immutable musd;
@@ -26,6 +30,13 @@ contract VelodromeMUSDStrategy is MYTStrategy {
     IVelodromeRouter public immutable router;
     address public immutable factory;
     uint256 public lpCostBasisUsdc;
+    /// @notice Execution tolerance (BPS) for router mins and end-to-end floors on swaps,
+    ///         addLiquidity/removeLiquidity legs, and the exit fair-value floor.
+    ///         Independent of `params.slippageBPS`, which drives withdraw previews and
+    ///         LP burn sizing (`previewAdjustedWithdraw` semantics).
+    uint256 public swapSlippageBPS;
+
+    event SwapSlippageBPSUpdated(uint256 newSwapSlippageBPS);
 
     constructor(address _myt, StrategyParams memory _params, address _usdc, address _musd, address _pool, address _gauge, address _router, address _factory)
         MYTStrategy(_myt, _params)
@@ -60,49 +71,105 @@ contract VelodromeMUSDStrategy is MYTStrategy {
         gauge = gauge_;
         router = router_;
         factory = _factory;
+        swapSlippageBPS = _params.slippageBPS;
+    }
+
+    /// @notice Update the execution tolerance applied to router mins and exit floors.
+    function setSwapSlippageBPS(uint256 newSwapSlippageBPS) external onlyOwner {
+        require(newSwapSlippageBPS < 5000, "Slippage too high");
+        swapSlippageBPS = newSwapSlippageBPS;
+        emit SwapSlippageBPSUpdated(newSwapSlippageBPS);
     }
 
     function _allocate(uint256 amount) internal override returns (uint256) {
         _ensureIdleBalance(address(usdc), amount);
         uint256 idleBefore = _idleAssets();
         uint256 valueBefore = _totalValue();
+        uint256 musdBefore = musd.balanceOf(address(this));
 
-        uint256 ratioB = router.quoteStableLiquidityRatio(address(usdc), address(musd), factory);
-        require(ratioB <= WAD, "Invalid liquidity ratio");
+        (uint256 amountInA, uint256 amountInB) = _splitForStableDeposit(amount);
 
-        uint256 amountInB = Math.mulDiv(amount, ratioB, WAD);
-        uint256 amountInA = amount - amountInB;
-        require(amountInA > 0 && amountInB > 0, "Allocation too small");
+        IVelodromeRouter.Route[] memory swapRoutes = new IVelodromeRouter.Route[](1);
+        swapRoutes[0] = IVelodromeRouter.Route({from: address(usdc), to: address(musd), stable: true, factory: factory});
 
-        (IVelodromeRouter.Route[] memory routesA, IVelodromeRouter.Route[] memory routesB) = _zapInRoutes();
-        (uint256 amountOutMinA, uint256 amountOutMinB, uint256 amountAMin, uint256 amountBMin) =
-            router.generateZapInParams(address(usdc), address(musd), true, factory, amountInA, amountInB, routesA, routesB);
+        uint256 minMusdOut = _minSwapOut(address(usdc), amountInB);
 
-        IVelodromeRouter.Zap memory zap = IVelodromeRouter.Zap({
-            tokenA: address(usdc),
-            tokenB: address(musd),
-            stable: true,
-            factory: factory,
-            amountOutMinA: _applySlippage(amountOutMinA),
-            amountOutMinB: _applySlippage(amountOutMinB),
-            amountAMin: _applySlippage(amountAMin),
-            amountBMin: _applySlippage(amountBMin)
-        });
-
-        uint256 gaugeBalanceBefore = gauge.balanceOf(address(this));
         TokenUtils.safeApprove(address(usdc), address(router), 0);
         TokenUtils.safeApprove(address(usdc), address(router), amount);
-        uint256 liquidity = router.zapIn(address(usdc), amountInA, amountInB, zap, routesA, routesB, address(this), true);
+
+        uint256[] memory swapAmounts = router.swapExactTokensForTokens(amountInB, minMusdOut, swapRoutes, address(this), block.timestamp);
+        uint256 musdReceived = swapAmounts[swapAmounts.length - 1];
+        require(musdReceived > 0, "No msUSD received");
+
+        uint256 musdForLp = musd.balanceOf(address(this)) - musdBefore;
+        require(musdForLp >= musdReceived, "msUSD balance mismatch");
+
+        // Re-quote after the swap moves reserves; mins must track optimal deposit amounts.
+        (uint256 amountAMin, uint256 amountBMin,) = router.quoteAddLiquidity(address(usdc), address(musd), true, factory, amountInA, musdForLp);
+        amountAMin = _applySlippage(amountAMin);
+        amountBMin = _applySlippage(amountBMin);
+
+        TokenUtils.safeApprove(address(musd), address(router), 0);
+        TokenUtils.safeApprove(address(musd), address(router), musdForLp);
+
+        (,, uint256 liquidity) =
+            router.addLiquidity(address(usdc), address(musd), true, amountInA, musdForLp, amountAMin, amountBMin, address(this), block.timestamp);
+
         TokenUtils.safeApprove(address(usdc), address(router), 0);
+        TokenUtils.safeApprove(address(musd), address(router), 0);
 
         require(liquidity > 0, "No LP tokens received");
+        uint256 gaugeBalanceBefore = gauge.balanceOf(address(this));
+        TokenUtils.safeApprove(address(pool), address(gauge), 0);
+        TokenUtils.safeApprove(address(pool), address(gauge), liquidity);
+        gauge.deposit(liquidity, address(this));
+        TokenUtils.safeApprove(address(pool), address(gauge), 0);
         require(gauge.balanceOf(address(this)) >= gaugeBalanceBefore + liquidity, "LP tokens not staked");
 
-        uint256 idleAfter = _idleAssets();
-        require(idleAfter <= idleBefore, "Unexpected USDC increase");
-        lpCostBasisUsdc += idleBefore - idleAfter;
-        require(_totalValue() >= valueBefore - Math.mulDiv(amount, params.slippageBPS, BASIS_POINTS), "Allocation loss");
+        _sweepMusdToUsdc(musd.balanceOf(address(this)) - musdBefore);
+        _finalizeAllocateAccounting(amount, idleBefore, valueBefore);
         return amount;
+    }
+
+    /// @dev Swap leftover msUSD from imperfect LP deposits back to USDC so idle NAV stays single-asset.
+    function _sweepMusdToUsdc(uint256 musdAmount) internal {
+        // Skip dust that cannot clear Velodrome's min-output checks after slippage.
+        if (musdAmount < MUSD_PRECISION / USDC_PRECISION) return;
+
+        uint256 minUsdcOut = _minSwapOut(address(musd), musdAmount);
+        if (minUsdcOut == 0) return;
+
+        IVelodromeRouter.Route[] memory routes = new IVelodromeRouter.Route[](1);
+        routes[0] = IVelodromeRouter.Route({from: address(musd), to: address(usdc), stable: true, factory: factory});
+
+        TokenUtils.safeApprove(address(musd), address(router), 0);
+        TokenUtils.safeApprove(address(musd), address(router), musdAmount);
+        router.swapExactTokensForTokens(musdAmount, minUsdcOut, routes, address(this), block.timestamp);
+        TokenUtils.safeApprove(address(musd), address(router), 0);
+    }
+
+    /// @dev Swap floor from pool TWAP (not same-block spot), then slippageBPS.
+    ///      USDC→msUSD also enforces a 1:1 peg floor so we never buy msUSD at a premium.
+    ///      msUSD→USDC uses TWAP only: a peg floor would brick residual sweeps / exits under
+    ///      normal stable-pool impact even when the peg is intact.
+    function _minSwapOut(address tokenIn, uint256 amountIn) internal view returns (uint256) {
+        uint256 twapOut = pool.quote(tokenIn, amountIn, TWAP_GRANULARITY);
+        uint256 floor = twapOut;
+        if (tokenIn == address(usdc)) {
+            uint256 pegOut = amountIn * (MUSD_PRECISION / USDC_PRECISION);
+            if (pegOut > floor) floor = pegOut;
+        } else {
+            require(tokenIn == address(musd), "Invalid swap token");
+        }
+        return _applySlippage(floor);
+    }
+
+    function _finalizeAllocateAccounting(uint256 amount, uint256 idleUsdcBefore, uint256 valueBefore) internal {
+        uint256 idleUsdcAfter = _idleAssets();
+        require(idleUsdcAfter <= idleUsdcBefore, "Unexpected USDC increase");
+
+        lpCostBasisUsdc += idleUsdcBefore - idleUsdcAfter;
+        require(_totalValue() >= valueBefore - Math.mulDiv(amount, swapSlippageBPS, BASIS_POINTS), "Allocation loss");
     }
 
     function _allocate(uint256, bytes memory) internal pure override returns (uint256) {
@@ -124,7 +191,7 @@ contract VelodromeMUSDStrategy is MYTStrategy {
             uint256 basisReduction = Math.mulDiv(lpCostBasisUsdc, liquidity, totalLp, Math.Rounding.Ceil);
             lpCostBasisUsdc -= basisReduction;
             _unstake(liquidity);
-            _zapOut(liquidity);
+            _removeLiquidityAndSwap(liquidity, basisReduction);
         }
 
         uint256 receivedAssets = _idleAssets();
@@ -141,26 +208,28 @@ contract VelodromeMUSDStrategy is MYTStrategy {
         revert ActionNotSupported();
     }
 
-    function _zapOut(uint256 liquidity) internal {
-        (IVelodromeRouter.Route[] memory routesA, IVelodromeRouter.Route[] memory routesB) = _zapOutRoutes();
-        (uint256 amountOutMinA, uint256 amountOutMinB, uint256 amountAMin, uint256 amountBMin) =
-            router.generateZapOutParams(address(usdc), address(musd), true, factory, liquidity, routesA, routesB);
+    /// @dev Exit LP to USDC and enforce an end-to-end floor that cannot be lowered by
+    ///      same-block reserve skew: min(invariant fair value, pro-rata cost basis).
+    function _removeLiquidityAndSwap(uint256 liquidity, uint256 basisShareUsdc) internal {
+        uint256 fairValue = _lpFairValueUsdc(liquidity);
+        uint256 floor = fairValue < basisShareUsdc ? fairValue : basisShareUsdc;
+        uint256 minUsdcOut = _applySlippage(floor);
+        uint256 usdcBefore = _idleAssets();
 
-        IVelodromeRouter.Zap memory zap = IVelodromeRouter.Zap({
-            tokenA: address(usdc),
-            tokenB: address(musd),
-            stable: true,
-            factory: factory,
-            amountOutMinA: _applySlippage(amountOutMinA),
-            amountOutMinB: _applySlippage(amountOutMinB),
-            amountAMin: _applySlippage(amountAMin),
-            amountBMin: _applySlippage(amountBMin)
-        });
+        (uint256 amountAMin, uint256 amountBMin) = router.quoteRemoveLiquidity(address(usdc), address(musd), true, factory, liquidity);
+        amountAMin = _applySlippage(amountAMin);
+        amountBMin = _applySlippage(amountBMin);
+
+        uint256 musdBefore = musd.balanceOf(address(this));
 
         TokenUtils.safeApprove(address(pool), address(router), 0);
         TokenUtils.safeApprove(address(pool), address(router), liquidity);
-        router.zapOut(address(usdc), liquidity, zap, routesA, routesB);
+        router.removeLiquidity(address(usdc), address(musd), true, liquidity, amountAMin, amountBMin, address(this), block.timestamp);
         TokenUtils.safeApprove(address(pool), address(router), 0);
+
+        _sweepMusdToUsdc(musd.balanceOf(address(this)) - musdBefore);
+
+        require(_idleAssets() - usdcBefore >= minUsdcOut, "Exit below fair value");
     }
 
     function _unstake(uint256 liquidity) internal {
@@ -172,7 +241,9 @@ contract VelodromeMUSDStrategy is MYTStrategy {
     }
 
     function _totalValue() internal view override returns (uint256) {
-        return _idleAssets() + _positionValueUsdc(_lpBalance());
+        // Idle msUSD dust (e.g. after addLiquidity) valued at a $1 peg.
+        uint256 idleMusdUsdc = Math.mulDiv(musd.balanceOf(address(this)), USDC_PRECISION, MUSD_PRECISION);
+        return _idleAssets() + idleMusdUsdc + _positionValueUsdc(_lpBalance());
     }
 
     function _lpBalance() internal view returns (uint256) {
@@ -218,7 +289,7 @@ contract VelodromeMUSDStrategy is MYTStrategy {
         uint256 remaining = amount - fromIdle;
         uint256 positionValue = _positionValueUsdc(_lpBalance());
         uint256 fundableFromPosition = remaining < positionValue ? remaining : positionValue;
-        return fromIdle + _applySlippage(fundableFromPosition);
+        return fromIdle + _applyWithdrawHaircut(fundableFromPosition);
     }
 
     function _claimRewards(address token, bytes memory quote, uint256 minAmountOut) internal override returns (uint256 rewardsClaimed) {
@@ -234,19 +305,24 @@ contract VelodromeMUSDStrategy is MYTStrategy {
         TokenUtils.safeTransfer(address(usdc), address(MYT), rewardsClaimed);
     }
 
-    function _zapInRoutes() internal view returns (IVelodromeRouter.Route[] memory routesA, IVelodromeRouter.Route[] memory routesB) {
-        routesA = new IVelodromeRouter.Route[](0);
-        routesB = new IVelodromeRouter.Route[](1);
-        routesB[0] = IVelodromeRouter.Route({from: address(usdc), to: address(musd), stable: true, factory: factory});
+    /// @dev `quoteStableLiquidityRatio` returns B/(A+B); amountInB is swapped to msUSD, amountInA stays USDC.
+    function _splitForStableDeposit(uint256 amount) internal view returns (uint256 amountInA, uint256 amountInB) {
+        uint256 ratioB = router.quoteStableLiquidityRatio(address(usdc), address(musd), factory);
+        require(ratioB <= WAD, "Invalid liquidity ratio");
+
+        amountInB = Math.mulDiv(amount, ratioB, WAD);
+        amountInA = amount - amountInB;
+        require(amountInA > 0 && amountInB > 0, "Allocation too small");
     }
 
-    function _zapOutRoutes() internal view returns (IVelodromeRouter.Route[] memory routesA, IVelodromeRouter.Route[] memory routesB) {
-        routesA = new IVelodromeRouter.Route[](0);
-        routesB = new IVelodromeRouter.Route[](1);
-        routesB[0] = IVelodromeRouter.Route({from: address(musd), to: address(usdc), stable: true, factory: factory});
-    }
-
+    /// @dev Execution tolerance on router mins and end-to-end floors (swapSlippageBPS).
     function _applySlippage(uint256 amount) internal view returns (uint256) {
+        return Math.mulDiv(amount, BASIS_POINTS - swapSlippageBPS, BASIS_POINTS);
+    }
+
+    /// @dev Expected exit efficiency haircut for withdraw previews and LP burn sizing
+    ///      (params.slippageBPS, owner-updatable via setSlippageBPS).
+    function _applyWithdrawHaircut(uint256 amount) internal view returns (uint256) {
         return Math.mulDiv(amount, BASIS_POINTS - params.slippageBPS, BASIS_POINTS);
     }
 

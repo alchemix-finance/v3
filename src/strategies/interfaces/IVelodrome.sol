@@ -10,6 +10,12 @@ interface IVelodromePool is IERC20 {
         returns (uint256 decimals0, uint256 decimals1, uint256 reserve0, uint256 reserve1, bool stable, address token0, address token1);
 
     function getReserves() external view returns (uint256 reserve0, uint256 reserve1, uint256 blockTimestampLast);
+
+    /// @notice TWAP quote over `granularity` pool observation periods (30 minutes each).
+    function quote(address tokenIn, uint256 amountIn, uint256 granularity) external view returns (uint256 amountOut);
+
+    /// @notice Spot output amount for swapping `amountIn` of `tokenIn` at current reserves.
+    function getAmountOut(uint256 amountIn, address tokenIn) external view returns (uint256 amountOut);
 }
 
 interface IVelodromeGauge {
@@ -33,54 +39,50 @@ interface IVelodromeRouter {
         address factory;
     }
 
-    struct Zap {
-        address tokenA;
-        address tokenB;
-        bool stable;
-        address factory;
-        uint256 amountOutMinA;
-        uint256 amountOutMinB;
-        uint256 amountAMin;
-        uint256 amountBMin;
-    }
-
     function poolFor(address tokenA, address tokenB, bool stable, address factory) external view returns (address pool);
 
     function voter() external view returns (address);
 
+    function quoteAddLiquidity(
+        address tokenA,
+        address tokenB,
+        bool stable,
+        address factory,
+        uint256 amountADesired,
+        uint256 amountBDesired
+    ) external view returns (uint256 amountA, uint256 amountB, uint256 liquidity);
+
     function quoteStableLiquidityRatio(address tokenA, address tokenB, address factory) external view returns (uint256 ratio);
 
-    function generateZapInParams(
+    function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, Route[] calldata routes, address to, uint256 deadline)
+        external
+        returns (uint256[] memory amounts);
+
+    function addLiquidity(
         address tokenA,
         address tokenB,
         bool stable,
-        address factory,
-        uint256 amountInA,
-        uint256 amountInB,
-        Route[] calldata routesA,
-        Route[] calldata routesB
-    ) external view returns (uint256 amountOutMinA, uint256 amountOutMinB, uint256 amountAMin, uint256 amountBMin);
-
-    function generateZapOutParams(
-        address tokenA,
-        address tokenB,
-        bool stable,
-        address factory,
-        uint256 liquidity,
-        Route[] calldata routesA,
-        Route[] calldata routesB
-    ) external view returns (uint256 amountOutMinA, uint256 amountOutMinB, uint256 amountAMin, uint256 amountBMin);
-
-    function zapIn(
-        address tokenIn,
-        uint256 amountInA,
-        uint256 amountInB,
-        Zap calldata zapInPool,
-        Route[] calldata routesA,
-        Route[] calldata routesB,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin,
         address to,
-        bool stake
-    ) external payable returns (uint256 liquidity);
+        uint256 deadline
+    ) external returns (uint256 amountA, uint256 amountB, uint256 liquidity);
 
-    function zapOut(address tokenOut, uint256 liquidity, Zap calldata zapOutPool, Route[] calldata routesA, Route[] calldata routesB) external;
+    function quoteRemoveLiquidity(address tokenA, address tokenB, bool stable, address factory, uint256 liquidity)
+        external
+        view
+        returns (uint256 amountA, uint256 amountB);
+
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        bool stable,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountA, uint256 amountB);
 }
