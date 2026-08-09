@@ -53,6 +53,10 @@ contract MockMYTStrategy is MYTStrategy {
         return _totalValue();
     }
 
+    function _previewAdjustedWithdraw(uint256 amount) internal view override returns (uint256) {
+        return amount;
+    }
+
     function _totalValue() internal view override returns (uint256) {
         uint256 invested = (token.balanceOf(address(this)) * token.price()) / 10 ** token.decimals();
         uint256 idle = underlying.balanceOf(address(this));
