@@ -687,7 +687,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
                 newEpoch += 1;
                 newIndex = ONE_Q128;
             } else {
-                newIndex = FixedPointMath.mulDiv(oldIndex, ratioWanted, ONE_Q128);
+                newIndex = FixedPointMath.mulQ128(oldIndex, ratioWanted);
             }
 
             _redemptionWeight = _packRed(newEpoch, newIndex);
@@ -1844,7 +1844,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             newEpoch += 1;
             newIndex = ONE_Q128;
         } else {
-            newIndex = FixedPointMath.mulDiv(oldIndex, ratioWanted, ONE_Q128);
+            newIndex = FixedPointMath.mulQ128(oldIndex, ratioWanted);
         }
 
         epochAdvanced = newEpoch > oldEpoch;
@@ -1866,7 +1866,6 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     }
 
 }
-
 
 
 
