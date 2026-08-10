@@ -35,8 +35,10 @@ contract VelodromeMUSDStrategy is MYTStrategy {
     ///         Independent of `params.slippageBPS`, which drives withdraw previews and
     ///         LP burn sizing (`previewAdjustedWithdraw` semantics).
     uint256 public swapSlippageBPS;
+    bool public canForceDeallocate;
 
     event SwapSlippageBPSUpdated(uint256 newSwapSlippageBPS);
+    event CanForceDeallocateUpdated(bool newCanForceDeallocate);
 
     constructor(address _myt, StrategyParams memory _params, address _usdc, address _musd, address _pool, address _gauge, address _router, address _factory)
         MYTStrategy(_myt, _params)
@@ -79,6 +81,11 @@ contract VelodromeMUSDStrategy is MYTStrategy {
         require(newSwapSlippageBPS < 5000, "Slippage too high");
         swapSlippageBPS = newSwapSlippageBPS;
         emit SwapSlippageBPSUpdated(newSwapSlippageBPS);
+    }
+
+    function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
+        canForceDeallocate = canForceDeallocate_;
+        emit CanForceDeallocateUpdated(canForceDeallocate_);
     }
 
     function _allocate(uint256 amount) internal override returns (uint256) {
@@ -334,7 +341,7 @@ contract VelodromeMUSDStrategy is MYTStrategy {
         return token == address(usdc) || token == address(musd) || token == address(pool);
     }
 
-    function _canForceDeallocate() internal pure override returns (bool) {
-        return false;
+    function _canForceDeallocate() internal view override returns (bool) {
+        return canForceDeallocate;
     }
 }

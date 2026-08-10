@@ -139,7 +139,7 @@ contract VelodromeMUSDStrategyTest is BaseStrategyTest {
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {
-        return 0;
+        return 155386026;
     }
 
     function getRpcUrl() internal view override returns (string memory) {
