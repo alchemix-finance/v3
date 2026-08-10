@@ -13,7 +13,7 @@ import "forge-std/console.sol";
 /// @dev Keep stochastic, iterative, and invariant-like tests here; prefer allowlist-aware helper paths.
 abstract contract BaseStrategyMulti is StrategyOps {
     // Fuzz test: Multiple random allocations and deallocations
-    function test_fuzz_multiple_allocations_deallocations(uint256[] calldata amounts, uint8[] calldata actions) public {
+    function test_fuzz_multiple_allocations_deallocations(uint256[] calldata amounts, uint8[] calldata actions) public virtual {
         uint256 numOps = bound(amounts.length, 1, 10);
         uint256 maxIterations = numOps < amounts.length ? numOps : amounts.length;
 
@@ -64,7 +64,7 @@ abstract contract BaseStrategyMulti is StrategyOps {
         uint256 initialAlloc,
         uint256 allocIncrease,
         uint256 deallocationPercent
-    ) public {
+    ) public virtual {
         bytes32 allocationId = IMYTStrategy(strategy).adapterId();
 
         // Use handler for allocations - it handles cap validation and bounding internally
@@ -132,7 +132,7 @@ abstract contract BaseStrategyMulti is StrategyOps {
     }
 
     /// @notice Fuzz test: Real assets should always be non-negative after any operation
-    function test_fuzz_real_assets_non_negative(uint256[] calldata amounts, uint8[] calldata operations) public {
+    function test_fuzz_real_assets_non_negative(uint256[] calldata amounts, uint8[] calldata operations) public virtual {
         vm.startPrank(admin);
         bytes32 allocationId = IMYTStrategy(strategy).adapterId();
 
@@ -208,7 +208,7 @@ abstract contract BaseStrategyMulti is StrategyOps {
     }
 
     /// @notice Fuzz test: Deallocation decreases real assets
-    function test_fuzz_deallocation_decreases_real_assets(uint256 amountToAllocate, uint256 fractionToDeallocate) public {
+    function test_fuzz_deallocation_decreases_real_assets(uint256 amountToAllocate, uint256 fractionToDeallocate) public virtual {
         vm.startPrank(admin);
 
         (uint256 minAlloc, uint256 maxAlloc) = _getAllocationBounds();
@@ -316,7 +316,7 @@ abstract contract BaseStrategyMulti is StrategyOps {
     }
 
     /// @notice Fuzz test: Repeated small operations maintain invariants
-    function test_fuzz_repeated_operations_stability(uint256 baseAmount, uint8 numOperations) public {
+    function test_fuzz_repeated_operations_stability(uint256 baseAmount, uint8 numOperations) public virtual {
         vm.startPrank(admin);
 
         (uint256 minAlloc, uint256 maxAlloc) = _getAllocationBounds();
@@ -499,7 +499,7 @@ abstract contract BaseStrategyMulti is StrategyOps {
     }
 
     /// @notice Iterative accumulation test with repeated warp/deallocate loops.
-    function test_strategy_accumulation_over_time() public {
+    function test_strategy_accumulation_over_time() public virtual {
         vm.startPrank(admin);
         bytes32 allocationId = IMYTStrategy(strategy).adapterId();
 
