@@ -8,8 +8,76 @@ import {BaseStrategyTest} from "../BaseStrategyTest.sol";
 import {RevertContext} from "../base/StrategyTypes.sol";
 import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
+import {MYTStrategy} from "../../MYTStrategy.sol";
 import {VelodromeMUSDStrategy} from "../../strategies/VelodromeMUSDStrategy.sol";
 import {IVelodromeGauge, IVelodromePool, IVelodromeRouter} from "../../strategies/interfaces/IVelodrome.sol";
+
+/// @dev Etched over the live gauge so getReward can credit a fixed VELO amount.
+contract MockVelodromeGaugeRewards {
+    IERC20 public immutable rewardToken;
+    uint256 public immutable rewardAmount;
+
+    constructor(address rewardToken_, uint256 rewardAmount_) {
+        rewardToken = IERC20(rewardToken_);
+        rewardAmount = rewardAmount_;
+    }
+
+    function getReward(address account) external {
+        if (rewardAmount > 0) {
+            rewardToken.transfer(account, rewardAmount);
+        }
+    }
+}
+
+/// @dev AllowanceHolder stand-in: pulls approved VELO and pays a fixed USDC amount.
+contract MockUsdcSwapExecutor {
+    IERC20 public immutable velo;
+    IERC20 public immutable usdc;
+    uint256 public immutable amountToTransfer;
+
+    constructor(address velo_, address usdc_, uint256 amountToTransfer_) {
+        velo = IERC20(velo_);
+        usdc = IERC20(usdc_);
+        amountToTransfer = amountToTransfer_;
+    }
+
+    fallback() external {
+        uint256 sellAllowance = velo.allowance(msg.sender, address(this));
+        if (sellAllowance > 0) {
+            require(velo.transferFrom(msg.sender, address(this), sellAllowance), "VELO pull failed");
+        }
+        require(usdc.transfer(msg.sender, amountToTransfer), "USDC push failed");
+    }
+}
+
+/// @dev AllowanceHolder: pulls approved VELO and sells it for USDC on Velodrome V2.
+contract VeloToUsdcRouterExecutor {
+    IVelodromeRouter public immutable router;
+    IERC20 public immutable velo;
+    IERC20 public immutable usdc;
+    address public immutable factory;
+
+    constructor(address router_, address velo_, address usdc_, address factory_) {
+        router = IVelodromeRouter(router_);
+        velo = IERC20(velo_);
+        usdc = IERC20(usdc_);
+        factory = factory_;
+    }
+
+    fallback() external {
+        uint256 amount = velo.allowance(msg.sender, address(this));
+        require(amount > 0, "no VELO allowance");
+        require(velo.transferFrom(msg.sender, address(this), amount), "VELO pull failed");
+
+        IVelodromeRouter.Route[] memory routes = new IVelodromeRouter.Route[](1);
+        routes[0] = IVelodromeRouter.Route({from: address(velo), to: address(usdc), stable: false, factory: factory});
+
+        require(velo.approve(address(router), 0), "approve reset failed");
+        require(velo.approve(address(router), amount), "approve failed");
+        router.swapExactTokensForTokens(amount, 0, routes, msg.sender, block.timestamp);
+        require(velo.approve(address(router), 0), "approve clear failed");
+    }
+}
 
 contract VelodromeMUSDStrategyHarness is VelodromeMUSDStrategy {
     constructor(address myt, StrategyParams memory params, address usdc_, address musd_, address pool_, address gauge_, address router_, address factory_)
@@ -40,9 +108,12 @@ contract VelodromeMUSDStrategyTest is BaseStrategyTest {
 
     address internal constant USDC = 0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85;
     address internal constant MUSD = 0x9dAbAE7274D28A45F0B65Bf8ED201A5731492ca0;
+    address internal constant VELO = 0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db;
     address internal constant POOL = 0xe07388b2a7bb29d3Ad8989e1074Bd00Bd0d3C43d;
     address internal constant GAUGE = 0x7b3f9Ae95D8852078E49168505d6C897E4B11B6E;
     address internal constant ROUTER = 0xa062aE8A9c5e11aaA026fc2670B0D65cCc8B2858;
+    /// @dev Velodrome V2 volatile VELO/USDC pool (used by live claim swap test).
+    address internal constant VELO_USDC_POOL = 0xa0A215dE234276CAc1b844fD58901351a50fec8A;
     address internal constant FACTORY = 0xF1046053aa5682b4F9a81b5481394DA16BE5FF5a;
 
     function getStrategyConfig() internal pure override returns (IMYTStrategy.StrategyParams memory) {
@@ -730,8 +801,90 @@ contract VelodromeMUSDStrategyTest is BaseStrategyTest {
         );
     }
 
+    function test_claimRewards_revertsOnWrongToken() public {
+        vm.prank(VelodromeMUSDStrategy(strategy).owner());
+        vm.expectRevert("Invalid reward token");
+        IMYTStrategy(strategy).claimRewards(USDC, hex"", 0);
+    }
+
+    function test_claimRewards_returnsZeroWhenGaugePaysNothing() public {
+        MockVelodromeGaugeRewards mockGauge = new MockVelodromeGaugeRewards(VELO, 0);
+        vm.etch(GAUGE, address(mockGauge).code);
+
+        uint256 vaultBefore = IERC20(USDC).balanceOf(vault);
+        vm.prank(VelodromeMUSDStrategy(strategy).owner());
+        uint256 received = IMYTStrategy(strategy).claimRewards(VELO, hex"01", 0);
+
+        assertEq(received, 0, "expected zero when gauge pays nothing");
+        assertEq(IERC20(USDC).balanceOf(vault), vaultBefore, "vault USDC should be unchanged");
+        assertEq(IERC20(VELO).balanceOf(strategy), 0, "strategy should not retain VELO");
+    }
+
+    /// @dev Happy path with mocked gauge credit + mocked 0x settler (fixed USDC out).
+    function test_claimRewards_emitsEventAndVaultReceivesUsdc() public {
+        // ~100k VELO at ~50.45 VELO/USDC ≈ 1,982 USDC.
+        uint256 veloReward = 100_000e18;
+        uint256 usdcOut = 1_982e6;
+
+        MockVelodromeGaugeRewards mockGauge = new MockVelodromeGaugeRewards(VELO, veloReward);
+        vm.etch(GAUGE, address(mockGauge).code);
+        deal(VELO, GAUGE, veloReward);
+
+        MockUsdcSwapExecutor mockSwap = new MockUsdcSwapExecutor(VELO, USDC, usdcOut);
+        deal(USDC, address(mockSwap), usdcOut);
+
+        vm.prank(VelodromeMUSDStrategy(strategy).owner());
+        MYTStrategy(strategy).setAllowanceHolder(address(mockSwap));
+
+        uint256 vaultBefore = IERC20(USDC).balanceOf(vault);
+
+        vm.expectEmit(true, true, false, true, strategy);
+        emit IMYTStrategy.RewardsClaimed(VELO, veloReward);
+
+        vm.prank(VelodromeMUSDStrategy(strategy).owner());
+        uint256 received = IMYTStrategy(strategy).claimRewards(VELO, hex"01", usdcOut - 1);
+
+        assertEq(received, usdcOut, "unexpected USDC received from claim");
+        assertEq(IERC20(USDC).balanceOf(vault) - vaultBefore, usdcOut, "vault did not receive USDC");
+        assertEq(IERC20(VELO).balanceOf(strategy), 0, "VELO should be fully spent in swap");
+    }
+
+    /// @dev Live Velodrome VELO/USDC swap via allowanceHolder stand in. Sizes around the
+    ///      observed ~2.7% impact band near 1M VELO; minOut uses pool spot with 3% cushion.
+    function test_claimRewards_liveVeloUsdcSwapTransfersToVault() public {
+        assertEq(IVelodromeRouter(ROUTER).poolFor(VELO, USDC, false, FACTORY), VELO_USDC_POOL, "unexpected VELO/USDC pool");
+
+        // 1M VELO ≈ 19.8k USDC at recent quotes with ~2.7% impact.
+        uint256 veloReward = 1_000_000e18;
+        uint256 spotUsdcOut = IVelodromePool(VELO_USDC_POOL).getAmountOut(veloReward, VELO);
+        require(spotUsdcOut > 15_000e6, "VELO/USDC liquidity unexpectedly thin");
+        uint256 minUsdcOut = Math.mulDiv(spotUsdcOut, 9700, 10_000); // 3% cushion vs spot
+
+        MockVelodromeGaugeRewards mockGauge = new MockVelodromeGaugeRewards(VELO, veloReward);
+        vm.etch(GAUGE, address(mockGauge).code);
+        deal(VELO, GAUGE, veloReward);
+
+        VeloToUsdcRouterExecutor liveSwap = new VeloToUsdcRouterExecutor(ROUTER, VELO, USDC, FACTORY);
+        vm.prank(VelodromeMUSDStrategy(strategy).owner());
+        MYTStrategy(strategy).setAllowanceHolder(address(liveSwap));
+
+        uint256 vaultBefore = IERC20(USDC).balanceOf(vault);
+
+        vm.expectEmit(true, true, false, true, strategy);
+        emit IMYTStrategy.RewardsClaimed(VELO, veloReward);
+
+        vm.prank(VelodromeMUSDStrategy(strategy).owner());
+        uint256 received = IMYTStrategy(strategy).claimRewards(VELO, hex"01", minUsdcOut);
+
+        assertGe(received, minUsdcOut, "USDC out below minAmountOut");
+        assertApproxEqRel(received, spotUsdcOut, 0.03e18, "live swap far from spot quote");
+        assertEq(IERC20(USDC).balanceOf(vault) - vaultBefore, received, "vault did not receive swap proceeds");
+        assertEq(IERC20(VELO).balanceOf(strategy), 0, "VELO dust left on strategy");
+    }
+
     function test_constructor_usesExpectedGaugeRewardToken() public view {
         assertEq(address(VelodromeMUSDStrategy(strategy).velo()), IVelodromeGauge(GAUGE).rewardToken(), "wrong VELO token");
+        assertEq(address(VelodromeMUSDStrategy(strategy).velo()), VELO, "VELO address mismatch");
         assertEq(IVelodromeGauge(GAUGE).stakingToken(), POOL, "wrong staking token");
     }
 }
