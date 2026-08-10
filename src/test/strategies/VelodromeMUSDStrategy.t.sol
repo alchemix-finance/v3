@@ -19,11 +19,13 @@ contract VelodromeMUSDStrategyHarness is VelodromeMUSDStrategy {
     function exposedLpFairValueUsdc(uint256 liquidity) external view returns (uint256) {
         return _lpFairValueUsdc(liquidity);
     }
+
+    function exposedMinSwapOut(address tokenIn, uint256 amountIn) external view returns (uint256) {
+        return _minSwapOut(tokenIn, amountIn);
+    }
 }
 
 contract VelodromeMUSDStrategyTest is BaseStrategyTest {
-    /// @dev Vault is oversized so MEDIUM global risk (40%) stays above the absolute cap.
-    ///      Absolute cap clamps BaseStrategy fuzz to live-pool-safe sizes.
     uint256 internal constant INITIAL_VAULT_DEPOSIT = 1_000_000e6;
     uint256 internal constant LIVE_POOL_TEST_CAP = 100_000e6;
     uint256 internal constant ABSOLUTE_CAP = LIVE_POOL_TEST_CAP;
@@ -373,6 +375,359 @@ contract VelodromeMUSDStrategyTest is BaseStrategyTest {
         vm.prank(strat.owner());
         strat.setSlippageBPS(100);
         assertGt(IMYTStrategy(strategy).previewAdjustedWithdraw(realAssets), previewBefore, "preview should follow slippageBPS");
+    }
+
+    /// @dev Peg floor + fees make even a modest allocate impossible at 0 execution tolerance;
+    ///      restoring swapSlippageBPS recovers the path without touching preview haircut.
+    function test_tightSwapSlippage_blocksAllocate_thenLoosenRecovers() public {
+        VelodromeMUSDStrategy strat = VelodromeMUSDStrategy(strategy);
+        uint256 amount = 10_000e6;
+        // No position yet; preview of a hypothetical amount is still driven by params.slippageBPS.
+        uint256 previewProbeBefore = IMYTStrategy(strategy).previewAdjustedWithdraw(amount);
+
+        vm.prank(strat.owner());
+        strat.setSwapSlippageBPS(0);
+        assertEq(
+            IMYTStrategy(strategy).previewAdjustedWithdraw(amount), previewProbeBefore, "swap slippage must not move preview"
+        );
+
+        vm.prank(admin);
+        vm.expectRevert();
+        IAllocator(allocator).allocate(strategy, amount);
+
+        assertEq(IVelodromeGauge(GAUGE).balanceOf(strategy), 0, "allocate should not have partially filled");
+
+        vm.prank(strat.owner());
+        strat.setSwapSlippageBPS(300);
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, amount);
+        assertGt(IVelodromeGauge(GAUGE).balanceOf(strategy), 0, "allocate should succeed after loosen");
+    }
+
+    /// @dev Tight execution tolerance bricks a full LP exit; owner can recover via setSwapSlippageBPS
+    ///      without changing params.slippageBPS (preview / burn sizing).
+    function test_tightSwapSlippage_blocksFullExit_thenLoosenRecovers() public {
+        VelodromeMUSDStrategy strat = VelodromeMUSDStrategy(strategy);
+        uint256 amount = 50_000e6;
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, amount);
+
+        uint256 realAssets = IMYTStrategy(strategy).realAssets();
+        uint256 withdrawal = IMYTStrategy(strategy).previewAdjustedWithdraw(realAssets);
+        require(withdrawal > IERC20(USDC).balanceOf(strategy), "need LP exit");
+        uint256 previewBeforeTighten = withdrawal;
+
+        vm.prank(strat.owner());
+        strat.setSwapSlippageBPS(1);
+        assertEq(
+            IMYTStrategy(strategy).previewAdjustedWithdraw(realAssets),
+            previewBeforeTighten,
+            "swap slippage must not move preview"
+        );
+
+        vm.prank(admin);
+        vm.expectRevert();
+        IAllocator(allocator).deallocate(strategy, withdrawal);
+
+        assertGt(IVelodromeGauge(GAUGE).balanceOf(strategy), 0, "failed exit must leave gauge position");
+
+        vm.prank(strat.owner());
+        strat.setSwapSlippageBPS(300);
+
+        uint256 vaultBefore = IERC20(USDC).balanceOf(vault);
+        withdrawal = IMYTStrategy(strategy).previewAdjustedWithdraw(IMYTStrategy(strategy).realAssets());
+        vm.prank(admin);
+        IAllocator(allocator).deallocate(strategy, withdrawal);
+
+        assertEq(IERC20(USDC).balanceOf(vault), vaultBefore + withdrawal, "vault did not receive exit proceeds");
+        uint256 lpLeft = IVelodromeGauge(GAUGE).balanceOf(strategy) + IERC20(POOL).balanceOf(strategy);
+        assertLe(VelodromeMUSDStrategyHarness(strategy).exposedLpFairValueUsdc(lpLeft), 1e6, "LP dust value too high");
+    }
+
+    /// @dev Higher params.slippageBPS reduces previewed out and oversizes LP burn for the same
+    ///      withdrawal; swapSlippageBPS stays put so execution mins are unchanged.
+    function test_slippageBPS_sizesPreviewAndLpBurn_notSwapMins() public {
+        VelodromeMUSDStrategy strat = VelodromeMUSDStrategy(strategy);
+        uint256 amount = 50_000e6;
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, amount);
+
+        uint256 idle = IERC20(USDC).balanceOf(strategy);
+        uint256 realAssets = IMYTStrategy(strategy).realAssets();
+        require(realAssets > idle + 5_000e6, "need meaningful LP position");
+
+        // Fixed face target that forces an LP burn under both haircuts.
+        uint256 target = idle + (realAssets - idle) / 4;
+        uint256 previewLoose = IMYTStrategy(strategy).previewAdjustedWithdraw(target);
+
+        vm.prank(strat.owner());
+        strat.setSlippageBPS(900);
+        assertEq(strat.swapSlippageBPS(), 300, "swap execution tolerance must be untouched");
+
+        uint256 previewTight = IMYTStrategy(strategy).previewAdjustedWithdraw(target);
+        assertLt(previewTight, previewLoose, "higher haircut should shrink preview");
+
+        // Same USDC withdrawal under both haircuts: larger haircut ⇒ larger buffered LP burn.
+        uint256 fixedWithdrawal = previewTight;
+        require(fixedWithdrawal > idle, "fixed withdrawal still idle-only");
+
+        uint256 snap = vm.snapshotState();
+        uint256 lpBefore = IVelodromeGauge(GAUGE).balanceOf(strategy);
+        vm.prank(strat.owner());
+        strat.setSlippageBPS(100);
+        vm.prank(admin);
+        IAllocator(allocator).deallocate(strategy, fixedWithdrawal);
+        uint256 lpBurnedLowHaircut = lpBefore - IVelodromeGauge(GAUGE).balanceOf(strategy);
+        vm.revertToState(snap);
+
+        lpBefore = IVelodromeGauge(GAUGE).balanceOf(strategy);
+        vm.prank(strat.owner());
+        strat.setSlippageBPS(900);
+        vm.prank(admin);
+        IAllocator(allocator).deallocate(strategy, fixedWithdrawal);
+        uint256 lpBurnedHighHaircut = lpBefore - IVelodromeGauge(GAUGE).balanceOf(strategy);
+
+        assertGt(lpBurnedHighHaircut, lpBurnedLowHaircut, "higher haircut should burn more LP for same withdrawal");
+        assertEq(strat.swapSlippageBPS(), 300, "swap slippage must remain at default");
+    }
+
+    /// @dev After a msUSD dump, TWAP mins can clear while the invariant fair-value floor
+    ///      (same swapSlippageBPS) still reverts with "Exit below fair value".
+    function test_exitFloor_governedBySwapSlippageBPS() public {
+        VelodromeMUSDStrategy strat = VelodromeMUSDStrategy(strategy);
+        uint256 amount = 50_000e6;
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, amount);
+
+        // Skew pool against msUSD sellers, then let observations fully rotate to the new regime.
+        _dumpMusdForUsdc(150_000e18);
+        _advanceTimeWithTwapPokesMusd(3 hours, 6, 50e18);
+
+        uint256 withdrawal = IMYTStrategy(strategy).previewAdjustedWithdraw(IMYTStrategy(strategy).realAssets());
+        require(withdrawal > IERC20(USDC).balanceOf(strategy), "need LP exit");
+
+        // Wide enough for TWAP/removeLiquidity mins under the dump; fair-value floor still fails.
+        vm.prank(strat.owner());
+        strat.setSwapSlippageBPS(600);
+
+        vm.prank(admin);
+        try IAllocator(allocator).deallocate(strategy, withdrawal) {
+            revert("expected exit floor to revert");
+        } catch (bytes memory errData) {
+            assertTrue(_isExitBelowFairValue(errData), "expected Exit below fair value");
+        }
+
+        // Recovery: arb closes the msUSD discount, TWAP catches up, default tolerance exits.
+        _arbRestoreMusdPrice(1.02e18);
+        _advanceTimeWithTwapPokes(1 hours);
+
+        uint256 previewBeforeLoosen = IMYTStrategy(strategy).previewAdjustedWithdraw(IMYTStrategy(strategy).realAssets());
+        vm.prank(strat.owner());
+        strat.setSwapSlippageBPS(300);
+        assertEq(
+            IMYTStrategy(strategy).previewAdjustedWithdraw(IMYTStrategy(strategy).realAssets()),
+            previewBeforeLoosen,
+            "loosening swap slippage must not change preview"
+        );
+
+        withdrawal = previewBeforeLoosen;
+        vm.prank(admin);
+        IAllocator(allocator).deallocate(strategy, withdrawal);
+        assertLe(
+            VelodromeMUSDStrategyHarness(strategy).exposedLpFairValueUsdc(
+                IVelodromeGauge(GAUGE).balanceOf(strategy) + IERC20(POOL).balanceOf(strategy)
+            ),
+            1e6,
+            "LP dust value too high after recovery"
+        );
+    }
+
+    function _dumpMusdForUsdc(uint256 musdAmount) internal {
+        address dumper = makeAddr("musdDumper");
+        deal(MUSD, dumper, musdAmount);
+        IVelodromeRouter.Route[] memory routes = new IVelodromeRouter.Route[](1);
+        routes[0] = IVelodromeRouter.Route({from: MUSD, to: USDC, stable: true, factory: FACTORY});
+        vm.startPrank(dumper);
+        IERC20(MUSD).approve(ROUTER, musdAmount);
+        IVelodromeRouter(ROUTER).swapExactTokensForTokens(musdAmount, 0, routes, dumper, block.timestamp);
+        vm.stopPrank();
+    }
+
+    function _dumpUsdcForMusd(uint256 usdcAmount) internal {
+        address dumper = makeAddr("usdcDumper");
+        deal(USDC, dumper, usdcAmount);
+        IVelodromeRouter.Route[] memory routes = new IVelodromeRouter.Route[](1);
+        routes[0] = IVelodromeRouter.Route({from: USDC, to: MUSD, stable: true, factory: FACTORY});
+        vm.startPrank(dumper);
+        IERC20(USDC).approve(ROUTER, usdcAmount);
+        IVelodromeRouter(ROUTER).swapExactTokensForTokens(usdcAmount, 0, routes, dumper, block.timestamp);
+        vm.stopPrank();
+    }
+
+    /// @dev Sell msUSD until marginal USDC→msUSD output recovers to at least `minMusdOutPer1Usdc`.
+    function _restoreMusdPremiumTowardPeg(uint256 minMusdOutPer1Usdc) internal {
+        address arb = makeAddr("premiumArb");
+        uint256 arbChunk = 20_000e18;
+        IVelodromeRouter.Route[] memory routes = new IVelodromeRouter.Route[](1);
+        routes[0] = IVelodromeRouter.Route({from: MUSD, to: USDC, stable: true, factory: FACTORY});
+
+        for (uint256 i = 0; i < 40; i++) {
+            if (IVelodromePool(POOL).getAmountOut(1e6, USDC) >= minMusdOutPer1Usdc) break;
+            deal(MUSD, arb, arbChunk);
+            vm.startPrank(arb);
+            IERC20(MUSD).approve(ROUTER, arbChunk);
+            IVelodromeRouter(ROUTER).swapExactTokensForTokens(arbChunk, 0, routes, arb, block.timestamp);
+            vm.stopPrank();
+        }
+        require(
+            IVelodromePool(POOL).getAmountOut(1e6, USDC) >= minMusdOutPer1Usdc, "failed to restore USDC->msUSD toward peg"
+        );
+    }
+
+    function _isInsufficientOutputAmount(bytes memory errData) internal pure returns (bool) {
+        if (errData.length < 4) return false;
+        bytes4 sel;
+        assembly {
+            sel := mload(add(errData, 0x20))
+        }
+        return sel == INSUFFICIENT_OUTPUT_AMOUNT_SELECTOR;
+    }
+
+    function _advanceTimeWithTwapPokesMusd(uint256 duration, uint256 steps, uint256 pokeAmount) internal {
+        address poker = makeAddr("twapPokerMusd");
+        deal(MUSD, poker, pokeAmount * steps);
+        vm.startPrank(poker);
+        IERC20(MUSD).approve(ROUTER, pokeAmount * steps);
+        IVelodromeRouter.Route[] memory routes = new IVelodromeRouter.Route[](1);
+        routes[0] = IVelodromeRouter.Route({from: MUSD, to: USDC, stable: true, factory: FACTORY});
+
+        for (uint256 i = 0; i < steps; i++) {
+            vm.warp(block.timestamp + duration / steps);
+            IVelodromeRouter(ROUTER).swapExactTokensForTokens(pokeAmount, 0, routes, poker, block.timestamp);
+        }
+        vm.stopPrank();
+    }
+
+    function _isExitBelowFairValue(bytes memory errData) internal pure returns (bool) {
+        return keccak256(errData) == keccak256(abi.encodeWithSignature("Error(string)", "Exit below fair value"));
+    }
+
+    /// @dev USDC→msUSD never buys above the $1 peg: after a USDC dump makes spot worse than
+    ///      1:1, the peg floor keeps minOut above spot even once TWAP has repriced down.
+    function test_pegFloor_blocksAllocateWhenBuyingMsUsdAtPremium() public {
+        VelodromeMUSDStrategyHarness strat = VelodromeMUSDStrategyHarness(strategy);
+        uint256 amount = 25_000e6;
+
+        // Tighten execution tolerance so slipped peg sits above adverse spot.
+        vm.prank(strat.owner());
+        strat.setSwapSlippageBPS(50);
+
+        // Push msUSD to a premium (fewer msUSD per USDC), then rotate TWAP into that regime
+        // so TWAP alone would be below peg. peg floor must be the binding constraint.
+        _dumpUsdcForMusd(350_000e6);
+        _advanceTimeWithTwapPokes(3 hours);
+
+        // Match strategy split: ratioB = B/(A+B) is the USDC share swapped to msUSD.
+        uint256 ratioB = IVelodromeRouter(ROUTER).quoteStableLiquidityRatio(USDC, MUSD, FACTORY);
+        uint256 usdcForSwap = Math.mulDiv(amount, ratioB, 1e18);
+
+        uint256 spotOut = IVelodromePool(POOL).getAmountOut(usdcForSwap, USDC);
+        uint256 pegOut = usdcForSwap * (MUSD_PRECISION / USDC_PRECISION);
+        uint256 minOut = strat.exposedMinSwapOut(USDC, usdcForSwap);
+        uint256 twapOut = IVelodromePool(POOL).quote(USDC, usdcForSwap, 2);
+
+        assertLt(spotOut, pegOut, "setup: spot should be below 1:1 peg");
+        assertLe(twapOut, pegOut, "setup: TWAP should not exceed peg after dump regime");
+        assertGt(minOut, spotOut, "peg floor minOut must exceed adverse spot");
+        assertEq(minOut, Math.mulDiv(pegOut, 10_000 - strat.swapSlippageBPS(), 10_000), "minOut should be slipped peg");
+
+        vm.prank(admin);
+        try IAllocator(allocator).allocate(strategy, amount) {
+            revert("expected allocate to revert on peg premium");
+        } catch (bytes memory errData) {
+            assertTrue(_isInsufficientOutputAmount(errData), "expected router InsufficientOutputAmount");
+        }
+
+        // Restore toward peg by selling msUSD until USDC→msUSD recovers near 1:1, then refresh TWAP.
+        _restoreMusdPremiumTowardPeg(0.98e18);
+        _advanceTimeWithTwapPokes(2 hours);
+
+        vm.prank(strat.owner());
+        strat.setSwapSlippageBPS(300);
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, amount);
+        assertGt(IVelodromeGauge(GAUGE).balanceOf(strategy), 0, "allocate should succeed near peg");
+    }
+
+    /// @dev Same block sandwich: attacker buys msUSD first; victim allocate sees worse spot while
+    ///      TWAP/peg mins are still high. router reverts. No time warp between skew and allocate.
+    function test_twapSandwich_sameBlockUsdcDumpBlocksAllocate() public {
+        uint256 amount = 25_000e6;
+        uint256 usdcForSwap = amount / 2;
+
+        uint256 spotBefore = IVelodromePool(POOL).getAmountOut(usdcForSwap, USDC);
+        uint256 minOutBefore = VelodromeMUSDStrategyHarness(strategy).exposedMinSwapOut(USDC, usdcForSwap);
+        assertGe(spotBefore, minOutBefore, "setup: honest pool should clear minOut");
+
+        // Same timestamp / observation window: large USDC -> msUSD skew (sandwich front-run).
+        _dumpUsdcForMusd(150_000e6);
+
+        uint256 spotAfter = IVelodromePool(POOL).getAmountOut(usdcForSwap, USDC);
+        uint256 minOutAfter = VelodromeMUSDStrategyHarness(strategy).exposedMinSwapOut(USDC, usdcForSwap);
+        assertLt(spotAfter, spotBefore, "setup: dump must worsen spot");
+        assertLt(spotAfter, minOutAfter, "setup: spot must fall below unchanged TWAP/peg min");
+
+        vm.prank(admin);
+        try IAllocator(allocator).allocate(strategy, amount) {
+            revert("expected sandwiched allocate to revert");
+        } catch (bytes memory errData) {
+            assertTrue(_isInsufficientOutputAmount(errData), "expected router InsufficientOutputAmount");
+        }
+        assertEq(IVelodromeGauge(GAUGE).balanceOf(strategy), 0, "sandwiched allocate must not fill");
+    }
+
+    /// @dev Exit sweep uses TWAP only (no peg floor). Same block msUSD dump leaves optimistic
+    ///      TWAP mins -> sweep reverts; after TWAP rotates + arb, exit recovers.
+    function test_twapSandwich_sameBlockMusdDumpBlocksExitSweep() public {
+        uint256 amount = 40_000e6;
+
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, amount);
+
+        uint256 withdrawal = IMYTStrategy(strategy).previewAdjustedWithdraw(IMYTStrategy(strategy).realAssets());
+        require(withdrawal > IERC20(USDC).balanceOf(strategy), "need LP exit");
+
+        // Front-run: dump msUSD so the exit's msUSD -> USDC sweep is worse than the still high TWAP.
+        _dumpMusdForUsdc(150_000e18);
+
+        vm.prank(admin);
+        try IAllocator(allocator).deallocate(strategy, withdrawal) {
+            revert("expected sandwiched exit to revert");
+        } catch (bytes memory errData) {
+            // TWAP min on sweep (B0#) is the intended same block failure mode.
+            assertTrue(_isInsufficientOutputAmount(errData), "expected router InsufficientOutputAmount on sweep");
+        }
+        assertGt(IVelodromeGauge(GAUGE).balanceOf(strategy), 0, "failed exit must leave gauge position");
+
+        // Honest path after market + TWAP recover.
+        _arbRestoreMusdPrice(1.02e18);
+        _advanceTimeWithTwapPokes(1 hours);
+
+        withdrawal = IMYTStrategy(strategy).previewAdjustedWithdraw(IMYTStrategy(strategy).realAssets());
+        vm.prank(admin);
+        IAllocator(allocator).deallocate(strategy, withdrawal);
+        assertLe(
+            VelodromeMUSDStrategyHarness(strategy).exposedLpFairValueUsdc(
+                IVelodromeGauge(GAUGE).balanceOf(strategy) + IERC20(POOL).balanceOf(strategy)
+            ),
+            1e6,
+            "LP dust value too high after recovery"
+        );
     }
 
     function test_constructor_usesExpectedGaugeRewardToken() public view {
