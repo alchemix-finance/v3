@@ -72,4 +72,8 @@ contract ERC4626Strategy is MYTStrategy {
     function _isProtectedToken(address token) internal view virtual override returns (bool) {
         return token == MYT.asset() || token == address(vault);
     }
+
+    function _canForceDeallocate() internal view virtual override returns (bool) {
+        return canForceDeallocate;
+    }
 }
