@@ -313,14 +313,42 @@ Supported allocator paths:
 - `deallocate()`
 - `deallocateWithSwap()`
 
+Async unwind operations (keeper/owner, outside the allocator):
+
+- `requestExits(uint256 wethAmount)` — unwrap `weETH` and enter the Ether.fi
+  native withdrawal queue (`LiquidityPool.requestWithdraw`), holding the minted
+  `WithdrawRequestNFT`. Callable by the owner or the configured `keeper`.
+- `claimExits(uint256[] tokenIds)` — permissionless settlement of finalized
+  requests; claimed ETH is wrapped into idle WETH for later deallocation or
+  `withdrawToVault()`.
+- `removeInvalidExits(uint256[] tokenIds)` — owner cleanup for requests the
+  protocol has invalidated/seized; realizes the loss in `realAssets()`.
+
 Notes:
 
 1. `allocate()` uses the Ether.fi deposit adapter and directly mints into `weETH`.
 
 2. `allocateWithSwap()` can be used when buying `weETH` on the market is preferable to the native mint path.
-   The quote should be for `WETH -> weETH`.
+   The quote should be for `WETH -> weETH`. Pricing is oracle-free: minimum outputs are
+   floored by the canonical `weETH -> eETH` rate (`getEETHByWeETH`), not a Chainlink feed.
 
-3. `deallocate()` uses Ether.fi instant redemption.
-   This path is liquidity-dependent and reverts if instant redemption is unavailable.
+3. `deallocate()` cascades through instant liquidity: idle WETH, then Ether.fi instant
+   redemption, then a LiquidityPool instant withdraw (bounds-checked, permission failures
+   tolerated). It reverts with "Insufficient WETH available" only when all instant legs
+   are exhausted; the async queue refills idle WETH over subsequent days.
 
 4. `deallocateWithSwap()` remains useful as the market exit path when the operator prefers to sell `weETH -> WETH` rather than rely on the redemption manager.
+
+5. Pending queue exits are valued inside `realAssets()` (unfinalized: share value minus
+   `pendingHaircutBps`; finalized: exact `getClaimableAmount`), so the vault never
+   registers a phantom loss during the unwind window. `previewAdjustedWithdraw` counts
+   instant capacity only.
+
+6. A canonical-rate circuit breaker trips the kill switch when the eETH-per-weETH rate
+   drops more than `maxRateDropBps` below the last allocation checkpoint. Allocation
+   blocks; deallocation stays open.
+
+7. Keeper runbook: monitor idle WETH + RedemptionManager capacity against the target
+   buffer; when low, call `requestExits(refill)`. After Ether.fi finalizes (watch
+   `lastFinalizedRequestId` on the WithdrawRequestNFT), anyone calls `claimExits`; the
+   allocator then rebalances the recovered WETH.

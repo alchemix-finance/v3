@@ -8,6 +8,7 @@ import {MYTStrategy} from "../src/MYTStrategy.sol";
 import {EtherfiEETHMYTStrategy} from "../src/strategies/EtherfiEETHStrategy.sol";
 
 /// @notice Reusable deploy helper for the Ether.fi weETH strategy on Ethereum mainnet.
+/// @dev Oracle-free pricing; async unwinds (requestExits/claimExits) are keeper-driven.
 contract DeployEtherfiEETHStrategyScript is Script {
     address self = address(this);
     address deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
@@ -20,8 +21,6 @@ contract DeployEtherfiEETHStrategyScript is Script {
     address public constant WEETH = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
     address public constant DEPOSIT_ADAPTER = 0xcfC6d9Bd7411962Bfe7145451A7EF71A24b6A7A2;
     address public constant REDEMPTION_MANAGER = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
-    address public constant WEETH_ETH_ORACLE = 0x5c9C449BbC9a6075A2c061dF312a35fd1E05fF22;
-    uint256 public constant MAX_ORACLE_STALENESS = 24 hours;
 
     struct EtherfiEETHDeployConfig {
         address myt;
@@ -29,8 +28,6 @@ contract DeployEtherfiEETHStrategyScript is Script {
         address weETH;
         address depositAdapter;
         address redemptionManager;
-        address weEthEthOracle;
-        uint256 maxOracleStaleness;
         IMYTStrategy.StrategyParams params;
     }
 
@@ -59,9 +56,7 @@ contract DeployEtherfiEETHStrategyScript is Script {
             config.eETH,
             config.weETH,
             config.depositAdapter,
-            config.redemptionManager,
-            config.weEthEthOracle,
-            config.maxOracleStaleness
+            config.redemptionManager
         );
         strategyAddr = address(strategy);
         MYTStrategy(strategyAddr).setKillSwitch(true);
@@ -77,8 +72,6 @@ contract DeployEtherfiEETHStrategyScript is Script {
             weETH: WEETH,
             depositAdapter: DEPOSIT_ADAPTER,
             redemptionManager: REDEMPTION_MANAGER,
-            weEthEthOracle: WEETH_ETH_ORACLE,
-            maxOracleStaleness: MAX_ORACLE_STALENESS,
             params: defaultParams()
         });
 
