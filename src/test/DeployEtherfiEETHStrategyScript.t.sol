@@ -12,12 +12,6 @@ import {TestERC20} from "./mocks/TestERC20.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
-contract MockOracleForEtherfiEETHDeployTest {
-    function decimals() external pure returns (uint8) {
-        return 18;
-    }
-}
-
 contract MockMYTForEtherfiEETHDeployTest {
     address public asset;
 
@@ -59,7 +53,6 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
     AlchemistCurator internal curator;
     TestERC20 internal weth;
     MockMYTForEtherfiEETHDeployTest internal myt;
-    MockOracleForEtherfiEETHDeployTest internal oracle;
 
     address internal newOwner;
     address internal eETH;
@@ -73,7 +66,6 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
 
         weth = new TestERC20(1_000_000e18, 18);
         myt = new MockMYTForEtherfiEETHDeployTest(address(weth));
-        oracle = new MockOracleForEtherfiEETHDeployTest();
 
         newOwner = makeAddr("newOwner");
         eETH = makeAddr("eETH");
@@ -90,8 +82,6 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
                 weETH: weETH,
                 depositAdapter: depositAdapter,
                 redemptionManager: redemptionManager,
-                weEthEthOracle: address(oracle),
-                maxOracleStaleness: deployScript.MAX_ORACLE_STALENESS(),
                 params: _buildParams("Ether.fi Mainnet weETH", "Ether.fi")
             });
 
@@ -103,8 +93,10 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
         assertEq(address(strategy.weETH()), weETH, "unexpected weETH");
         assertEq(address(strategy.depositAdapter()), depositAdapter, "unexpected deposit adapter");
         assertEq(address(strategy.redemptionManager()), redemptionManager, "unexpected redemption manager");
-        assertEq(address(strategy.pricedTokenOracle()), address(oracle), "unexpected oracle");
-        assertEq(strategy.MAX_ORACLE_STALENESS(), deployScript.MAX_ORACLE_STALENESS(), "unexpected max oracle staleness");
+        assertEq(strategy.pendingExitCount(), 0, "unexpected pending exits");
+        assertEq(strategy.pendingHaircutBps(), 100, "unexpected pending haircut");
+        assertEq(strategy.maxRateDropBps(), 50, "unexpected max rate drop");
+        assertEq(strategy.rateCheckpoint(), 0, "rate checkpoint should start empty");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
         assertEq(curator.adapterToMYT(strategyAddr), address(0), "deploy script should not register with curator");
@@ -121,8 +113,6 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
                 weETH: weETH,
                 depositAdapter: depositAdapter,
                 redemptionManager: redemptionManager,
-                weEthEthOracle: address(oracle),
-                maxOracleStaleness: deployScript.MAX_ORACLE_STALENESS(),
                 params: _buildParams("Ether.fi Mainnet weETH", "Ether.fi")
             });
 
@@ -147,7 +137,7 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
         vm.createSelectFork(vm.envString("MAINNET_RPC_URL"), MAINNET_FORK_BLOCK);
         vm.deal(DEPLOYER, 10 ether);
 
-        // Mirror admin authority so the test can perform post-deploy registration, caps, and proxy setup.
+        // mirror admin authority for post-deploy registration and cap setup
         vm.store(CURATOR_ADDR, bytes32(0), bytes32(uint256(uint160(DEPLOYER))));
         vm.store(ETH_ALLOCATOR, bytes32(0), bytes32(uint256(uint160(DEPLOYER))));
 
@@ -180,7 +170,7 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
         assertEq(address(strategy.weETH()), MAINNET_WEETH, "unexpected weETH");
         assertEq(address(strategy.depositAdapter()), MAINNET_DEPOSIT_ADAPTER, "unexpected deposit adapter");
         assertEq(address(strategy.redemptionManager()), MAINNET_REDEMPTION_MANAGER, "unexpected redemption manager");
-        assertEq(address(strategy.pricedTokenOracle()), MAINNET_WEETH_ETH_ORACLE, "unexpected oracle");
+        assertEq(strategy.pendingExitCount(), 0, "unexpected pending exits");
         assertEq(strategy.owner(), MAINNET_NEW_OWNER, "unexpected strategy owner");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled after deploy");
         assertTrue(vault.isAdapter(strategyAddr), "strategy not registered");
@@ -233,7 +223,7 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
         assertEq(params.globalCap, 0.3e18, "unexpected global cap");
         assertEq(params.estimatedYield, 500, "unexpected estimated yield");
         assertFalse(params.additionalIncentives, "unexpected incentives flag");
-        assertEq(params.slippageBPS, 10, "unexpected slippage");
+        assertEq(params.slippageBPS, 125, "unexpected slippage");
     }
 
     function _buildParams(string memory name, string memory protocol)
