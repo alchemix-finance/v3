@@ -10,6 +10,14 @@ import {IStrategyClassifier} from "../../interfaces/IStrategyClassifier.sol";
 import {RevertContext, IRevertAllowlistProvider} from "./StrategyTypes.sol";
 import {StrategyRevertUtils} from "./StrategyRevertUtils.sol";
 
+/// @notice Optional async-exit surface for strategies with native withdrawal queues.
+interface IAsyncExitStrategy {
+    function requestExits(uint256 wethAmount) external returns (uint256 tokenId, uint96 shares);
+    function claimExits() external returns (uint256 ethClaimed);
+    function pendingExitCount() external view returns (uint256);
+    function claimableExits() external view returns (uint256);
+}
+
 /// @notice Invariant handler module for base strategy testing.
 /// @dev Instantiate from setup and target its selectors for invariant/fuzz-driven state transitions.
 /// @notice Handler contract for invariant testing according to Foundry best practices.
@@ -27,6 +35,8 @@ contract StrategyHandler is Test, StrategyRevertUtils {
     uint256 public ghost_totalAllocated;
     uint256 public ghost_totalDeallocated;
     uint256 public ghost_initialVaultAssets;
+    uint256 public ghost_asyncExitsRequested;
+    uint256 public ghost_asyncExitsClaimed;
 
     // Call counters for coverage analysis
     mapping(bytes4 => uint256) public calls;
@@ -155,10 +165,44 @@ contract StrategyHandler is Test, StrategyRevertUtils {
         vm.warp(block.timestamp + bound(timeDelta, 1, 365 days));
     }
 
+    /// @notice Async action: request a withdrawal-queue exit. Feature-detected;
+    ///      silently skipped when the strategy does not support async exits.
+    function requestAsyncExit(uint256 amountSeed) external countCall(this.requestAsyncExit.selector) {
+        (bool supported,) = address(strategy).staticcall(abi.encodeWithSignature("pendingExitCount()"));
+        if (!supported) return;
+
+        uint256 realAssets = strategy.realAssets();
+        if (realAssets < minAllocateAmount) return;
+        uint256 amount = bound(amountSeed, minAllocateAmount, realAssets);
+
+        vm.startPrank(admin);
+        try IAsyncExitStrategy(address(strategy)).requestExits(amount) {
+            vm.stopPrank();
+            ghost_asyncExitsRequested++;
+        } catch {
+            vm.stopPrank();
+        }
+    }
+
+    /// @notice Async action: claim a finalized withdrawal-queue exit.
+    function claimAsyncExits() external countCall(this.claimAsyncExits.selector) {
+        (bool supported,) = address(strategy).staticcall(abi.encodeWithSignature("pendingExitCount()"));
+        if (!supported) return;
+
+        IAsyncExitStrategy asyncStrategy = IAsyncExitStrategy(address(strategy));
+        if (asyncStrategy.pendingExitCount() == 0 || asyncStrategy.claimableExits() == 0) return;
+
+        try asyncStrategy.claimExits() {
+            ghost_asyncExitsClaimed++;
+        } catch {}
+    }
+
     function callSummary() external view {
         console.log("Handler Call Summary:");
         console.log("allocate calls:", calls[this.allocate.selector]);
         console.log("deallocate calls:", calls[this.deallocate.selector]);
         console.log("warpTime calls:", calls[this.warpTime.selector]);
+        console.log("requestAsyncExit calls:", calls[this.requestAsyncExit.selector]);
+        console.log("claimAsyncExits calls:", calls[this.claimAsyncExits.selector]);
     }
 }

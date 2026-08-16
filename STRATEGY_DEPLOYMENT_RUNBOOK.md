@@ -160,7 +160,7 @@ Examples:
 
 - `WstETHEthereumStrategy`: direct mainnet Lido mint, optional `WETH -> wstETH` swap allocation, and `wstETH -> WETH` swap deallocation.
 - `SFraxETHStrategy`: direct Frax mint, optional `WETH -> frxETH` swap allocation followed by `frxETH -> sfrxETH` deposit, and `sfrxETH -> frxETH -> WETH` unwrap-and-swap deallocation.
-- `EtherfiEETHMYTStrategy`: direct Ether.fi entry/exit plus optional `weETH` market routes.
+- `EtherfiEETHMYTStrategy`: direct Ether.fi entry, cascading instant exit (redemption manager -> LiquidityPool withdraw), optional `weETH` market routes, oracle-free canonical-rate pricing, and native async unwinds via the Ether.fi withdrawal queue (`requestExits`/`claimExits`).
 
 
 
@@ -194,6 +194,11 @@ Classify every route:
 - Async exit: the protocol requires a queue or delayed claim before assets can return.
 
 For minimal functionality, prefer direct routes when both entry and exit are synchronous and economically acceptable.
+
+When an async exit exists, implement it inside the strategy as an operator-facing unwind
+(see `EtherfiEETHMYTStrategy.requestExits`/`claimExits`): the vault's synchronous
+deallocate contract is unchanged, pending claims stay inside `realAssets()` so no phantom
+loss is realized, and `previewAdjustedWithdraw` must exclude queued liquidity.
 
 ### 3. Decide The Base Class
 
