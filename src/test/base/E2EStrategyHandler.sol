@@ -66,6 +66,7 @@ contract E2EStrategyHandler is Test {
     uint256 public ghost_totalCollateralDeposited;
     uint256 public ghost_totalDebtMinted;
     uint256 public ghost_totalDebtRepaid;
+    mapping(uint8 => uint256) public ghost_liquidityAdapterBypass;
 
     mapping(bytes4 => uint256) public calls;
     mapping(bytes4 => uint256) public skips;
@@ -145,7 +146,14 @@ contract E2EStrategyHandler is Test {
             return;
         }
 
-        amount = bound(amount, MIN_DEPOSIT, balance);
+        uint256 maxEnter = _maxEnterAssets();
+        uint256 upperBound = balance < maxEnter ? balance : maxEnter;
+        if (upperBound < MIN_DEPOSIT) {
+            skips[selector]++;
+            return;
+        }
+
+        amount = bound(amount, MIN_DEPOSIT, upperBound);
 
         IERC20(asset).approve(address(vault), amount);
         uint256[] memory snap = _snapshotAllocations();
@@ -200,7 +208,13 @@ contract E2EStrategyHandler is Test {
             skips[selector]++;
             return;
         }
-        uint256 maxShares = vault.convertToShares(balance);
+        uint256 maxEnter = _maxEnterAssets();
+        uint256 maxAssets = balance < maxEnter ? balance : maxEnter;
+        if (maxAssets < MIN_DEPOSIT) {
+            skips[selector]++;
+            return;
+        }
+        uint256 maxShares = vault.convertToShares(maxAssets);
         if (maxShares == 0) {
             skips[selector]++;
             return;
@@ -493,6 +507,81 @@ contract E2EStrategyHandler is Test {
         vm.prank(admin);
         AlchemistStrategyClassifier(classifier).setRiskClass(riskClass, newGlobalPct, newLocalPct);
         executed[selector]++;
+    }
+
+    function setLiquidityAdapter(uint256 strategySeed, uint256 modeSeed) external countCall(this.setLiquidityAdapter.selector) {
+        bytes4 selector = this.setLiquidityAdapter.selector;
+        uint256 len = strategies.length;
+        if (len == 0) {
+            skips[selector]++;
+            return;
+        }
+
+        address newLiquidityAdapter = address(0);
+        if (modeSeed % 3 != 0) {
+            address candidate = strategies[strategySeed % len];
+            if (_liquidityAdapterHasHeadroom(candidate)) {
+                newLiquidityAdapter = candidate;
+            }
+        }
+
+        vm.prank(_pickAllocatorCaller());
+        try IAllocator(allocator).setLiquidityAdapter(newLiquidityAdapter, _directLiquidityData()) {
+            executed[selector]++;
+        } catch {
+            skips[selector]++;
+        }
+    }
+
+    function _directLiquidityData() internal pure returns (bytes memory) {
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        return abi.encode(params);
+    }
+
+    // bounded to cap headroom
+    function _maxEnterAssets() internal view returns (uint256 maxEnter) {
+        address adapter = vault.liquidityAdapter();
+        if (adapter == address(0)) return type(uint256).max;
+
+        bytes32 id = IMYTStrategy(adapter).adapterId();
+        uint256 allocation = vault.allocation(id);
+        uint256 absoluteCap = vault.absoluteCap(id);
+        if (absoluteCap == 0 || allocation >= absoluteCap) return 0;
+
+        maxEnter = absoluteCap - allocation;
+
+        uint256 relativeCap = vault.relativeCap(id);
+        if (relativeCap != type(uint256).max && relativeCap != 1e18) {
+            uint256 firstTotalAssets = vault.firstTotalAssets();
+            if (firstTotalAssets == 0) return 0;
+            uint256 relativeLimit = (firstTotalAssets * relativeCap) / 1e18;
+            if (relativeLimit <= allocation) return 0;
+            uint256 relativeHeadroom = relativeLimit - allocation;
+            if (relativeHeadroom < maxEnter) maxEnter = relativeHeadroom;
+        }
+    }
+
+    function _liquidityAdapterHasHeadroom(address strategy) internal view returns (bool) {
+        bytes32 allocationId = IMYTStrategy(strategy).adapterId();
+        uint256 currentAllocation = vault.allocation(allocationId);
+        uint256 absoluteCap = vault.absoluteCap(allocationId);
+        uint256 relativeCap = vault.relativeCap(allocationId);
+        uint256 totalAssets = vault.totalAssets();
+        uint256 firstTotalAssets = vault.firstTotalAssets();
+        if (firstTotalAssets == 0) {
+            firstTotalAssets = totalAssets;
+        }
+
+        uint256 allocatorRelativeCapValue =
+            relativeCap == type(uint256).max ? type(uint256).max : (totalAssets * relativeCap) / 1e18;
+        uint256 vaultRelativeCapValue =
+            relativeCap == type(uint256).max ? type(uint256).max : (firstTotalAssets * relativeCap) / 1e18;
+        uint256 relativeLimit = allocatorRelativeCapValue < vaultRelativeCapValue ? allocatorRelativeCapValue : vaultRelativeCapValue;
+        uint256 hardLimit = absoluteCap < relativeLimit ? absoluteCap : relativeLimit;
+
+        if (hardLimit <= currentAllocation) return false;
+        return hardLimit - currentAllocation >= MIN_DEPOSIT * 10;
     }
 
     function simulateYield(uint256 strategyIndexSeed, uint256 bpsSeed) external countCall(this.simulateYield.selector) {
@@ -835,6 +924,7 @@ contract E2EStrategyHandler is Test {
             bytes32 allocationId = IMYTStrategy(strategy).adapterId();
             uint256 afterAllocation = vault.allocation(allocationId);
             uint256 beforeAllocation = beforeAllocations[i];
+            uint8 riskLevel = IStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
 
             if (afterAllocation >= beforeAllocation) {
                 uint256 deltaUp = afterAllocation - beforeAllocation;
@@ -851,6 +941,18 @@ contract E2EStrategyHandler is Test {
                     ghost_strategyAllocations[strategy] = 0;
                 }
             }
+
+            _recordLiquidityAdapterBypassDelta(riskLevel, beforeAllocation, afterAllocation);
+        }
+    }
+
+    function _recordLiquidityAdapterBypassDelta(uint8 riskLevel, uint256 beforeAllocation, uint256 afterAllocation) internal {
+        if (afterAllocation > beforeAllocation) {
+            ghost_liquidityAdapterBypass[riskLevel] += afterAllocation - beforeAllocation;
+        } else if (beforeAllocation > afterAllocation) {
+            uint256 decrease = beforeAllocation - afterAllocation;
+            ghost_liquidityAdapterBypass[riskLevel] =
+                ghost_liquidityAdapterBypass[riskLevel] > decrease ? ghost_liquidityAdapterBypass[riskLevel] - decrease : 0;
         }
     }
 
@@ -953,6 +1055,7 @@ contract E2EStrategyHandler is Test {
         console.log("forceDealloc:  ", calls[this.forceDeallocate.selector]);
         console.log("reclassify:    ", calls[this.reclassifyStrategy.selector]);
         console.log("modifyCaps:    ", calls[this.modifyRiskClassCaps.selector]);
+        console.log("setLiqAdapter: ", calls[this.setLiquidityAdapter.selector]);
         console.log("simulateYield: ", calls[this.simulateYield.selector]);
         console.log("simulateLoss:  ", calls[this.simulateValueLoss.selector]);
         console.log("warpTime:      ", calls[this.warpTime.selector]);
