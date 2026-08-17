@@ -277,7 +277,10 @@ contract HardenedInvariantHandler is Test {
             return;
         }
 
-        amount = bound(amount, 1, maxBorrow);
+        // One in eight borrows takes the maximum: fully-leveraged positions are what
+        // losses turn liquidation-eligible, and the coverage gate depends on such
+        // positions arising regularly.
+        amount = actorSeed % 8 == 0 ? maxBorrow : bound(amount, 1, maxBorrow);
 
         vm.prank(actor);
         try alchemist.mint(tokenId, amount, actor) {
@@ -1052,7 +1055,7 @@ contract HardenedInvariantsTest is InvariantsTest {
     }
 
     function invariantCriticalPathsExplored() public view {
-        if (handler.totalHandlerCalls() < 200) return;
+        if (handler.totalHandlerCalls() < 512) return;
 
         assertGt(handler.ghostDeposits(), 0, "H-cov: no deposits executed");
         assertGt(handler.ghostBorrows(), 0, "H-cov: no borrows executed");

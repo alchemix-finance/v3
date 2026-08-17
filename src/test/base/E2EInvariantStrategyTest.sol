@@ -19,6 +19,12 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
 
     uint256 internal constant REAL_STRATEGY_RELATIVE_CAP = 0.5e18;
 
+    /// @dev Vault-side absolute cap for the real strategy. Suites whose underlying
+    ///      protocol has tighter capacity than 50k override this.
+    function _realAbsoluteCap() internal view virtual returns (uint256) {
+        return 50_000 * 10 ** assetDecimals;
+    }
+
     function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params)
         internal
         virtual
@@ -36,7 +42,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         realStrategy = createStrategy(address(vault), params);
         require(realStrategy != address(0), "createStrategy returned zero");
         _enableForceDeallocate(realStrategy);
-        uint256 realAbsoluteCap = 50_000 * 10 ** assetDecimals;
+        uint256 realAbsoluteCap = _realAbsoluteCap();
         _addStrategyViaCurator(realStrategy, realAbsoluteCap, REAL_STRATEGY_RELATIVE_CAP);
         vm.stopPrank();
 
