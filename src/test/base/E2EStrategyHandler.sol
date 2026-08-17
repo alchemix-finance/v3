@@ -962,7 +962,11 @@ contract E2EStrategyHandler is Test {
 
         (bool ok, bytes memory data) = underlyingVault.staticcall(abi.encodeWithSignature("maxDeposit(address)", strategy));
         if (!ok || data.length < 32) return type(uint256).max;
-        return abi.decode(data, (uint256));
+        uint256 maxDeposit = abi.decode(data, (uint256));
+        // Some adapters (e.g. the Re7 Morpho wrapper) report maxDeposit == 0 while
+        // accepting deposits; treat zero as uninformative rather than zero capacity.
+        // Absolute/relative/risk caps still bound the allocation.
+        return maxDeposit == 0 ? type(uint256).max : maxDeposit;
     }
 
     function _getUnderlyingMaxWithdraw(address strategy) internal view returns (uint256) {
