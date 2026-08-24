@@ -143,6 +143,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     
     uint256 private constant _REDEMPTION_INDEX_BITS = 129;
     uint256 private constant _REDEMPTION_INDEX_MASK = (uint256(1) << _REDEMPTION_INDEX_BITS) - 1;
+    uint256 private constant _REDEMPTION_SCALE_SHIFT = _REDEMPTION_INDEX_BITS + 64;
 
     uint256 private constant _EARMARK_INDEX_BITS = 129;
     uint256 private constant _EARMARK_INDEX_MASK = (uint256(1) << _EARMARK_INDEX_BITS) - 1;
@@ -668,6 +669,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             // Snapshot old packed
             uint256 packedOld = _redemptionWeight;
             uint256 oldEpoch  = _redEpoch(packedOld);
+            uint256 oldScale  = _redScale(packedOld);
             uint256 oldIndex  = _redIndex(packedOld);
 
             // Normalize uninitialized / zero index
@@ -678,23 +680,35 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
                 oldEpoch += 1;
                 oldIndex = ONE_Q128;
             }
+            (oldIndex, oldScale) = _normalizeRedemptionIndex(oldIndex, oldScale);
 
             // Compute new packed
             uint256 newEpoch = oldEpoch;
+            uint256 newScale = oldScale;
             uint256 newIndex;
 
             if (ratioWanted == 0) {
                 newEpoch += 1;
+                newScale = 0;
                 newIndex = ONE_Q128;
             } else {
-                newIndex = FixedPointMath.mulQ128(oldIndex, ratioWanted);
+                while (ratioWanted < ONE_Q128 >> 1) {
+                    ratioWanted <<= 1;
+                    newScale += 1;
+                }
+                newIndex = oldIndex * ratioWanted >> 128;
+                if (newIndex < ONE_Q128 >> 1) {
+                    newIndex <<= 1;
+                    newScale += 1;
+                }
             }
 
-            _redemptionWeight = _packRed(newEpoch, newIndex);
+            _redemptionWeight = _packRed(newEpoch, newScale, newIndex);
 
             // ratioApplied is what accounts will actually see via _redemptionSurvivalRatio()
             // epoch advance => full wipe => 0 survival
-            uint256 ratioApplied = (newEpoch > oldEpoch) ? 0 : FixedPointMath.divQ128(newIndex, oldIndex);
+            uint256 ratioApplied =
+                (newEpoch > oldEpoch) ? 0 : FixedPointMath.divQ128(newIndex, oldIndex) >> (newScale - oldScale);
 
             // Apply survival using the APPLIED ratio
             _survivalAccumulator = FixedPointMath.mulQ128(_survivalAccumulator, ratioApplied);
@@ -702,7 +716,9 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             // Derive effective redeemed amount using the SAME applied ratio
             uint256 remainingEarmarked = FixedPointMath.mulQ128(liveEarmarked, ratioApplied);
             effectiveRedeemed = liveEarmarked - remainingEarmarked;
-            if (amount > effectiveRedeemed + 5_256_001) revert IllegalState();
+            uint256 mismatch =
+                amount > effectiveRedeemed ? amount - effectiveRedeemed : effectiveRedeemed - amount;
+            if (mismatch > 5_256_001) revert IllegalState();
 
             cumulativeEarmarked = remainingEarmarked;
             totalDebt -= effectiveRedeemed;
@@ -1600,8 +1616,9 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
         if (amount > 0 && liveUnearmarked != 0) {
             // ratioWanted = (liveUnearmarked - amount) / liveUnearmarked
+            uint256 remaining = liveUnearmarked - amount;
             uint256 ratioWanted =
-                (amount == liveUnearmarked) ? 0 : FixedPointMath.divQ128(liveUnearmarked - amount, liveUnearmarked);
+                remaining <= 5_256_001 ? 0 : FixedPointMath.divQ128(remaining, liveUnearmarked);
 
             uint256 packedOld = _earmarkWeight;
             (uint256 packedNew, uint256 ratioApplied, uint256 oldIndex, uint256 newEpoch, bool epochAdvanced) =
@@ -1621,6 +1638,9 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             // Bump cumulativeEarmarked by the effective amount implied by ratioApplied
             uint256 newUnearmarked = FixedPointMath.mulQ128(liveUnearmarked, ratioApplied);
             uint256 effectiveEarmarked = liveUnearmarked - newUnearmarked;
+            uint256 mismatch =
+                amount > effectiveEarmarked ? amount - effectiveEarmarked : effectiveEarmarked - amount;
+            if (mismatch > 5_256_001) revert IllegalState();
 
             cumulativeEarmarked += effectiveEarmarked;
         }
@@ -1757,20 +1777,25 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         if (newPacked == oldPacked) return ONE_Q128;
         if (oldPacked == 0) return ONE_Q128;
 
-        uint256 oldEpoch = oldPacked >> _REDEMPTION_INDEX_BITS;
-        uint256 newEpoch = newPacked >> _REDEMPTION_INDEX_BITS;
+        uint256 oldEpoch = _redEpoch(oldPacked);
+        uint256 newEpoch = _redEpoch(newPacked);
 
         // If epoch advances, there was a full wipe at some point
         if (newEpoch > oldEpoch) return 0;
 
-        uint256 oldIndex = oldPacked & _REDEMPTION_INDEX_MASK;
-        uint256 newIndex = newPacked & _REDEMPTION_INDEX_MASK;
+        uint256 oldIndex = _redIndex(oldPacked);
+        uint256 newIndex = _redIndex(newPacked);
 
         // If oldIndex is 0, treat as fully redeemed.
         if (oldIndex == 0) return 0;
 
-        // ratio = newIndex / oldIndex
-        return FixedPointMath.divQ128(newIndex, oldIndex);
+        uint256 oldScale = _redScale(oldPacked);
+        uint256 newScale = _redScale(newPacked);
+        (oldIndex, oldScale) = _normalizeRedemptionIndex(oldIndex, oldScale);
+        (newIndex, newScale) = _normalizeRedemptionIndex(newIndex, newScale);
+        if (newScale < oldScale) return 0;
+
+        return FixedPointMath.divQ128(newIndex, oldIndex) >> (newScale - oldScale);
     }
 
     /// @dev Simulates one uncommitted earmark window using current on-chain state.
@@ -1803,14 +1828,18 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         if (amount == 0 || liveUnearmarked == 0) return (earmarkWeightCopy, 0);
 
         // ratioWanted = (liveUnearmarked - amount) / liveUnearmarked
+        uint256 remaining = liveUnearmarked - amount;
         uint256 ratioWanted =
-            (amount == liveUnearmarked) ? 0 : FixedPointMath.divQ128(liveUnearmarked - amount, liveUnearmarked);
+            remaining <= 5_256_001 ? 0 : FixedPointMath.divQ128(remaining, liveUnearmarked);
 
         (uint256 packedNew, uint256 ratioApplied,,,) = _simulateEarmarkPackedUpdate(earmarkWeightCopy, ratioWanted);
         earmarkWeightCopy = packedNew;
 
         uint256 newUnearmarked = FixedPointMath.mulQ128(liveUnearmarked, ratioApplied);
         effectiveEarmarked = liveUnearmarked - newUnearmarked;
+        uint256 mismatch =
+            amount > effectiveEarmarked ? amount - effectiveEarmarked : effectiveEarmarked - amount;
+        if (mismatch > 5_256_001) revert IllegalState();
     }
 
     /// @dev Simulates the packed earmark update and returns the applied survival ratio.
@@ -1844,25 +1873,42 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             newEpoch += 1;
             newIndex = ONE_Q128;
         } else {
-            newIndex = FixedPointMath.mulQ128(oldIndex, ratioWanted);
+            newIndex = FixedPointMath.mulDiv(oldIndex, ratioWanted, ONE_Q128);
+            if (newIndex == 0) revert IllegalState();
         }
 
         epochAdvanced = newEpoch > oldEpoch;
-        packedNew = _packRed(newEpoch, newIndex);
+        packedNew = (newEpoch << _EARMARK_INDEX_BITS) | newIndex;
         ratioApplied = epochAdvanced ? 0 : FixedPointMath.divQ128(newIndex, oldIndex);
     }
 
     // Bitwise helpers
     function _redEpoch(uint256 packed) private pure returns (uint256) {
-        return packed >> _REDEMPTION_INDEX_BITS;
+        return uint256(uint64(packed >> _REDEMPTION_INDEX_BITS));
+    }
+
+    function _redScale(uint256 packed) private pure returns (uint256) {
+        return packed >> _REDEMPTION_SCALE_SHIFT;
     }
 
     function _redIndex(uint256 packed) private pure returns (uint256) {
         return packed & _REDEMPTION_INDEX_MASK;
     }
 
-    function _packRed(uint256 epoch, uint256 index) private pure returns (uint256) {
-        return (epoch << _REDEMPTION_INDEX_BITS) | index;
+    function _packRed(uint256 epoch, uint256 scale, uint256 index) private pure returns (uint256) {
+        return (scale << _REDEMPTION_SCALE_SHIFT) | (epoch << _REDEMPTION_INDEX_BITS) | index;
+    }
+
+    function _normalizeRedemptionIndex(uint256 index, uint256 scale)
+        private
+        pure
+        returns (uint256, uint256)
+    {
+        while (index < ONE_Q128 >> 1) {
+            index <<= 1;
+            scale += 1;
+        }
+        return (index, scale);
     }
 
 }
