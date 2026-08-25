@@ -11,9 +11,11 @@ import {RevertContext, IRevertAllowlistProvider} from "./StrategyTypes.sol";
 import {StrategyRevertUtils} from "./StrategyRevertUtils.sol";
 
 /// @notice Optional async-exit surface for strategies with native withdrawal queues.
+/// @dev Return values of the mutating functions are intentionally not declared:
+///      strategies differ in what they return, and the handler ignores returns.
 interface IAsyncExitStrategy {
-    function requestExits(uint256 wethAmount) external returns (uint256 tokenId, uint96 shares);
-    function claimExits() external returns (uint256 ethClaimed);
+    function requestExits(uint256 wethAmount) external;
+    function claimExits() external;
     function pendingExitCount() external view returns (uint256);
     function claimableExits() external view returns (uint256);
 }
@@ -143,20 +145,37 @@ contract StrategyHandler is Test, StrategyRevertUtils {
 
         vm.startPrank(admin);
         if (IRevertAllowlistProvider(limitProvider).useAllocatorDeallocateUnwrapAndSwap()) {
-            IAllocator(allocator).deallocateWithUnwrapAndSwap(
-                address(strategy),
-                amount,
-                IRevertAllowlistProvider(limitProvider).allocatorDeallocateSwapData(amount),
-                IRevertAllowlistProvider(limitProvider).allocatorDeallocateMinIntermediateOut(amount)
-            );
+            try IAllocator(allocator)
+                .deallocateWithUnwrapAndSwap(
+                    address(strategy),
+                    amount,
+                    IRevertAllowlistProvider(limitProvider).allocatorDeallocateSwapData(amount),
+                    IRevertAllowlistProvider(limitProvider).allocatorDeallocateMinIntermediateOut(amount)
+                ) {
+                vm.stopPrank();
+            } catch (bytes memory errData) {
+                vm.stopPrank();
+                _revertUnlessWhitelisted(errData, _isWhitelistedRevert(_revertSelector(errData), RevertContext.HandlerDeallocate));
+                return;
+            }
         } else if (IRevertAllowlistProvider(limitProvider).useAllocatorDeallocateSwap()) {
-            IAllocator(allocator).deallocateWithSwap(
-                address(strategy), amount, IRevertAllowlistProvider(limitProvider).allocatorDeallocateSwapData(amount)
-            );
+            try IAllocator(allocator)
+                .deallocateWithSwap(address(strategy), amount, IRevertAllowlistProvider(limitProvider).allocatorDeallocateSwapData(amount)) {
+                vm.stopPrank();
+            } catch (bytes memory errData) {
+                vm.stopPrank();
+                _revertUnlessWhitelisted(errData, _isWhitelistedRevert(_revertSelector(errData), RevertContext.HandlerDeallocate));
+                return;
+            }
         } else {
-            IAllocator(allocator).deallocate(address(strategy), amount);
+            try IAllocator(allocator).deallocate(address(strategy), amount) {
+                vm.stopPrank();
+            } catch (bytes memory errData) {
+                vm.stopPrank();
+                _revertUnlessWhitelisted(errData, _isWhitelistedRevert(_revertSelector(errData), RevertContext.HandlerDeallocate));
+                return;
+            }
         }
-        vm.stopPrank();
 
         ghost_totalDeallocated += amount;
     }

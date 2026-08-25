@@ -72,8 +72,8 @@ interface IWeETH {
 contract EtherfiEETHMYTStrategy is MYTStrategy {
     uint256 internal constant BPS = 10_000;
     uint256 public constant MAX_GROSS_REDEEM_AMOUNT_BUFFER = 1e18;
-    uint256 public constant MAX_PENDING_HAIRCUT_BPS = 1_000;
-    uint256 public constant MAX_RATE_DROP_BPS = 5_000;
+    uint256 public constant MAX_PENDING_HAIRCUT_BPS = 1000;
+    uint256 public constant MAX_RATE_DROP_BPS = 5000;
 
     IDepositAdapter public immutable depositAdapter;
     IRedemptionManager public immutable redemptionManager;
@@ -97,7 +97,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     struct PendingExit {
         uint256 tokenId;
         uint96 shareOfEEth;
-        uint64 requestedAt;
     }
     PendingExit internal _pendingExit;
 
@@ -122,14 +121,9 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         _;
     }
 
-    constructor(
-        address _myt,
-        StrategyParams memory _params,
-        address _eETH,
-        address _weETH,
-        address _depositAdapter,
-        address _redemptionManager
-    ) MYTStrategy(_myt, _params) {
+    constructor(address _myt, StrategyParams memory _params, address _eETH, address _weETH, address _depositAdapter, address _redemptionManager)
+        MYTStrategy(_myt, _params)
+    {
         require(_eETH != address(0), "Zero eETH address");
         require(_weETH != address(0), "Zero weETH address");
         require(_depositAdapter != address(0), "Zero deposit adapter address");
@@ -140,8 +134,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         depositAdapter = IDepositAdapter(_depositAdapter);
         redemptionManager = IRedemptionManager(_redemptionManager);
     }
-
-    /* ========== ALLOCATION ========== */
 
     function _allocate(uint256 amount) internal override returns (uint256) {
         _checkRate();
@@ -165,8 +157,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         dexSwap(address(weETH), _asset(), amount, minWeEthOut, callData);
         return amount;
     }
-
-    /* ========== DEALLOCATION ========== */
 
     /// @notice Synchronous exit cascading idle WETH -> instant redemption ->
     ///         LP instant withdraw; reverts when instant capacity cannot cover `amount`.
@@ -250,8 +240,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         return amount;
     }
 
-    /* ========== ASYNC WITHDRAWALS ========== */
-
     /// @notice Unwrap weETH and enter the Ether.fi withdrawal queue; the minted
     ///         WithdrawRequestNFT is tracked until claimed. One exit at a time:
     ///         a finalized previous exit is auto-claimed first, an unfinalized
@@ -283,7 +271,7 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         require(request.isValid && request.shareOfEEth > 0, "Invalid withdraw request");
         shares = request.shareOfEEth;
 
-        _pendingExit = PendingExit({tokenId: tokenId, shareOfEEth: shares, requestedAt: uint64(block.timestamp)});
+        _pendingExit = PendingExit({tokenId: tokenId, shareOfEEth: shares});
 
         emit ExitRequested(tokenId, eEthToExit, shares);
     }
@@ -329,13 +317,10 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         return _claimExit();
     }
 
-    /* ========== VALUE ACCOUNTING ========== */
-
     /// @notice Idle WETH + loose eETH + weETH at the canonical rate + pending claim
     ///         (finalized at claimable amount, otherwise share value minus haircut).
     function _totalValue() internal view override returns (uint256) {
-        return _idleAssets() + eETH.balanceOf(address(this)) + weETH.getEETHByWeETH(weETH.balanceOf(address(this)))
-            + _pendingExitValue();
+        return _idleAssets() + eETH.balanceOf(address(this)) + weETH.getEETHByWeETH(weETH.balanceOf(address(this))) + _pendingExitValue();
     }
 
     function _idleAssets() internal view override returns (uint256) {
@@ -364,8 +349,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         uint256 fundableFromPosition = remaining <= positionValue ? remaining : positionValue;
         return fromIdle + (fundableFromPosition * (BPS - params.slippageBPS)) / BPS;
     }
-
-    /* ========== INTERNAL HELPERS ========== */
 
     function _asset() internal view returns (address) {
         return MYT.asset();
@@ -430,11 +413,7 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         rateCheckpoint = rate;
     }
 
-    function _redemptionInfo()
-        internal
-        view
-        returns (uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl)
-    {
+    function _redemptionInfo() internal view returns (uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl) {
         (, exitFeeSplitToTreasuryInBps, exitFeeInBps, lowWatermarkInBpsOfTvl) = redemptionManager.tokenToRedemptionInfo(ETH);
     }
 
@@ -473,8 +452,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         return (x * y + denominator - 1) / denominator;
     }
 
-    /* ========== VIEW FUNCTIONS ========== */
-
     /// @notice 0 or 1; feature-detection hook for handlers.
     function pendingExitCount() external view returns (uint256) {
         return _pendingExit.tokenId == 0 ? 0 : 1;
@@ -496,8 +473,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         return _withdrawRequestNFT().getClaimableAmount(tokenId);
     }
 
-    /* ========== HOOKS ========== */
-
     function _canForceDeallocate() internal view override returns (bool) {
         return canForceDeallocate;
     }
@@ -511,8 +486,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         require(msg.sender == address(_withdrawRequestNFT()), "Unexpected NFT sender");
         return this.onERC721Received.selector;
     }
-
-    /* ========== ADMIN FUNCTIONS ========== */
 
     function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
         canForceDeallocate = canForceDeallocate_;
