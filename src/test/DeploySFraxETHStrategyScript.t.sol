@@ -8,21 +8,9 @@ import {IMYTStrategy} from "../interfaces/IMYTStrategy.sol";
 import {AlchemistCurator} from "../AlchemistCurator.sol";
 import {SFraxETHStrategy} from "../strategies/SFraxETHStrategy.sol";
 import {TestERC20} from "./mocks/TestERC20.sol";
+import {MockSwapper} from "./mocks/MockSwapper.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
-
-contract MockOracleForSFraxETHDeployTest {
-    function decimals() external pure returns (uint8) {
-        return 18;
-    }
-}
-
-contract MockSwapperForSFraxETHDeployTest {
-    function swap(address from, address to, uint256 amountIn, uint256 amountOut) external {
-        require(IERC20(from).transferFrom(msg.sender, address(this), amountIn), "pull failed");
-        require(IERC20(to).transfer(msg.sender, amountOut), "push failed");
-    }
-}
 
 contract MockMYTForSFraxETHDeployTest {
     address public asset;
@@ -42,16 +30,15 @@ contract DeploySFraxETHStrategyScriptTest is Test {
     address internal constant MAINNET_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address internal constant MAINNET_FRXETH = 0x5E8422345238F34275888049021821E8E08CAa1f;
     address internal constant MAINNET_SFRXETH = 0xac3E018457B222d93114458476f3E3416Abbe38F;
+    address internal constant MAINNET_FRAX_REDEMPTION_QUEUE = 0x82bA8da44Cd5261762e629dd5c605b17715727bd;
     address internal constant CURATOR_ADDR = 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4;
     address internal constant ETH_MYT = 0x29bcfeD246ce37319d94eBa107db90C453D4c43D;
     address internal constant ETH_ALLOCATOR = 0x23a3C27Bb007887FD8CbfEaF323799093a450e7e;
     uint256 internal constant MAINNET_FORK_BLOCK = 24_980_826;
     uint256 internal constant ALLOCATION_AMOUNT = 10e18;
     uint256 internal constant DEALLOCATION_TARGET = 4e18;
-    uint256 internal constant MAX_ORACLE_STALENESS = 24 hours;
 
     DeploySFraxETHStrategyScript internal deployScript;
-    AlchemistCurator internal curator;
     TestERC20 internal assetToken;
     MockMYTForSFraxETHDeployTest internal myt;
 
@@ -59,14 +46,10 @@ contract DeploySFraxETHStrategyScriptTest is Test {
     address internal minter;
     address internal frxETH;
     address internal sfrxETH;
-    address internal frxEthEthDualOracle;
-
-    uint256 internal constant MIN_FRXETH_OUT_BPS = 9000;
+    address internal redemptionQueue;
 
     function setUp() public {
         deployScript = new DeploySFraxETHStrategyScript();
-        curator = new AlchemistCurator(address(deployScript), address(deployScript));
-
         assetToken = new TestERC20(1_000_000e18, 18);
         myt = new MockMYTForSFraxETHDeployTest(address(assetToken));
 
@@ -74,34 +57,29 @@ contract DeploySFraxETHStrategyScriptTest is Test {
         minter = makeAddr("minter");
         frxETH = makeAddr("frxETH");
         sfrxETH = makeAddr("sfrxETH");
-        frxEthEthDualOracle = makeAddr("frxEthEthDualOracle");
+        redemptionQueue = makeAddr("redemptionQueue");
     }
 
     function test_deploySFraxETHStrategy_setsCoreAddressesAndFloor() public {
-        DeploySFraxETHStrategyScript.SFraxETHDeployConfig memory config = DeploySFraxETHStrategyScript
-            .SFraxETHDeployConfig({
+        DeploySFraxETHStrategyScript.SFraxETHDeployConfig memory config = DeploySFraxETHStrategyScript.SFraxETHDeployConfig({
             myt: address(myt),
             minter: minter,
             frxETH: frxETH,
             sfrxETH: sfrxETH,
-            frxEthEthDualOracle: frxEthEthDualOracle,
-            minFrxEthOutBps: MIN_FRXETH_OUT_BPS,
-            maxOracleStaleness: MAX_ORACLE_STALENESS,
+            redemptionQueue: redemptionQueue,
             params: _buildParams("sfrxETH Mainnet", "Frax")
         });
 
-        address strategyAddr = deployScript.deploySFraxETHStrategy(curator, newOwner, config);
+        address strategyAddr = deployScript.deploySFraxETHStrategy(newOwner, config);
         SFraxETHStrategy strategy = SFraxETHStrategy(payable(strategyAddr));
 
         assertEq(address(strategy.MYT()), address(myt), "unexpected MYT address");
         assertEq(address(strategy.minter()), minter, "unexpected minter");
         assertEq(address(strategy.frxETH()), frxETH, "unexpected frxETH");
         assertEq(address(strategy.sfrxETH()), sfrxETH, "unexpected sfrxETH");
-        assertEq(strategy.minFrxEthOutBps(), MIN_FRXETH_OUT_BPS, "unexpected minFrxEthOutBps");
-        assertEq(strategy.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS, "unexpected max oracle staleness");
+        assertEq(address(strategy.redemptionQueue()), redemptionQueue, "unexpected redemption queue");
         assertEq(strategy.killSwitch(), true, "kill switch should be enabled");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
-        assertEq(curator.adapterToMYT(strategyAddr), address(0), "deploy script should not register with curator");
         (, string memory strategyName, string memory protocol,,,,,,) = strategy.params();
         assertEq(strategyName, "sfrxETH Mainnet", "unexpected strategy name");
         assertEq(protocol, "Frax", "unexpected protocol");
@@ -135,6 +113,7 @@ contract DeploySFraxETHStrategyScriptTest is Test {
         assertEq(vault.asset(), MAINNET_WETH, "unexpected MYT asset");
         assertEq(address(strategy.frxETH()), MAINNET_FRXETH, "unexpected frxETH");
         assertEq(address(strategy.sfrxETH()), MAINNET_SFRXETH, "unexpected sfrxETH");
+        assertEq(address(strategy.redemptionQueue()), MAINNET_FRAX_REDEMPTION_QUEUE, "unexpected redemption queue");
         assertEq(strategy.owner(), MAINNET_NEW_OWNER, "unexpected strategy owner");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled after deploy");
         assertTrue(vault.isAdapter(strategyAddr), "strategy not registered");
@@ -154,33 +133,26 @@ contract DeploySFraxETHStrategyScriptTest is Test {
         assertGt(strategyAssetsAfterAllocate, 0, "strategy did not receive assets");
         assertGt(vault.allocation(strategy.adapterId()), 0, "vault allocation not updated");
 
-        MockSwapperForSFraxETHDeployTest swapper = new MockSwapperForSFraxETHDeployTest();
+        MockSwapper swapper = new MockSwapper();
         deal(MAINNET_WETH, address(swapper), DEALLOCATION_TARGET);
 
         vm.prank(MAINNET_NEW_OWNER);
         strategy.setAllowanceHolder(address(swapper));
 
-        bytes memory txData =
-            abi.encodeCall(MockSwapperForSFraxETHDeployTest.swap, (MAINNET_FRXETH, MAINNET_WETH, DEALLOCATION_TARGET, DEALLOCATION_TARGET));
+        bytes memory txData = abi.encodeCall(MockSwapper.swap, (MAINNET_FRXETH, MAINNET_WETH, DEALLOCATION_TARGET, DEALLOCATION_TARGET));
 
         uint256 vaultWethBeforeDeallocate = IERC20(MAINNET_WETH).balanceOf(ETH_MYT);
         uint256 deallocationAmount = strategy.previewAdjustedWithdraw(DEALLOCATION_TARGET);
 
         vm.prank(DEPLOYER);
-        IAllocator(ETH_ALLOCATOR).deallocateWithUnwrapAndSwap(
-            strategyAddr, deallocationAmount, txData, DEALLOCATION_TARGET
-        );
+        IAllocator(ETH_ALLOCATOR).deallocateWithUnwrapAndSwap(strategyAddr, deallocationAmount, txData, DEALLOCATION_TARGET);
 
         assertLt(strategy.realAssets(), strategyAssetsAfterAllocate, "strategy assets should decrease");
         assertEq(IERC20(MAINNET_FRXETH).balanceOf(strategyAddr), 0, "strategy should not retain frxETH after swap");
         assertGt(IERC20(MAINNET_WETH).balanceOf(ETH_MYT), vaultWethBeforeDeallocate, "vault did not receive WETH back");
     }
 
-    function _buildParams(string memory name, string memory protocol)
-        internal
-        view
-        returns (IMYTStrategy.StrategyParams memory)
-    {
+    function _buildParams(string memory name, string memory protocol) internal view returns (IMYTStrategy.StrategyParams memory) {
         return IMYTStrategy.StrategyParams({
             owner: address(deployScript),
             name: name,
