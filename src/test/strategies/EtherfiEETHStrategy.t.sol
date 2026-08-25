@@ -2,7 +2,9 @@
 pragma solidity 0.8.28;
 
 import {BaseStrategyTest} from "../BaseStrategyTest.sol";
-import {RevertContext} from "../base/StrategyTypes.sol";
+import {RevertContext, RevertSelectors} from "../base/StrategyTypes.sol";
+import {E2EInvariantStrategyTest} from "../base/E2EInvariantStrategyTest.sol";
+import {MockSwapper} from "../mocks/MockSwapper.sol";
 import {EtherfiEETHMYTStrategy, IWeETH} from "../../strategies/EtherfiEETHStrategy.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
@@ -34,15 +36,6 @@ contract ChainlinkPriceHelper {
     /// @dev weETH -> WETH valuation exactly as the old strategy computed it.
     function weEthToWeth(uint256 weEthAmount) external view returns (uint256) {
         return (weEthAmount * oracleAnswer()) / 1e18;
-    }
-}
-
-contract MockSwapper {
-    function swap(address from, address to, uint256 amountIn, uint256 amountOut) external {
-        (bool pullOk,) = from.call(abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(this), amountIn));
-        require(pullOk, "pull failed");
-        (bool pushOk,) = to.call(abi.encodeWithSelector(IERC20.transfer.selector, msg.sender, amountOut));
-        require(pushOk, "push failed");
     }
 }
 
@@ -95,12 +88,7 @@ contract MockFeeRedemptionManager {
     function tokenToRedemptionInfo(address token)
         external
         view
-        returns (
-            RedemptionLimit memory limit,
-            uint16 exitFeeSplitToTreasuryInBps,
-            uint16 exitFeeInBps,
-            uint16 lowWatermarkInBpsOfTvl
-        )
+        returns (RedemptionLimit memory limit, uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl)
     {
         if (token != ETH) {
             return (limit, 0, 0, 0);
@@ -234,11 +222,7 @@ contract MockWithdrawRequestNFT {
         return _requests[tokenId].amountOfEEth;
     }
 
-    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient)
-        external
-        onlyLiquidityPool
-        returns (uint256)
-    {
+    function requestWithdraw(uint96 amountOfEEth, uint96 shareOfEEth, address recipient) external onlyLiquidityPool returns (uint256) {
         uint256 requestId = nextRequestId++;
         _requests[requestId] = WithdrawRequest({amountOfEEth: amountOfEEth, shareOfEEth: shareOfEEth, isValid: true, feeGwei: 0});
         _ownerOf[requestId] = recipient;
@@ -506,14 +490,13 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
     /// @notice Max allowed canonical-vs-Chainlink divergence for parity assertions.
     uint256 public constant MAX_DIVERGENCE_BPS = 100;
     uint256 public constant TEST_RESIDUAL_TOLERANCE_BPS = 100;
-    bytes4 internal constant ERROR_STRING_SELECTOR = 0x08c379a0;
 
     /// @dev Instant-capacity exhaustion string reverts are tolerated in fuzz/handler flows.
     function isProtocolRevertAllowed(bytes4 selector, RevertContext context) external pure override returns (bool) {
-        bool isFuzzOrHandler = context == RevertContext.HandlerAllocate || context == RevertContext.HandlerDeallocate
-            || context == RevertContext.FuzzAllocate || context == RevertContext.FuzzDeallocate;
+        bool isFuzzOrHandler = context == RevertContext.HandlerAllocate || context == RevertContext.HandlerDeallocate || context == RevertContext.FuzzAllocate
+            || context == RevertContext.FuzzDeallocate;
         if (!isFuzzOrHandler) return false;
-        return selector == ERROR_STRING_SELECTOR;
+        return selector == RevertSelectors.ERROR_STRING;
     }
 
     /// @notice Fork impersonation target authorized to finalize withdrawal requests.
@@ -536,8 +519,6 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         deal(WEETH, address(swapper), 1_000_000e18);
     }
 
-    /* ================= CONFIG HOOKS ================= */
-
     function getStrategyConfig() internal pure override returns (IMYTStrategy.StrategyParams memory) {
         return IMYTStrategy.StrategyParams({
             owner: address(1),
@@ -553,13 +534,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
     }
 
     function getTestConfig() internal pure override returns (TestConfig memory) {
-        return TestConfig({
-            vaultAsset: WETH,
-            vaultInitialDeposit: 1000e18,
-            absoluteCap: 2_000_000e18,
-            relativeCap: 1e18,
-            decimals: 18
-        });
+        return TestConfig({vaultAsset: WETH, vaultInitialDeposit: 1000e18, absoluteCap: 2_000_000e18, relativeCap: 1e18, decimals: 18});
     }
 
     function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
@@ -567,14 +542,12 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {
-        return 24595012;
+        return 24_595_012;
     }
 
     function getRpcUrl() internal view override returns (string memory) {
         return vm.envString("MAINNET_RPC_URL");
     }
-
-    /* ================= ORACLE PARITY ================= */
 
     /// @notice Canonical pricing must stay within MAX_DIVERGENCE_BPS of Chainlink at the fork state.
     function test_pricing_parity_canonical_vs_chainlink_fork() public view {
@@ -602,8 +575,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
     /// @notice The helper rejects stale feed data.
     function test_parity_helper_reverts_on_stale_feed() public {
         ChainlinkPriceHelper helper = new ChainlinkPriceHelper(WEETH_ETH_ORACLE, MAX_ORACLE_STALENESS);
-        (uint80 roundId, int256 answer, uint256 startedAt,, uint80 answeredInRound) =
-            AggregatorV3Interface(WEETH_ETH_ORACLE).latestRoundData();
+        (uint80 roundId, int256 answer, uint256 startedAt,, uint80 answeredInRound) = AggregatorV3Interface(WEETH_ETH_ORACLE).latestRoundData();
         vm.mockCall(
             WEETH_ETH_ORACLE,
             abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
@@ -613,8 +585,6 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         helper.oracleAnswer();
         vm.clearMockedCalls();
     }
-
-    /* ================= CANONICAL PRICING / RATE GUARD ================= */
 
     function test_rate_checkpoint_advances_on_allocation() public {
         vm.startPrank(vault);
@@ -626,8 +596,6 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         assertGt(checkpoint, 0, "checkpoint should be recorded");
         assertApproxEqRel(checkpoint, IWeETH(WEETH).getEETHByWeETH(1e18), 1e12, "checkpoint should track canonical rate");
     }
-
-    /* ================= SYNC DEALLOCATE CASCADE (FORK) ================= */
 
     function test_deallocate_direct_uses_instant_redeem_path_cant_redeem() public {
         uint256 allocateAmount = 1e18;
@@ -716,14 +684,8 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
     function test_deallocate_direct_cascades_to_liquidity_pool_withdraw() public {
         // Mock env with redemption drained but the LP instant withdraw leg open.
         MockEtherfiEnvironment env = mockEnv;
-        EtherfiEETHMYTStrategy localStrategy = new MockEtherfiEETHStrategy(
-            vault,
-            strategyConfig,
-            env.eETH(),
-            env.weETH(),
-            env.depositAdapter(),
-            env.redemptionManager()
-        );
+        EtherfiEETHMYTStrategy localStrategy =
+            new MockEtherfiEETHStrategy(vault, strategyConfig, env.eETH(), env.weETH(), env.depositAdapter(), env.redemptionManager());
 
         uint256 allocateAmount = 5e18;
         vm.startPrank(vault);
@@ -744,14 +706,8 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
 
     function test_deallocate_direct_reverts_when_all_instant_legs_exhausted() public {
         MockEtherfiEnvironment env = mockEnv;
-        EtherfiEETHMYTStrategy localStrategy = new MockEtherfiEETHStrategy(
-            vault,
-            strategyConfig,
-            env.eETH(),
-            env.weETH(),
-            env.depositAdapter(),
-            env.redemptionManager()
-        );
+        EtherfiEETHMYTStrategy localStrategy =
+            new MockEtherfiEETHStrategy(vault, strategyConfig, env.eETH(), env.weETH(), env.depositAdapter(), env.redemptionManager());
 
         uint256 allocateAmount = 5e18;
         // pool admin is the test; close the LP leg before the prank
@@ -771,8 +727,6 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.stopPrank();
     }
 
-    /* ================= SWAP ROUTES (CANONICAL FLOORS) ================= */
-
     function test_allocate_swap_mock_success() public {
         uint256 amount = 10e18;
         // canonical floor: minWeETH = WETH * (1-slippage) converted at canonical rate (up-rounded)
@@ -780,8 +734,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         bytes memory callData = abi.encodeCall(MockSwapper.swap, (WETH, WEETH, amount, minWeEthOut));
 
         IMYTStrategy.SwapParams memory sp = IMYTStrategy.SwapParams({txData: callData, minIntermediateOut: 0});
-        IMYTStrategy.VaultAdapterParams memory vp =
-            IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: sp});
+        IMYTStrategy.VaultAdapterParams memory vp = IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: sp});
 
         vm.startPrank(vault);
         deal(WETH, strategy, amount);
@@ -799,8 +752,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         bytes memory callData = abi.encodeCall(MockSwapper.swap, (WETH, WEETH, amount, insufficientOut));
 
         IMYTStrategy.SwapParams memory sp = IMYTStrategy.SwapParams({txData: callData, minIntermediateOut: 0});
-        IMYTStrategy.VaultAdapterParams memory vp =
-            IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: sp});
+        IMYTStrategy.VaultAdapterParams memory vp = IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: sp});
 
         vm.startPrank(vault);
         deal(WETH, strategy, amount);
@@ -812,10 +764,8 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
     }
 
     function getDeallocateVaultParams(uint256 assets) internal view override returns (bytes memory) {
-        IMYTStrategy.SwapParams memory sp =
-            IMYTStrategy.SwapParams({txData: _swapCallDataForWethOut(assets), minIntermediateOut: 0});
-        IMYTStrategy.VaultAdapterParams memory vp =
-            IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: sp});
+        IMYTStrategy.SwapParams memory sp = IMYTStrategy.SwapParams({txData: _swapCallDataForWethOut(assets), minIntermediateOut: 0});
+        IMYTStrategy.VaultAdapterParams memory vp = IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: sp});
         return abi.encode(vp);
     }
 
@@ -847,8 +797,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         deal(WETH, address(swapper), deallocAmount);
         bytes memory callData = _swapCallDataForWethOut(deallocAmount);
         IMYTStrategy.SwapParams memory sp = IMYTStrategy.SwapParams({txData: callData, minIntermediateOut: 0});
-        IMYTStrategy.VaultAdapterParams memory vp =
-            IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: sp});
+        IMYTStrategy.VaultAdapterParams memory vp = IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: sp});
         bytes memory deallocParams = abi.encode(vp);
 
         vm.startPrank(vault);
@@ -877,8 +826,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         deal(WETH, address(swapper), insufficientOut);
         bytes memory callData = abi.encodeCall(MockSwapper.swap, (WEETH, WETH, sellAmount, insufficientOut));
         IMYTStrategy.SwapParams memory sp = IMYTStrategy.SwapParams({txData: callData, minIntermediateOut: 0});
-        IMYTStrategy.VaultAdapterParams memory vp =
-            IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: sp});
+        IMYTStrategy.VaultAdapterParams memory vp = IMYTStrategy.VaultAdapterParams({action: IMYTStrategy.ActionType.swap, swapParams: sp});
         bytes memory deallocParams = abi.encode(vp);
 
         vm.startPrank(vault);
@@ -887,13 +835,9 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.stopPrank();
     }
 
-    /* ================= ASYNC LIFECYCLE (MOCK ENV) ================= */
-
     function _deployMockStrategy() internal returns (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) {
         env = mockEnv;
-        localStrategy = new MockEtherfiEETHStrategy(
-            vault, strategyConfig, env.eETH(), env.weETH(), env.depositAdapter(), env.redemptionManager()
-        );
+        localStrategy = new MockEtherfiEETHStrategy(vault, strategyConfig, env.eETH(), env.weETH(), env.depositAdapter(), env.redemptionManager());
     }
 
     function _mockAllocate(EtherfiEETHMYTStrategy localStrategy, uint256 amount) internal {
@@ -1075,8 +1019,6 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         assertApproxEqRel(afterClaim, afterFinalize, 1e15, "claim should be value-neutral");
     }
 
-    /* ================= RATE GUARD ================= */
-
     function test_rate_guard_trips_kill_switch_on_rate_drop() public {
         (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) = _deployMockStrategy();
         _mockAllocate(localStrategy, 10e18);
@@ -1099,8 +1041,6 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         IMYTStrategy(address(localStrategy)).deallocate(abi.encode(directDealloc), 1e18, "", address(vault));
     }
 
-    /* ================= PROTECTED TOKENS ================= */
-
     function test_rescue_blocks_protected_tokens() public {
         (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) = _deployMockStrategy();
         _mockAllocate(localStrategy, 5e18);
@@ -1116,8 +1056,6 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         }
         vm.stopPrank();
     }
-
-    /* ================= HELPERS ================= */
 
     receive() external payable {}
 
@@ -1149,13 +1087,8 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         return (maxGrossDeallocate * (10_000 - exitFeeInBps)) / 10_000;
     }
 
-    function _redemptionInfo(address manager)
-        internal
-        view
-        returns (uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl)
-    {
-        (, exitFeeSplitToTreasuryInBps, exitFeeInBps, lowWatermarkInBpsOfTvl) =
-            IRedemptionManagerView(manager).tokenToRedemptionInfo(ETH);
+    function _redemptionInfo(address manager) internal view returns (uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl) {
+        (, exitFeeSplitToTreasuryInBps, exitFeeInBps, lowWatermarkInBpsOfTvl) = IRedemptionManagerView(manager).tokenToRedemptionInfo(ETH);
     }
 
     function _swapCallDataForWethOut(uint256 wethOut) internal view returns (bytes memory) {
@@ -1221,10 +1154,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         _allocateMultipleTimes(rawAmounts);
     }
 
-    function test_fuzz_deallocate_direct_uses_instant_redeem_path_can_redeem(
-        uint256[] memory rawAllocateAmounts,
-        uint256 rawDeallocateAmount
-    ) public {
+    function test_fuzz_deallocate_direct_uses_instant_redeem_path_can_redeem(uint256[] memory rawAllocateAmounts, uint256 rawDeallocateAmount) public {
         _allocateMultipleTimes(rawAllocateAmounts);
 
         uint256 maxDeallocate = _maxNetDirectDeallocate(REDEMPTION_MANAGER);
@@ -1238,11 +1168,15 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         directDealloc.action = IMYTStrategy.ActionType.direct;
         bytes memory deallocParams = abi.encode(directDealloc);
         vm.startPrank(vault);
-        try IMYTStrategy(strategy).deallocate(deallocParams, deallocateAmount, "", address(vault)) {} catch {
+        try IMYTStrategy(strategy).deallocate(deallocParams, deallocateAmount, "", address(vault)) {
             vm.stopPrank();
-            return;
+            assertGe(IERC20(WETH).balanceOf(strategy), deallocateAmount, "instant legs should cover deallocation");
+        } catch (bytes memory errData) {
+            vm.stopPrank();
+            // Only tolerated failure: the closed-form bound overshoots instant capacity
+            // by fee/rounding dust. Anything else is a real regression.
+            require(errorStringEquals(errData, "Insufficient WETH available"), "unexpected deallocate revert");
         }
-        vm.stopPrank();
     }
 
     function getDirectAllocateVaultParams(uint256) internal view virtual returns (bytes memory) {
@@ -1344,10 +1278,98 @@ interface IRedemptionManagerView {
     function tokenToRedemptionInfo(address token)
         external
         view
-        returns (
-            RedemptionLimit memory limit,
-            uint16 exitFeeSplitToTreasuryInBps,
-            uint16 exitFeeInBps,
-            uint16 lowWatermarkInBpsOfTvl
-        );
+        returns (RedemptionLimit memory limit, uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl);
+}
+
+/// @notice E2E invariant suite against the real Ether.fi protocol on a pinned mainnet fork.
+contract EtherfiEETHInvariantTest is E2EInvariantStrategyTest {
+    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address public constant WEETH = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
+    address public constant EETH = 0x35fA164735182de50811E8e2E824cFb9B6118ac2;
+    address public constant DEPOSIT_ADAPTER = 0xcfC6d9Bd7411962Bfe7145451A7EF71A24b6A7A2;
+    address public constant REDEMPTION_MANAGER = 0xDadEf1fFBFeaAB4f68A9fD181395F68b4e4E7Ae0;
+    /// @dev Holds WITHDRAW_REQUEST_NFT_ADMIN_ROLE at the fork block.
+    address public constant ETHERFI_WITHDRAW_ADMIN = 0x0EF8fa4760Db8f5Cd4d993f3e3416f30f942D705;
+
+    function getRpcUrl() internal override returns (string memory) {
+        return vm.envString("MAINNET_RPC_URL");
+    }
+
+    function getForkBlockNumber() internal pure override returns (uint256) {
+        return 24_595_012;
+    }
+
+    function getAsset() internal pure override returns (address) {
+        return WETH;
+    }
+
+    function getRealStrategyParams() internal pure override returns (IMYTStrategy.StrategyParams memory) {
+        return IMYTStrategy.StrategyParams({
+            owner: address(0),
+            name: "Ether.fi Mainnet weETH",
+            protocol: "Ether.fi",
+            riskClass: IMYTStrategy.RiskClass.MEDIUM,
+            cap: 5000e18,
+            globalCap: 0.3e18,
+            estimatedYield: 500,
+            additionalIncentives: false,
+            slippageBPS: 125
+        });
+    }
+
+    function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
+        return address(new EtherfiEETHMYTStrategy(vault_, params, EETH, WEETH, DEPOSIT_ADAPTER, REDEMPTION_MANAGER));
+    }
+
+    /// @dev Requires instant-redemption capacity invisible to the handler's static bounds.
+    function _realStrategySupportsForceDeallocate() internal pure override returns (bool) {
+        return false;
+    }
+
+    /// @dev Burn weETH worth `amount` (asset-denominated) to simulate a value loss.
+    function onSimulateValueLoss(address strategy, uint256 amount) external override {
+        uint256 balance = IWeETH(WEETH).balanceOf(strategy);
+        if (balance == 0) return;
+        uint256 shares = IWeETH(WEETH).getWeETHByeETH(amount);
+        if (shares > balance) shares = balance;
+        vm.prank(strategy);
+        IERC20(WEETH).transfer(address(0xdead), shares);
+    }
+
+    function _realStrategySupportsAsyncExit() internal pure override returns (bool) {
+        return true;
+    }
+
+    /// @dev Simulates Ether.fi operators finalizing the request and funding the payout.
+    /// @dev Simulates Ether.fi operators: finalize the request and re-earmark LP liquidity
+    ///      (`ethAmountLockedForWithdrawal` is consumed by every claim and never refilled
+    ///      on the static fork). The LP pays claims from its own ETH balance.
+    function onBeforeAsyncClaim(address strategy) external override {
+        uint256 tokenId = EtherfiEETHMYTStrategy(payable(strategy)).pendingExit().tokenId;
+        IE2ERedemptionManager rm = IE2ERedemptionManager(REDEMPTION_MANAGER);
+        IE2ELiquidityPool lp = IE2ELiquidityPool(rm.liquidityPool());
+        IE2EWithdrawRequestNFT wrn = IE2EWithdrawRequestNFT(lp.withdrawRequestNFT());
+        if (!wrn.isFinalized(tokenId)) {
+            vm.prank(ETHERFI_WITHDRAW_ADMIN);
+            wrn.finalizeRequests(tokenId);
+        }
+        uint256 claimable = wrn.getClaimableAmount(tokenId);
+        vm.prank(ETHERFI_WITHDRAW_ADMIN);
+        lp.addEthAmountLockedForWithdrawal(uint128(claimable + 1e18));
+    }
+}
+
+interface IE2ERedemptionManager {
+    function liquidityPool() external view returns (address);
+}
+
+interface IE2ELiquidityPool {
+    function withdrawRequestNFT() external view returns (address);
+    function addEthAmountLockedForWithdrawal(uint128) external;
+}
+
+interface IE2EWithdrawRequestNFT {
+    function isFinalized(uint256) external view returns (bool);
+    function finalizeRequests(uint256) external;
+    function getClaimableAmount(uint256) external view returns (uint256);
 }

@@ -20,14 +20,17 @@ import {ITestYieldToken} from "../../interfaces/test/ITestYieldToken.sol";
 import {MockYieldToken} from "../mocks/MockYieldToken.sol";
 import {TokenUtils} from "../../libraries/TokenUtils.sol";
 import {AlchemistNFTHelper} from "../libraries/AlchemistNFTHelper.sol";
+import {StrategyRevertUtils} from "./StrategyRevertUtils.sol";
+import {IAsyncExitStrategy} from "./StrategyHandler.sol";
 
 interface IStrategySimulationProvider {
     function onSimulateYield(address strategy, uint256 amount) external;
     function onSimulateValueLoss(address strategy, uint256 amount) external;
+    /// @dev Prepare the strategy's pending queue exit for claiming (finalization, queue funding).
+    function onBeforeAsyncClaim(address strategy) external;
 }
 
-contract E2EStrategyHandler is Test {
-
+contract E2EStrategyHandler is Test, StrategyRevertUtils {
     IVaultV2 public vault;
     address public allocator;
     address public classifier;
@@ -66,6 +69,8 @@ contract E2EStrategyHandler is Test {
     uint256 public ghost_totalCollateralDeposited;
     uint256 public ghost_totalDebtMinted;
     uint256 public ghost_totalDebtRepaid;
+    uint256 public ghost_asyncExitsRequested;
+    uint256 public ghost_asyncExitsClaimed;
     mapping(uint8 => uint256) public ghost_liquidityAdapterBypass;
 
     mapping(bytes4 => uint256) public calls;
@@ -120,7 +125,7 @@ contract E2EStrategyHandler is Test {
         mockStrategyB = p.mockStrategyB;
         mockYieldTokenA = p.mockYieldTokenA;
         mockYieldTokenB = p.mockYieldTokenB;
-        
+
         forceDeallocateEnabled[p.mockStrategyA] = true;
         forceDeallocateEnabled[p.mockStrategyB] = true;
     }
@@ -325,10 +330,14 @@ contract E2EStrategyHandler is Test {
         uint256[] memory snap = _snapshotAllocations();
 
         vm.prank(_pickAllocatorCaller());
-        IAllocator(allocator).deallocate(strategy, preview);
-        executed[selector]++;
-
-        _recordAllocationDeltas(snap);
+        // Async strategies revert "Insufficient WETH available" beyond instant capacity; rethrow anything else.
+        try IAllocator(allocator).deallocate(strategy, preview) {
+            executed[selector]++;
+            _recordAllocationDeltas(snap);
+        } catch (bytes memory errData) {
+            _revertUnlessWhitelisted(errData, errorStringEquals(errData, "Insufficient WETH available"));
+            skips[selector]++;
+        }
     }
 
     function deallocateAll(uint256 strategyIndexSeed) external countCall(this.deallocateAll.selector) {
@@ -355,10 +364,87 @@ contract E2EStrategyHandler is Test {
         uint256[] memory snap = _snapshotAllocations();
 
         vm.prank(_pickAllocatorCaller());
-        IAllocator(allocator).deallocate(strategy, preview);
-        executed[selector]++;
+        try IAllocator(allocator).deallocate(strategy, preview) {
+            executed[selector]++;
+            _recordAllocationDeltas(snap);
+        } catch (bytes memory errData) {
+            _revertUnlessWhitelisted(errData, errorStringEquals(errData, "Insufficient WETH available"));
+            skips[selector]++;
+        }
+    }
 
-        _recordAllocationDeltas(snap);
+    /// @notice Async action: request a withdrawal-queue exit on a strategy that supports one.
+    function requestAsyncExit(uint256 strategyIndexSeed, uint256 amountSeed) external countCall(this.requestAsyncExit.selector) {
+        bytes4 selector = this.requestAsyncExit.selector;
+        address strategy = _pickAsyncStrategy(strategyIndexSeed);
+        if (strategy == address(0)) {
+            skips[selector]++;
+            return;
+        }
+        IAsyncExitStrategy asyncStrategy = IAsyncExitStrategy(strategy);
+
+        // one exit at a time
+        if (asyncStrategy.pendingExitCount() != 0) {
+            skips[selector]++;
+            return;
+        }
+
+        // position value excluding idle; no pending exit exists here
+        uint256 idle = IERC20(asset).balanceOf(strategy);
+        uint256 realAssets = IMYTStrategy(strategy).realAssets();
+        uint256 positionValue = realAssets > idle ? realAssets - idle : 0;
+        if (positionValue < MIN_ALLOCATE) {
+            skips[selector]++;
+            return;
+        }
+
+        uint256 amount = bound(amountSeed, MIN_ALLOCATE, positionValue);
+
+        vm.prank(admin);
+        try asyncStrategy.requestExits(amount) {
+            executed[selector]++;
+            ghost_asyncExitsRequested++;
+        } catch (bytes memory errData) {
+            // tolerated: position entirely in the loose intermediate token (eETH/frxETH)
+            _revertUnlessWhitelisted(errData, errorStringEquals(errData, "No weETH available") || errorStringEquals(errData, "No sfrxETH available"));
+            skips[selector]++;
+        }
+    }
+
+    /// @notice Async action: claim a matured/finalized queue exit. Permissionless.
+    function claimAsyncExits(uint256 strategyIndexSeed) external countCall(this.claimAsyncExits.selector) {
+        bytes4 selector = this.claimAsyncExits.selector;
+        address strategy = _pickAsyncStrategy(strategyIndexSeed);
+        if (strategy == address(0)) {
+            skips[selector]++;
+            return;
+        }
+        IAsyncExitStrategy asyncStrategy = IAsyncExitStrategy(strategy);
+
+        if (asyncStrategy.pendingExitCount() == 0) {
+            skips[selector]++;
+            return;
+        }
+
+        // protocol-side claim preparation (finalization, queue funding); no-op by default
+        if (simulator != address(0)) IStrategySimulationProvider(simulator).onBeforeAsyncClaim(strategy);
+
+        if (asyncStrategy.claimableExits() == 0) {
+            skips[selector]++;
+            return;
+        }
+
+        asyncStrategy.claimExits();
+        executed[selector]++;
+        ghost_asyncExitsClaimed++;
+    }
+
+    function _pickAsyncStrategy(uint256 seed) internal view returns (address strategy) {
+        uint256 len = strategies.length;
+        if (len == 0) return address(0);
+        strategy = strategies[seed % len];
+        (bool supported,) = strategy.staticcall(abi.encodeWithSignature("pendingExitCount()"));
+        if (!supported) return address(0);
     }
 
     /// strategies that have force-deallocate enabled
@@ -573,10 +659,8 @@ contract E2EStrategyHandler is Test {
             firstTotalAssets = totalAssets;
         }
 
-        uint256 allocatorRelativeCapValue =
-            relativeCap == type(uint256).max ? type(uint256).max : (totalAssets * relativeCap) / 1e18;
-        uint256 vaultRelativeCapValue =
-            relativeCap == type(uint256).max ? type(uint256).max : (firstTotalAssets * relativeCap) / 1e18;
+        uint256 allocatorRelativeCapValue = relativeCap == type(uint256).max ? type(uint256).max : (totalAssets * relativeCap) / 1e18;
+        uint256 vaultRelativeCapValue = relativeCap == type(uint256).max ? type(uint256).max : (firstTotalAssets * relativeCap) / 1e18;
         uint256 relativeLimit = allocatorRelativeCapValue < vaultRelativeCapValue ? allocatorRelativeCapValue : vaultRelativeCapValue;
         uint256 hardLimit = absoluteCap < relativeLimit ? absoluteCap : relativeLimit;
 
@@ -818,7 +902,6 @@ contract E2EStrategyHandler is Test {
         if (absoluteCap == 0) return (false, 0);
         if (currentAllocation >= absoluteCap) return (false, 0);
 
-
         uint8 riskLevel = AlchemistStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
         uint256 globalRiskHeadroom = _remainingGlobalRiskHeadroom(riskLevel);
         if (globalRiskHeadroom < MIN_ALLOCATE) return (false, 0);
@@ -1056,6 +1139,8 @@ contract E2EStrategyHandler is Test {
         console.log("allocate:      ", calls[this.allocate.selector]);
         console.log("deallocate:    ", calls[this.deallocate.selector]);
         console.log("deallocateAll: ", calls[this.deallocateAll.selector]);
+        console.log("reqAsyncExit:  ", calls[this.requestAsyncExit.selector]);
+        console.log("claimAsync:    ", calls[this.claimAsyncExits.selector]);
         console.log("forceDealloc:  ", calls[this.forceDeallocate.selector]);
         console.log("reclassify:    ", calls[this.reclassifyStrategy.selector]);
         console.log("modifyCaps:    ", calls[this.modifyRiskClassCaps.selector]);
