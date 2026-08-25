@@ -3,6 +3,13 @@ pragma solidity 0.8.28;
 
 /// @notice Shared type definitions for the base strategy testing stack.
 /// @dev Keep enums/interfaces used across setup, ops, handler, and strategy-specific tests here.
+
+/// @notice Common revert selectors shared across strategy tests.
+library RevertSelectors {
+    /// @dev `Error(string)` revert prefix.
+    bytes4 internal constant ERROR_STRING = 0x08c379a0;
+}
+
 enum RevertContext {
     HandlerAllocate,
     HandlerDeallocate,
