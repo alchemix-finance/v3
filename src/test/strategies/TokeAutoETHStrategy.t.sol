@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 // Adjust these imports to your layout
 
-import {TokeAutoStrategy, TokeRedeemParams, TokeSwapRoute} from "../../strategies/TokeAutoStrategy.sol";
+import {IERC4626Like, TokeAutoStrategy, TokeRedeemParams, TokeSwapRoute} from "../../strategies/TokeAutoStrategy.sol";
 import {BaseStrategyTest, RevertContext} from "../BaseStrategyTest.sol";
 import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
@@ -174,7 +174,9 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
     }
 
     function createStrategy(address vault, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
-        return address(new MockTokeAutoEthStrategy(vault, params, TOKE_AUTO_ETH_VAULT, REWARDER, WETH, TOKE, AUTOPILOT_ROUTER));
+        address strat = address(new MockTokeAutoEthStrategy(vault, params, TOKE_AUTO_ETH_VAULT, REWARDER, WETH, TOKE, AUTOPILOT_ROUTER));
+        _mockFreshDebtReport(block.timestamp);
+        return strat;
     }
 
     function getForkBlockNumber() internal pure override returns (uint256) {
@@ -185,8 +187,17 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
         return vm.envString("MAINNET_RPC_URL");
     }
 
-    function _beforeTimeShift(uint256) internal override {
-        // Keep Tokemak oracle reads fresh across synthetic time warps.
+    function _mockFreshDebtReport(uint256 timestamp) internal {
+        vm.mockCall(
+            TOKE_AUTO_ETH_VAULT,
+            abi.encodeWithSelector(IERC4626Like.oldestDebtReporting.selector),
+            abi.encode(timestamp)
+        );
+    }
+
+    function _beforeTimeShift(uint256 targetTimestamp) internal override {
+        // Keep Tokemak debt reporting and oracle reads fresh across synthetic time warps.
+        _mockFreshDebtReport(targetTimestamp);
         // Use live-like mainnet values captured via Tenderly RPC.
         uint256 mockedEthPrice = 1_108_368_970_000_000_000;
         uint256 mockedCeilingPrice = 1_006_112_990_447_894_840;

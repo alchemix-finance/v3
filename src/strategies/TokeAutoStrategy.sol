@@ -21,6 +21,9 @@ interface IERC4626Like is IERC4626 {
 
     function totalAssets(TotalAssetPurpose purpose) external view returns (uint256);
 
+    /// @notice Timestamp of the oldest destination debt report.
+    function oldestDebtReporting() external view returns (uint256);
+
     enum Rounding {
         Down, // Toward negative infinity
         Up, // Toward infinity
@@ -84,6 +87,12 @@ contract TokeAutoStrategy is MYTStrategy {
     uint256 public constant DEFAULT_EXEC_TOLERANCE_BPS = 25;
     /// @dev Hard upper bound for the configurable execution tolerance (mirrors slippage cap).
     uint256 internal constant MAX_EXEC_TOLERANCE_BPS = 650;
+    /// @dev Tokemak: do not consume dest reports older than 1 day.
+    uint256 public constant MAX_DEBT_REPORT_AGE = 1 days;
+    /// @dev Default Deposit vs Withdraw purpose-spread ceiling. Honest is ~1 bp; PoC was ~2,720 bps.
+    uint256 public constant DEFAULT_MAX_NAV_SPREAD_BPS = 100;
+    /// @dev Owner can widen up to 100% to force mark-to-market if a real dest failure keeps spread elevated.
+    uint256 internal constant MAX_NAV_SPREAD_BPS_CAP = BASIS_POINTS;
 
     IERC20 public immutable mytAsset;
     IERC4626Like public immutable autoVault;
@@ -95,8 +104,16 @@ contract TokeAutoStrategy is MYTStrategy {
     /// @notice Per-redeem execution slippage tolerance (bps) for the direct deallocation path.
     /// Set at construction and tunable by the owner via {setExecToleranceBps}.
     uint256 public execToleranceBps;
+    /// @notice Max allowed |Deposit − Withdraw| / Withdraw (bps) for a report to be usable in {_totalValue}.
+    /// @dev Defaults to {DEFAULT_MAX_NAV_SPREAD_BPS}; owner-tunable via {setMaxNavSpreadBps}.
+    uint256 public maxNavSpreadBps;
+    /// @notice Last usable Withdraw-purpose price per autoVault share, scaled by {FIXED_POINT_SCALAR}.
+    /// @dev Snapshotted on allocate/deallocate while the report is usable. Fallback valuation is
+    /// `shares * lastGoodSharePrice / FIXED_POINT_SCALAR` so share-count changes do not double-count idle.
+    uint256 public lastGoodSharePrice;
 
     event ExecToleranceBpsUpdated(uint256 newExecToleranceBps);
+    event MaxNavSpreadBpsUpdated(uint256 newMaxNavSpreadBps);
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
 
     constructor(
@@ -120,6 +137,7 @@ contract TokeAutoStrategy is MYTStrategy {
         tokeRewardsToken = _tokeRewardsToken;
         autopilotRouter = IAutopilotRouterWithRoutes(_autopilotRouter);
         execToleranceBps = _execToleranceBps;
+        maxNavSpreadBps = DEFAULT_MAX_NAV_SPREAD_BPS;
     }
 
     /// @notice Update the per-redeem execution slippage tolerance for the direct deallocation path.
@@ -127,6 +145,15 @@ contract TokeAutoStrategy is MYTStrategy {
         require(newExecToleranceBps < MAX_EXEC_TOLERANCE_BPS, "Exec tolerance too high");
         execToleranceBps = newExecToleranceBps;
         emit ExecToleranceBpsUpdated(newExecToleranceBps);
+    }
+
+    /// @notice Update the Deposit/Withdraw purpose-spread ceiling used by {_reportUsable}.
+    /// @dev Widen toward {MAX_NAV_SPREAD_BPS_CAP} to force live Withdraw NAV after a real dest
+    /// insolvency that keeps purpose spread elevated; keep tight in normal operation.
+    function setMaxNavSpreadBps(uint256 newMaxNavSpreadBps) external onlyOwner {
+        require(newMaxNavSpreadBps <= MAX_NAV_SPREAD_BPS_CAP, "Nav spread too high");
+        maxNavSpreadBps = newMaxNavSpreadBps;
+        emit MaxNavSpreadBpsUpdated(newMaxNavSpreadBps);
     }
 
     function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
@@ -150,6 +177,7 @@ contract TokeAutoStrategy is MYTStrategy {
 
         TokenUtils.safeApprove(address(autoVault), address(rewarder), shares);
         rewarder.stake(address(this), shares);
+        _snapshotSharePrice();
         return assetsReceived;
     }
 
@@ -159,37 +187,44 @@ contract TokeAutoStrategy is MYTStrategy {
             TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
             return amount;
         }
+        return _deallocateFromVault(amount, assetBalance);
+    }
 
+    function _deallocateFromVault(uint256 amount, uint256 assetBalance) internal returns (uint256) {
         uint256 shortfall = amount - assetBalance;
-        // Over-redeem only by the real execution tolerance (not the user-facing slippageBPS,
-        // which is already applied once on the request side in `_previewAdjustedWithdraw`).
-        uint256 tolerance = execToleranceBps;
-        uint256 maxAssetIn = (shortfall * BASIS_POINTS + (BASIS_POINTS - tolerance) - 1)
-            / (BASIS_POINTS - tolerance);
-        uint256 totalAssetsForWithdraw = autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
-        uint256 totalSupply = autoVault.totalSupply();
-        uint256 sharesNeeded = autoVault.convertToShares(
-            maxAssetIn,
-            totalAssetsForWithdraw,
-            totalSupply,
-            IERC4626Like.Rounding.Up
-        );
+        uint256 sharesNeeded;
+        uint256 minOut;
+        {
+            // Over-redeem only by the real execution tolerance (not the user-facing slippageBPS,
+            // which is already applied once on the request side in `_previewAdjustedWithdraw`).
+            uint256 tolerance = execToleranceBps;
+            uint256 maxAssetIn = (shortfall * BASIS_POINTS + (BASIS_POINTS - tolerance) - 1)
+                / (BASIS_POINTS - tolerance);
+            uint256 totalAssetsForWithdraw = autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
+            uint256 totalSupply = autoVault.totalSupply();
+            sharesNeeded = autoVault.convertToShares(
+                maxAssetIn,
+                totalAssetsForWithdraw,
+                totalSupply,
+                IERC4626Like.Rounding.Up
+            );
 
-        uint256 directShares = autoVault.balanceOf(address(this));
-        uint256 totalSharesAvailable = directShares + rewarder.balanceOf(address(this));
-        sharesNeeded = Math.max(sharesNeeded, MIN_SHARES);
-        if (sharesNeeded > totalSharesAvailable) sharesNeeded = totalSharesAvailable;
-        require(sharesNeeded > 0, "No shares available");
+            uint256 directShares = autoVault.balanceOf(address(this));
+            uint256 totalSharesAvailable = directShares + rewarder.balanceOf(address(this));
+            sharesNeeded = Math.max(sharesNeeded, MIN_SHARES);
+            if (sharesNeeded > totalSharesAvailable) sharesNeeded = totalSharesAvailable;
+            require(sharesNeeded > 0, "No shares available");
 
-        // Anchor the redeem floor to the NAV of the shares actually being burned, minus the
-        // execution tolerance. This bounds the worst-case loss to ~EXEC_TOLERANCE_BPS of NAV,
-        // regardless of how much `shortfall` differs from that NAV.
-        uint256 expectedAssets = _redeemableAssets(sharesNeeded);
-        require(expectedAssets > 0, "Zero redeemable assets");
-        uint256 minOut = Math.max(shortfall, expectedAssets * (BASIS_POINTS - tolerance) / BASIS_POINTS);
+            // Anchor the redeem floor to the NAV of the shares actually being burned, minus the
+            // execution tolerance. This bounds the worst-case loss to ~EXEC_TOLERANCE_BPS of NAV,
+            // regardless of how much `shortfall` differs from that NAV.
+            uint256 expectedAssets = _redeemableAssets(sharesNeeded);
+            require(expectedAssets > 0, "Zero redeemable assets");
+            minOut = Math.max(shortfall, expectedAssets * (BASIS_POINTS - tolerance) / BASIS_POINTS);
 
-        if (sharesNeeded > directShares) {
-            rewarder.withdraw(address(this), sharesNeeded - directShares, false);
+            if (sharesNeeded > directShares) {
+                rewarder.withdraw(address(this), sharesNeeded - directShares, false);
+            }
         }
 
         require(autoVault.balanceOf(address(this)) >= sharesNeeded, "Insufficient unstaked shares");
@@ -203,6 +238,7 @@ contract TokeAutoStrategy is MYTStrategy {
         require(pulled >= shortfall, "Insufficient redeem output");
         require(TokenUtils.safeBalanceOf(address(mytAsset), address(this)) >= amount, "Withdraw amount insufficient");
         TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
+        _snapshotSharePrice();
         return amount;
     }
 
@@ -260,20 +296,39 @@ contract TokeAutoStrategy is MYTStrategy {
         require(received >= shortfall, "Insufficient redeem output");
         require(TokenUtils.safeBalanceOf(address(mytAsset), address(this)) >= amount, "Withdraw amount insufficient");
         TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
+        _snapshotSharePrice();
         return amount;
     }
-        
-    function _totalValue() internal view virtual override returns (uint256) {
-        uint256 shares = rewarder.balanceOf(address(this)) + autoVault.balanceOf(address(this));
-        if (shares == 0) return _idleAssets();
 
-        uint256 assets = autoVault.convertToAssets(
-            shares,
-            autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw),
-            autoVault.totalSupply(),
-            IERC4626Like.Rounding.Down
-        );
-        return _idleAssets() + assets;
+    function _totalValue() internal view virtual override returns (uint256) {
+        uint256 idle = _idleAssets();
+        uint256 shares = rewarder.balanceOf(address(this)) + autoVault.balanceOf(address(this));
+        if (shares == 0) return idle;
+        if (_reportUsable()) return idle + _shareValue(shares);
+        return idle + shares.mulDiv(lastGoodSharePrice, FIXED_POINT_SCALAR);
+    }
+
+    function _snapshotSharePrice() internal {
+        if (!_reportUsable()) return;
+        uint256 shares = rewarder.balanceOf(address(this)) + autoVault.balanceOf(address(this));
+        if (shares == 0) return;
+        lastGoodSharePrice = _shareValue(shares).mulDiv(FIXED_POINT_SCALAR, shares);
+    }
+
+    function _shareValue(uint256 shares) internal view returns (uint256) {
+        if (shares == 0) return 0;
+        return _redeemableAssets(shares);
+    }
+
+    function _reportUsable() internal view returns (bool) {
+        uint256 oldest = autoVault.oldestDebtReporting();
+        if (oldest > block.timestamp || block.timestamp - oldest > MAX_DEBT_REPORT_AGE) return false;
+
+        uint256 depositNAV = autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Deposit);
+        uint256 withdrawNAV = autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
+        if (withdrawNAV == 0) return false;
+        uint256 diff = depositNAV > withdrawNAV ? depositNAV - withdrawNAV : withdrawNAV - depositNAV;
+        return diff * BASIS_POINTS / withdrawNAV <= maxNavSpreadBps;
     }
 
     function _idleAssets() internal view virtual override returns (uint256) {
