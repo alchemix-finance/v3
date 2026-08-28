@@ -14,7 +14,7 @@ interface AlAsset {
 }
 
 contract DeployV3BaseAlUSDbScript is Script {
-    address deployerAddr = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // FIXME anvil #0
+    address deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
 
     address public newOwner = 0x24E9cbB9DdDa1247ae4b4eEEE3C569A2190ac401;
 
@@ -35,6 +35,7 @@ contract DeployV3BaseAlUSDbScript is Script {
         alAssetProxy.grantRole(alAssetProxy.ADMIN_ROLE(), newOwner);
         alAssetProxy.grantRole(alAssetProxy.SENTINEL_ROLE(), newOwner);
         alAssetProxy.mint(newOwner, 10 * 1e18);
+        alAssetProxy.setWhitelist(deployerAddr, false);
         alAssetProxy.transferOwnership(newOwner);
         return address(alAssetProxy);
     }
@@ -45,6 +46,12 @@ contract DeployV3BaseAlUSDbScript is Script {
         // Deploy alAsset
         alUSDb = deployAlAsset("Alchemic USD Base", "alUSDb");
 
+        CrossChainCanonicalAlchemicTokenV3 token = CrossChainCanonicalAlchemicTokenV3(alUSDb);
+        require(token.hasRole(token.ADMIN_ROLE(), newOwner));
+        require(token.hasRole(token.SENTINEL_ROLE(), newOwner));
+        token.renounceRole(token.ADMIN_ROLE(), deployerAddr);
+        token.renounceRole(token.SENTINEL_ROLE(), deployerAddr);
+
         vm.stopBroadcast();
 
         // Output deployment addresses
@@ -52,11 +59,18 @@ contract DeployV3BaseAlUSDbScript is Script {
 
         console.log("----------- IMPORTANT -----------");
         console.log("- Run DeployV3Base with ALUSDB_ADDRESS set to the address above!");
-        console.log("- Deployer intentionally keeps ADMIN_ROLE and mint whitelist for the handoff in DeployV3Base!");
+        console.log("- Multisig must grantRole(ADMIN_ROLE, deployer) on alUSDb before running DeployV3Base!");
+        console.log("- Multisig must accept pending admin on alchemist, transmuter, curator and allocator after DeployV3Base!");
 
+        require(keccak256(abi.encodePacked(token.name())) == keccak256("Alchemic USD Base"));
+        require(keccak256(abi.encodePacked(token.symbol())) == keccak256("alUSDb"));
         require(Ownable(alUSDb).owner() == newOwner);
-        require(IERC20(alUSDb).balanceOf(newOwner) == 10 * 1e18);
-        require(AlAsset(alUSDb).whitelisted(deployerAddr));
+        require(IERC20(alUSDb).balanceOf(newOwner) == 10 * 1e18); // must match mint amount
+        require(token.hasRole(token.ADMIN_ROLE(), newOwner));
+        require(token.hasRole(token.SENTINEL_ROLE(), newOwner));
         require(AlAsset(alUSDb).whitelisted(newOwner));
+        require(!AlAsset(alUSDb).whitelisted(deployerAddr));
+        require(!token.hasRole(token.ADMIN_ROLE(), deployerAddr));
+        require(!token.hasRole(token.SENTINEL_ROLE(), deployerAddr));
     }
 }

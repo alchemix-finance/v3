@@ -30,18 +30,18 @@ interface AlAsset {
 }
 
 contract DeployV3BaseScript is Script {
-    address deployerAddr = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // FIXME anvil #0
+    address deployerAddr = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // FIXME
 
-    address public USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address public USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // native USDC on Base
     address public alUSDb;
 
     // Fee and receiver addresses
-    address public receiver = 0x24E9cbB9DdDa1247ae4b4eEEE3C569A2190ac401;
     address public protocolFeeReceiver = 0x24E9cbB9DdDa1247ae4b4eEEE3C569A2190ac401;
 
     // Contract addresses
-    address public vaultAdmin = 0x24E9cbB9DdDa1247ae4b4eEEE3C569A2190ac401;
     address public newOwner = 0x24E9cbB9DdDa1247ae4b4eEEE3C569A2190ac401;
+
+    uint256 public expectedMint;
 
     // Vault and factory
     VaultV2Factory public vaultFactory;
@@ -153,11 +153,15 @@ contract DeployV3BaseScript is Script {
     }
 
     function run() public {
-        // Requires the alUSDb deployed by DeployV3BaseAlUSDb
+        // Requires the alUSDb deployed by DeployV3BaseAlUSDb and ADMIN_ROLE granted back to the deployer by the multisig
         alUSDb = vm.envAddress("ALUSDB_ADDRESS");
         require(alUSDb != address(0));
+        require(alUSDb.code.length > 0);
+        CrossChainCanonicalAlchemicTokenV3 token = CrossChainCanonicalAlchemicTokenV3(alUSDb);
+        require(keccak256(abi.encodePacked(token.symbol())) == keccak256("alUSDb"));
         require(Ownable(alUSDb).owner() == newOwner);
-        require(AlAsset(alUSDb).whitelisted(deployerAddr));
+        require(token.hasRole(token.ADMIN_ROLE(), deployerAddr));
+        expectedMint = vm.envOr("ALUSDB_INITIAL_MINT", uint256(1e9 * 1e18)); // FIXME must match DeployV3BaseAlUSDb mint amount
 
         vm.startBroadcast(deployerAddr);
 
@@ -238,9 +242,25 @@ contract DeployV3BaseScript is Script {
         require(usdcAllocator.pendingAdmin() == newOwner);
         require(usdcVault.maxRate() == 3170979198);
         require(usdcVault.owner() == newOwner);
+        require(usdcVault.curator() == address(curator));
+        require(usdcVault.isAllocator(address(usdcAllocator)));
+        require(usdcAlchemist.debtToken() == alUSDb);
+        require(usdcAlchemist.underlyingToken() == USDC);
+        require(usdcAlchemist.myt() == address(usdcVault));
+        require(usdcAlchemist.transmuter() == address(usdcTransmuter));
+        require(usdcAlchemist.alchemistPositionNFT() != address(0));
+        require(usdcAlchemist.alchemistFeeVault() != address(0));
+        require(address(usdcTransmuter.alchemist()) == address(usdcAlchemist));
+        require(usdcTransmuter.syntheticToken() == alUSDb);
+        require(AlchemistV3Position(usdcAlchemist.alchemistPositionNFT()).admin() == newOwner);
+        require(AlchemistTokenVault(usdcAlchemist.alchemistFeeVault()).authorized(address(usdcAlchemist)));
+        require(Ownable(usdcAlchemist.alchemistFeeVault()).owner() == newOwner);
+        require(usdcRouter.alchemist() == address(usdcAlchemist));
         require(Ownable(alUSDb).owner() == newOwner);
-        require(IERC20(alUSDb).balanceOf(newOwner) == 10 * 1e18);
+        require(IERC20(alUSDb).balanceOf(newOwner) == expectedMint);
         require(AlAsset(alUSDb).whitelisted(address(usdcAlchemist)));
         require(!AlAsset(alUSDb).whitelisted(deployerAddr));
+        require(!token.hasRole(token.ADMIN_ROLE(), deployerAddr));
+        require(!token.hasRole(token.SENTINEL_ROLE(), deployerAddr));
     }
 }
