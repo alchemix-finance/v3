@@ -662,7 +662,8 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
         if (liveEarmarked != 0 && amount != 0) {
             // ratioWanted = (liveEarmarked - amount) / liveEarmarked in Q128.128
-            uint256 ratioWanted = (amount == liveEarmarked) ? 0 : FixedPointMath.divQ128(liveEarmarked - amount, liveEarmarked);
+            uint256 remaining = liveEarmarked - amount;
+            uint256 ratioWanted = (remaining <= 5_256_001) ? 0 : FixedPointMath.divQ128(remaining, liveEarmarked);
 
             // Snapshot old packed
             uint256 packedOld = _redemptionWeight;
@@ -671,7 +672,6 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
             // Normalize uninitialized / zero index
             if (packedOld == 0) {
-                oldEpoch = 0;
                 oldIndex = ONE_Q128;
             }
             if (oldIndex == 0) {
@@ -702,6 +702,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             // Derive effective redeemed amount using the SAME applied ratio
             uint256 remainingEarmarked = FixedPointMath.mulQ128(liveEarmarked, ratioApplied);
             effectiveRedeemed = liveEarmarked - remainingEarmarked;
+            if (amount > effectiveRedeemed + 5_256_001) revert IllegalState();
 
             cumulativeEarmarked = remainingEarmarked;
             totalDebt -= effectiveRedeemed;
@@ -759,6 +760,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
         if(repaidDebtInYield > 0) {
             // Forward repaid collateral to the transmuter.
+            _syncEarmarkedTransmuterTransfer(repaidDebtInYield, 0);
             TokenUtils.safeTransfer(myt, transmuter, repaidDebtInYield);
         }
 
@@ -824,35 +826,18 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
     ///@inheritdoc IAlchemistV3Actions
     function setTransmuterTokenBalance(uint256 amount) external onlyTransmuter {
-        uint256 last = lastTransmuterTokenBalance;
-
-        // If balance went down, assume cover could have been spent and reduce it conservatively.
-        if (amount < last) {
-            uint256 spent = last - amount;
-            uint256 cover = _pendingCoverShares;
-
-            if (spent >= cover) {
-                _pendingCoverShares = 0;
-            } else {
-                _pendingCoverShares = cover - spent;
-            }
+        if (amount > lastTransmuterTokenBalance) {
+            _pendingCoverShares += amount - lastTransmuterTokenBalance;
         }
 
-        // Always keep cover <= actual transmuter balance.
-        if (_pendingCoverShares > amount) {
-            _pendingCoverShares = amount;
-        }
-
-        // Update baseline
         lastTransmuterTokenBalance = amount;
     }
 
-    /// @dev Keeps already-earmarked transfers from being re-counted as future cover.
+    /// @dev Tracks transmuter inflows so earmarked shares bypass cover and the remainder becomes live cover.
     function _syncEarmarkedTransmuterTransfer(uint256 sharesSent, uint256 earmarkedShares) internal {
-        if (earmarkedShares == 0) return;
-
-        // Only the portion that satisfied an existing earmark should bypass cover accounting.
-        if (sharesSent > earmarkedShares) sharesSent = earmarkedShares;
+        if (sharesSent > earmarkedShares) {
+            _pendingCoverShares += sharesSent - earmarkedShares;
+        }
         lastTransmuterTokenBalance += sharesSent;
     }
 
@@ -1228,7 +1213,10 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         }
 
         // Route seized collateral net of liquidator fee to the transmuter.
-        TokenUtils.safeTransfer(myt, transmuter, netToTransmuter);
+        if (netToTransmuter > 0) {
+            _syncEarmarkedTransmuterTransfer(netToTransmuter, 0);
+            TokenUtils.safeTransfer(myt, transmuter, netToTransmuter);
+        }
 
         // Pay the liquidator from MYT if available, otherwise fall back to the fee vault.
         if (feeInYield > 0) {
@@ -1842,7 +1830,6 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         oldIndex = packedOld & _EARMARK_INDEX_MASK;
 
         if (packedOld == 0) {
-            oldEpoch = 0;
             oldIndex = ONE_Q128;
         }
         if (oldIndex == 0) {
@@ -1879,7 +1866,6 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     }
 
 }
-
 
 
 
