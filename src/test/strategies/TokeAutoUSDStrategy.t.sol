@@ -386,6 +386,130 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
         assertGt(real, idle, "must not collapse share value to idle");
     }
 
+    /// @notice reportUsable() must mirror the internal gate across fresh, stale, and wide-spread states.
+    function test_reportUsable_view_reflectsGateStates() public {
+        TokeAutoStrategy strat = TokeAutoStrategy(strategy);
+        assertTrue(strat.reportUsable(), "fresh report should be usable");
+
+        _mockStaleDebtReport();
+        assertFalse(strat.reportUsable(), "stale report should be unusable");
+
+        _mockFreshDebtReport(block.timestamp);
+        assertTrue(strat.reportUsable(), "refreshed report should recover");
+
+        uint256 fairWithdraw = IERC4626Like(TOKE_AUTO_USD_VAULT).totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
+        uint256 lowWithdraw = fairWithdraw / 2;
+        uint256 highDeposit = lowWithdraw + (lowWithdraw * 2720) / 10_000;
+        _mockPurposeNav(highDeposit, lowWithdraw);
+        assertFalse(strat.reportUsable(), "wide purpose spread should be unusable");
+    }
+
+    /// @notice Every lastGoodSharePrice write path (allocate, deallocate, owner snapshot, forceMarkDown)
+    /// must stamp lastSnapshotAt so ops can alert on a stale fallback mark.
+    function test_lastSnapshotAt_writtenOnAllUpdatePaths() public {
+        TokeAutoStrategy strat = TokeAutoStrategy(strategy);
+        assertEq(strat.lastSnapshotAt(), 0, "precondition: no snapshot yet");
+
+        // Owner seed path.
+        vm.prank(address(1));
+        strat.snapshotSharePrice();
+        uint256 t1 = strat.lastSnapshotAt();
+        assertEq(t1, block.timestamp, "owner snapshot should stamp timestamp");
+
+        // Allocate path.
+        vm.warp(block.timestamp + 1 hours);
+        _mockFreshDebtReport(block.timestamp);
+        bytes memory params = getVaultParams();
+        vm.startPrank(vault);
+        deal(USDC, strategy, 100e6);
+        IMYTStrategy(strategy).allocate(params, 100e6, "", address(vault));
+        vm.stopPrank();
+        uint256 t2 = strat.lastSnapshotAt();
+        assertEq(t2, block.timestamp, "usable allocate should stamp timestamp");
+        assertGt(t2, t1, "allocate stamp should advance");
+
+        // Deallocate path.
+        vm.warp(block.timestamp + 1 hours);
+        _mockFreshDebtReport(block.timestamp);
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(params, 50e6, "", address(vault));
+        uint256 t3 = strat.lastSnapshotAt();
+        assertEq(t3, block.timestamp, "usable deallocate should stamp timestamp");
+
+        // Unusable flows must not stamp.
+        vm.warp(block.timestamp + 1 hours);
+        _mockStaleDebtReport();
+        vm.startPrank(vault);
+        deal(USDC, strategy, 100e6);
+        IMYTStrategy(strategy).allocate(params, 100e6, "", address(vault));
+        vm.stopPrank();
+        assertEq(strat.lastSnapshotAt(), t3, "unusable allocate must not stamp timestamp");
+
+        // forceMarkDown path stamps even while unusable.
+        uint256 pps = strat.lastGoodSharePrice();
+        vm.prank(address(1));
+        strat.forceMarkDown(pps - 1);
+        assertEq(strat.lastSnapshotAt(), block.timestamp, "forceMarkDown should stamp timestamp");
+    }
+
+    /// @notice forceMarkDown lowers the frozen mark during an unusable window and realAssets follows;
+    /// it can never raise the mark, set it to zero, or be called by a non-owner.
+    function test_forceMarkDown_lowersFrozenMark_and_enforcesMonotonicDecrease() public {
+        TokeAutoStrategy strat = TokeAutoStrategy(strategy);
+        bytes memory params = getVaultParams();
+        uint256 amountToAllocate = 100e6;
+
+        vm.startPrank(vault);
+        deal(USDC, strategy, amountToAllocate);
+        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
+        vm.stopPrank();
+
+        uint256 pps = strat.lastGoodSharePrice();
+        assertGt(pps, 0, "usable allocate should snapshot share price");
+
+        // Keeper outage: reads freeze at last-good PPS.
+        _mockStaleDebtReport();
+        uint256 frozenBefore = IMYTStrategy(strategy).realAssets();
+        assertEq(frozenBefore, _expectedFrozenRealAssets(), "stale report should freeze at last-good");
+
+        // Non-owner cannot force.
+        vm.prank(address(2));
+        vm.expectRevert();
+        strat.forceMarkDown(pps / 2);
+
+        // Cannot raise the mark or zero it.
+        vm.prank(address(1));
+        vm.expectRevert(bytes("Mark can only decrease"));
+        strat.forceMarkDown(pps + 1);
+        vm.prank(address(1));
+        vm.expectRevert(bytes("Zero share price"));
+        strat.forceMarkDown(0);
+
+        // Owner recognizes a 50% loss while the cached NAV is stale.
+        uint256 markedDown = pps / 2;
+        vm.expectEmit(true, true, true, true, strategy);
+        emit TokeAutoStrategy.LastGoodSharePriceForcedDown(markedDown);
+        vm.prank(address(1));
+        strat.forceMarkDown(markedDown);
+
+        assertEq(strat.lastGoodSharePrice(), markedDown, "mark should be lowered");
+        uint256 frozenAfter = IMYTStrategy(strategy).realAssets();
+        assertEq(frozenAfter, _expectedFrozenRealAssets(), "realAssets should track the lowered mark");
+        assertLt(frozenAfter, frozenBefore, "lowered mark should reduce frozen realAssets");
+
+        // previewAdjustedWithdraw sizes off the lowered mark too.
+        uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(frozenAfter);
+        uint256 shares = _strategyShares();
+        uint256 sharesNeeded = Math.mulDiv(frozenAfter, MYTStrategy(strategy).FIXED_POINT_SCALAR(), markedDown, Math.Rounding.Ceil);
+        if (sharesNeeded > shares) sharesNeeded = shares;
+        uint256 expectedAssets = Math.mulDiv(sharesNeeded, markedDown, MYTStrategy(strategy).FIXED_POINT_SCALAR());
+        assertEq(
+            preview,
+            expectedAssets - (expectedAssets * strategyConfig.slippageBPS / 10_000),
+            "preview must use the lowered mark"
+        );
+    }
+
     /// @notice previewAdjustedWithdraw must size off last-good PPS when the report is unusable,
     /// not off a depressed live Withdraw NAV.
     function test_unusableReport_previewAdjustedWithdraw_usesLastGoodSharePrice() public {

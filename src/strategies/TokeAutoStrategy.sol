@@ -68,7 +68,7 @@ interface IAutopilotRouterWithRoutes {
 
 /**
  * @title TokeAutoStrategy
- * @notice Generic Tokemak auto-vault strategy with rewarder staking.
+ * @notice Generic Tokemak auto vault strategy with rewarder staking.
  */
 contract TokeAutoStrategy is MYTStrategy {
     using Math for uint256;
@@ -76,14 +76,11 @@ contract TokeAutoStrategy is MYTStrategy {
     uint256 internal constant BASIS_POINTS = 10_000;
     /// @dev Minimum shares to ensure possibleAssets > 0 in TokeAutoETH.redeem
     uint256 internal constant MIN_SHARES = 1e15;
-    /// @dev Per-redeem execution slippage tolerance for the direct path. This is the REAL
+    /// @dev Per redeem execution slippage tolerance for the direct path. This is the REAL
     /// round-trip cost of redeeming from the autoVault (queue + destination swaps), NOT the
     /// user-facing `params.slippageBPS` haircut. It bounds both the share over-redeem and the
     /// NAV-anchored output floor, so the worst-case loss on a direct deallocation is
     /// ~execToleranceBps of the NAV of the shares actually burned.
-    /// @dev Empirical basis (wstETH-backed autoETH autopool, mainnet): honest direct redeems cost
-    /// ~0–4.5 bps for sizes up to 1,500 WETH across ~4 weeks of blocks; 25 bps gives ~5x headroom.
-    /// Re-validate before reusing on a thinner or less tightly-pegged autopool.
     uint256 public constant DEFAULT_EXEC_TOLERANCE_BPS = 25;
     /// @dev Hard upper bound for the configurable execution tolerance (mirrors slippage cap).
     uint256 internal constant MAX_EXEC_TOLERANCE_BPS = 650;
@@ -111,11 +108,15 @@ contract TokeAutoStrategy is MYTStrategy {
     /// @dev Snapshotted on allocate/deallocate while the report is usable. Fallback valuation is
     /// `shares * lastGoodSharePrice / FIXED_POINT_SCALAR` so share-count changes do not double-count idle.
     uint256 public lastGoodSharePrice;
+    /// @notice Timestamp of the last {lastGoodSharePrice} write (any path). Lets ops alert on a
+    /// fallback mark older than N days and see how stale a frozen valuation is.
+    uint256 public lastSnapshotAt;
 
     event ExecToleranceBpsUpdated(uint256 newExecToleranceBps);
     event MaxNavSpreadBpsUpdated(uint256 newMaxNavSpreadBps);
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
     event LastGoodSharePriceUpdated(uint256 lastGoodSharePrice);
+    event LastGoodSharePriceForcedDown(uint256 lastGoodSharePrice);
 
     constructor(
         address _myt,
@@ -141,16 +142,14 @@ contract TokeAutoStrategy is MYTStrategy {
         maxNavSpreadBps = DEFAULT_MAX_NAV_SPREAD_BPS;
     }
 
-    /// @notice Update the per-redeem execution slippage tolerance for the direct deallocation path.
+    /// @notice Update the per redeem execution slippage tolerance for the direct deallocation path.
     function setExecToleranceBps(uint256 newExecToleranceBps) external onlyOwner {
         require(newExecToleranceBps < MAX_EXEC_TOLERANCE_BPS, "Exec tolerance too high");
         execToleranceBps = newExecToleranceBps;
         emit ExecToleranceBpsUpdated(newExecToleranceBps);
     }
 
-    /// @notice Update the Deposit/Withdraw purpose-spread ceiling used by {_reportUsable}.
-    /// @dev Widen toward {MAX_NAV_SPREAD_BPS_CAP} to force live Withdraw NAV after a real dest
-    /// insolvency that keeps purpose spread elevated; keep tight in normal operation.
+    /// @notice Update the Deposit/Withdraw purpose spread ceiling used by _reportUsable.
     function setMaxNavSpreadBps(uint256 newMaxNavSpreadBps) external onlyOwner {
         require(newMaxNavSpreadBps <= MAX_NAV_SPREAD_BPS_CAP, "Nav spread too high");
         maxNavSpreadBps = newMaxNavSpreadBps;
@@ -163,15 +162,29 @@ contract TokeAutoStrategy is MYTStrategy {
     }
 
     /// @notice Snapshot Withdraw PPS into {lastGoodSharePrice} while the report is usable.
-    /// @dev Same write as allocate/deallocate. Call after deploy (before killSwitch / ownership
-    /// transfer) so a later unusable first allocate does not freeze at 0. Does not accept an
-    /// arbitrary price.
+    /// @dev Same write as allocate/deallocate.
     function snapshotSharePrice() external onlyOwner {
         require(_reportUsable(), "Report not usable");
         uint256 unit = _snapshotUnit();
         require(unit > 0, "No snapshot unit");
         lastGoodSharePrice = _shareValue(unit).mulDiv(FIXED_POINT_SCALAR, unit);
+        lastSnapshotAt = block.timestamp;
         emit LastGoodSharePriceUpdated(lastGoodSharePrice);
+    }
+
+    /// @notice Owner override to lower {lastGoodSharePrice} 
+    /// and mark to real value in case of genuine losses during an unsusable state.
+    function forceMarkDown(uint256 newSharePrice) external onlyOwner {
+        require(newSharePrice > 0, "Zero share price");
+        require(newSharePrice <= lastGoodSharePrice, "Mark can only decrease");
+        lastGoodSharePrice = newSharePrice;
+        lastSnapshotAt = block.timestamp;
+        emit LastGoodSharePriceForcedDown(newSharePrice);
+    }
+
+    /// @notice True when valuation consumes live Withdraw NAV; false when frozen at {lastGoodSharePrice}.
+    function reportUsable() external view returns (bool) {
+        return _reportUsable();
     }
 
     function _allocate(uint256 amount) internal virtual override returns (uint256) {
@@ -208,7 +221,7 @@ contract TokeAutoStrategy is MYTStrategy {
         uint256 sharesNeeded;
         uint256 minOut;
         {
-            // Over-redeem only by the real execution tolerance (not the user-facing slippageBPS,
+            // Over redeem only by the real execution tolerance (not the user-facing slippageBPS,
             // which is already applied once on the request side in `_previewAdjustedWithdraw`).
             uint256 tolerance = execToleranceBps;
             uint256 maxAssetIn = (shortfall * BASIS_POINTS + (BASIS_POINTS - tolerance) - 1)
@@ -326,10 +339,9 @@ contract TokeAutoStrategy is MYTStrategy {
         uint256 unit = _snapshotUnit();
         if (unit == 0) return;
         lastGoodSharePrice = _shareValue(unit).mulDiv(FIXED_POINT_SCALAR, unit);
+        lastSnapshotAt = block.timestamp;
     }
 
-    /// @dev Prefer this adapter's shares so PPS matches the position; otherwise a 1-share
-    /// vault unit so deploy can seed before the first allocate.
     function _snapshotUnit() internal view returns (uint256) {
         uint256 shares = rewarder.balanceOf(address(this)) + autoVault.balanceOf(address(this));
         if (shares > 0) return shares;
@@ -356,11 +368,8 @@ contract TokeAutoStrategy is MYTStrategy {
         return TokenUtils.safeBalanceOf(address(mytAsset), address(this));
     }
 
-    /// @notice Live Withdraw-purpose NAV of `shares` per the autoVault's own accounting.
-    /// @dev Anchors redeem *execution* floors to the cached Withdraw mark of the shares being burned.
-    /// This is a Tokemak debt-report cache, not a live AMM-resistant floor: a sandwiched
-    /// `updateDebtReporting` can move it. `{_totalValue}` and `{_previewAdjustedWithdraw}` consume
-    /// it only when `{_reportUsable}` is true.
+    /// @notice Live Withdraw purpose NAV of shares per the autoVault's own accounting.
+    /// @dev Anchors redeem (execution) floors to the cached withdraw mark of the shares being burned.
     function _redeemableAssets(uint256 shares) internal view returns (uint256) {
         return autoVault.convertToAssets(
             shares,
