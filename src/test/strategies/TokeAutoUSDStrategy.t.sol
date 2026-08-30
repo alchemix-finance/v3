@@ -354,6 +354,90 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
         assertEq(TokeAutoStrategy(strategy).lastGoodSharePrice(), pps, "unusable deallocate must not refresh PPS");
     }
 
+    /// @notice Owner seed before the first allocate: if that allocate lands in an unusable window,
+    /// realAssets must mark the new shares at the seeded PPS instead of collapsing to idle.
+    function test_seededSnapshot_unusableFirstAllocate_doesNotCollapseToIdle() public {
+        TokeAutoStrategy strat = TokeAutoStrategy(strategy);
+        assertEq(strat.lastGoodSharePrice(), 0, "precondition: cold start");
+        assertEq(_strategyShares(), 0, "precondition: no shares before first allocate");
+
+        vm.prank(address(1));
+        strat.snapshotSharePrice();
+
+        uint256 pps = strat.lastGoodSharePrice();
+        assertGt(pps, 0, "owner snapshot should seed PPS before allocate");
+
+        _mockStaleDebtReport();
+
+        bytes memory params = getVaultParams();
+        uint256 amountToAllocate = 100e6;
+        vm.startPrank(vault);
+        deal(USDC, strategy, amountToAllocate);
+        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
+        vm.stopPrank();
+
+        uint256 shares = _strategyShares();
+        uint256 idle = IERC20(USDC).balanceOf(strategy);
+        uint256 real = IMYTStrategy(strategy).realAssets();
+
+        assertGt(shares, 0, "allocate should mint shares");
+        assertEq(strat.lastGoodSharePrice(), pps, "unusable first allocate must not refresh PPS");
+        assertEq(real, _expectedFrozenRealAssets(), "seeded PPS should mark the new shares");
+        assertGt(real, idle, "must not collapse share value to idle");
+    }
+
+    /// @notice previewAdjustedWithdraw must size off last-good PPS when the report is unusable,
+    /// not off a depressed live Withdraw NAV.
+    function test_unusableReport_previewAdjustedWithdraw_usesLastGoodSharePrice() public {
+        bytes memory params = getVaultParams();
+        uint256 amountToAllocate = 100e6;
+
+        vm.startPrank(vault);
+        deal(USDC, strategy, amountToAllocate);
+        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
+        vm.stopPrank();
+
+        uint256 pps = TokeAutoStrategy(strategy).lastGoodSharePrice();
+        uint256 shares = _strategyShares();
+        uint256 fairReal = IMYTStrategy(strategy).realAssets();
+        assertGt(pps, 0, "usable allocate should snapshot share price");
+        assertGt(fairReal, 0, "usable mark should be positive");
+
+        uint256 fairWithdraw = IERC4626Like(TOKE_AUTO_USD_VAULT).totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
+        uint256 lowWithdraw = fairWithdraw / 2;
+        uint256 highDeposit = lowWithdraw + (lowWithdraw * 2720) / 10_000;
+        _mockPurposeNav(highDeposit, lowWithdraw);
+        _mockFreshDebtReport(block.timestamp);
+
+        // Partial previews agree (shares↔assets is identity on one NAV). Full unwind of frozen
+        // realAssets is where live Withdraw would clamp to the depressed mark.
+        uint256 requested = IMYTStrategy(strategy).realAssets();
+        uint256 frozenPreview = IMYTStrategy(strategy).previewAdjustedWithdraw(requested);
+        uint256 sharesNeeded = Math.mulDiv(requested, MYTStrategy(strategy).FIXED_POINT_SCALAR(), pps, Math.Rounding.Ceil);
+        if (sharesNeeded > shares) sharesNeeded = shares;
+        uint256 expectedAssets = Math.mulDiv(sharesNeeded, pps, MYTStrategy(strategy).FIXED_POINT_SCALAR());
+        uint256 expectedPreview = expectedAssets - (expectedAssets * strategyConfig.slippageBPS / 10_000);
+
+        uint256 liveSharesNeeded = IERC4626Like(TOKE_AUTO_USD_VAULT).convertToShares(
+            requested,
+            lowWithdraw,
+            IERC4626Like(TOKE_AUTO_USD_VAULT).totalSupply(),
+            IERC4626Like.Rounding.Up
+        );
+        if (liveSharesNeeded > shares) liveSharesNeeded = shares;
+        uint256 liveAssets = IERC4626Like(TOKE_AUTO_USD_VAULT).convertToAssets(
+            liveSharesNeeded,
+            lowWithdraw,
+            IERC4626Like(TOKE_AUTO_USD_VAULT).totalSupply(),
+            IERC4626Like.Rounding.Down
+        );
+        uint256 livePreview = liveAssets - (liveAssets * strategyConfig.slippageBPS / 10_000);
+
+        assertEq(frozenPreview, expectedPreview, "unusable preview must use last-good PPS");
+        assertApproxEqRel(frozenPreview, fairReal - (fairReal * strategyConfig.slippageBPS / 10_000), 1e12, "frozen preview should stay near pre-attack fair");
+        assertLt(livePreview, frozenPreview, "live Withdraw preview would have sized the unwind lower");
+    }
+
     function getForkBlockNumber() internal pure override returns (uint256) {
         return 22_089_302;
     }

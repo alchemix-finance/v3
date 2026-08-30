@@ -115,6 +115,7 @@ contract TokeAutoStrategy is MYTStrategy {
     event ExecToleranceBpsUpdated(uint256 newExecToleranceBps);
     event MaxNavSpreadBpsUpdated(uint256 newMaxNavSpreadBps);
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
+    event LastGoodSharePriceUpdated(uint256 lastGoodSharePrice);
 
     constructor(
         address _myt,
@@ -159,6 +160,18 @@ contract TokeAutoStrategy is MYTStrategy {
     function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
         canForceDeallocate = canForceDeallocate_;
         emit CanForceDeallocateUpdated(canForceDeallocate_);
+    }
+
+    /// @notice Snapshot Withdraw PPS into {lastGoodSharePrice} while the report is usable.
+    /// @dev Same write as allocate/deallocate. Call after deploy (before killSwitch / ownership
+    /// transfer) so a later unusable first allocate does not freeze at 0. Does not accept an
+    /// arbitrary price.
+    function snapshotSharePrice() external onlyOwner {
+        require(_reportUsable(), "Report not usable");
+        uint256 unit = _snapshotUnit();
+        require(unit > 0, "No snapshot unit");
+        lastGoodSharePrice = _shareValue(unit).mulDiv(FIXED_POINT_SCALAR, unit);
+        emit LastGoodSharePriceUpdated(lastGoodSharePrice);
     }
 
     function _allocate(uint256 amount) internal virtual override returns (uint256) {
@@ -310,9 +323,17 @@ contract TokeAutoStrategy is MYTStrategy {
 
     function _snapshotSharePrice() internal {
         if (!_reportUsable()) return;
+        uint256 unit = _snapshotUnit();
+        if (unit == 0) return;
+        lastGoodSharePrice = _shareValue(unit).mulDiv(FIXED_POINT_SCALAR, unit);
+    }
+
+    /// @dev Prefer this adapter's shares so PPS matches the position; otherwise a 1-share
+    /// vault unit so deploy can seed before the first allocate.
+    function _snapshotUnit() internal view returns (uint256) {
         uint256 shares = rewarder.balanceOf(address(this)) + autoVault.balanceOf(address(this));
-        if (shares == 0) return;
-        lastGoodSharePrice = _shareValue(shares).mulDiv(FIXED_POINT_SCALAR, shares);
+        if (shares > 0) return shares;
+        return autoVault.totalSupply() > 0 ? 1e18 : 0;
     }
 
     function _shareValue(uint256 shares) internal view returns (uint256) {
@@ -335,10 +356,11 @@ contract TokeAutoStrategy is MYTStrategy {
         return TokenUtils.safeBalanceOf(address(mytAsset), address(this));
     }
 
-    /// @notice Withdraw-purpose NAV of `shares` per the autoVault's own accounting.
-    /// @dev Used to anchor redeem floors to the fair value of the shares being burned,
-    /// rather than to the caller-requested amount. The Withdraw purpose uses Tokemak's
-    /// conservative (floor) valuation, which is not moved by spot-AMM manipulation.
+    /// @notice Live Withdraw-purpose NAV of `shares` per the autoVault's own accounting.
+    /// @dev Anchors redeem *execution* floors to the cached Withdraw mark of the shares being burned.
+    /// This is a Tokemak debt-report cache, not a live AMM-resistant floor: a sandwiched
+    /// `updateDebtReporting` can move it. `{_totalValue}` and `{_previewAdjustedWithdraw}` consume
+    /// it only when `{_reportUsable}` is true.
     function _redeemableAssets(uint256 shares) internal view returns (uint256) {
         return autoVault.convertToAssets(
             shares,
@@ -349,21 +371,25 @@ contract TokeAutoStrategy is MYTStrategy {
     }
 
     function _previewAdjustedWithdraw(uint256 amount) internal view virtual override returns (uint256) {
-        uint256 sharesNeeded = autoVault.convertToShares(
-            amount,
-            autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw),
-            autoVault.totalSupply(),
-            IERC4626Like.Rounding.Up
-        );
         uint256 totalShares = rewarder.balanceOf(address(this)) + autoVault.balanceOf(address(this));
-        if (sharesNeeded > totalShares) sharesNeeded = totalShares;
+        uint256 assets;
 
-        uint256 assets = autoVault.convertToAssets(
-            sharesNeeded,
-            autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw),
-            autoVault.totalSupply(),
-            IERC4626Like.Rounding.Down
-        );
+        if (_reportUsable()) {
+            uint256 withdrawNAV = autoVault.totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
+            uint256 supply = autoVault.totalSupply();
+            uint256 sharesNeeded =
+                autoVault.convertToShares(amount, withdrawNAV, supply, IERC4626Like.Rounding.Up);
+            if (sharesNeeded > totalShares) sharesNeeded = totalShares;
+            assets = autoVault.convertToAssets(sharesNeeded, withdrawNAV, supply, IERC4626Like.Rounding.Down);
+        } else if (lastGoodSharePrice == 0) {
+            uint256 idle = _idleAssets();
+            assets = amount < idle ? amount : idle;
+        } else {
+            uint256 sharesNeeded = amount.mulDiv(FIXED_POINT_SCALAR, lastGoodSharePrice, Math.Rounding.Ceil);
+            if (sharesNeeded > totalShares) sharesNeeded = totalShares;
+            assets = sharesNeeded.mulDiv(lastGoodSharePrice, FIXED_POINT_SCALAR);
+        }
+
         return assets - (assets * params.slippageBPS / BASIS_POINTS);
     }
 
