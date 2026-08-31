@@ -172,8 +172,8 @@ contract TokeAutoStrategy is MYTStrategy {
         emit LastGoodSharePriceUpdated(lastGoodSharePrice);
     }
 
-    /// @notice Owner override to lower {lastGoodSharePrice} 
-    /// and mark to real value in case of genuine losses during an unsusable state.
+    /// @notice Owner override to lower {lastGoodSharePrice}
+    /// and mark to real value in case of genuine losses during an unusable state.
     function forceMarkDown(uint256 newSharePrice) external onlyOwner {
         require(newSharePrice > 0, "Zero share price");
         require(newSharePrice <= lastGoodSharePrice, "Mark can only decrease");

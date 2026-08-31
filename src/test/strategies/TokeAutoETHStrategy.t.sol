@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
-// Adjust these imports to your layout
 
-import {IERC4626Like, TokeAutoStrategy, TokeRedeemParams, TokeSwapRoute} from "../../strategies/TokeAutoStrategy.sol";
-import {BaseStrategyTest, RevertContext} from "../BaseStrategyTest.sol";
+import {TokeAutoStrategy, TokeRedeemParams, TokeSwapRoute} from "../../strategies/TokeAutoStrategy.sol";
+import {TokeAutoStrategyTestBase} from "./TokeAutoStrategyTestBase.sol";
+import {MockAutopilotRouter, MockSwapExecutor, MockTokeRewarder} from "./mocks/TokeMocks.sol";
+import {RevertContext} from "../base/StrategyTypes.sol";
 import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
-import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
 interface IRootOracle {
@@ -40,89 +40,6 @@ interface IAutoEthMath {
     ) external view returns (uint256);
 }
 
-/// @notice Replaces the Tokemak MainRewarder via vm.etch so that
-///         getReward actually transfers TOKE tokens to the recipient.
-contract MockTokeRewarder {
-    IERC20 public immutable tokeToken;
-    uint256 public immutable rewardAmount;
-    address public immutable rewardTokenAddr;
-    uint256 public immutable lockDuration;
-
-    constructor(address _tokeToken, uint256 _rewardAmount, address _rewardTokenAddr, uint256 _lockDuration) {
-        tokeToken = IERC20(_tokeToken);
-        rewardAmount = _rewardAmount;
-        rewardTokenAddr = _rewardTokenAddr;
-        lockDuration = _lockDuration;
-    }
-
-    function allowExtraRewards() external pure returns (bool) {
-        return false;
-    }
-
-    function getReward(address, address recipient, bool) external {
-        tokeToken.transfer(recipient, rewardAmount);
-    }
-
-    function rewardToken() external view returns (address) {
-        return rewardTokenAddr;
-    }
-
-    function tokeLockDuration() external view returns (uint256) {
-        return lockDuration;
-    }
-}
-
-/// @notice When used as allowanceHolder, transfers a fixed amount of token
-///         to msg.sender on any call (simulates swap output).
-contract MockSwapExecutor {
-    IERC20 public immutable token;
-    uint256 public amountToTransfer;
-
-    constructor(address _token, uint256 _amountToTransfer) {
-        token = IERC20(_token);
-        amountToTransfer = _amountToTransfer;
-    }
-
-    receive() external payable {}
-
-    fallback() external {
-        token.transfer(msg.sender, amountToTransfer);
-    }
-}
-
-contract MockAutopilotRouter {
-    IERC20 public immutable asset;
-    uint256 public redeemCalls;
-
-    constructor(address _asset) {
-        asset = IERC20(_asset);
-    }
-
-    function redeem(
-        IERC4626 vault,
-        address to,
-        uint256 shares,
-        uint256 minAmountOut
-    ) external returns (uint256 amountOut) {
-        redeemCalls++;
-        IERC20(address(vault)).transferFrom(msg.sender, address(this), shares);
-        asset.transfer(to, minAmountOut);
-        return minAmountOut;
-    }
-
-    function redeemWithRoutes(
-        IERC4626 vault,
-        address to,
-        uint256 shares,
-        uint256 minAmountOut,
-        TokeSwapRoute[] calldata
-    ) external returns (uint256 amountOut) {
-        IERC20(address(vault)).transferFrom(msg.sender, address(this), shares);
-        asset.transfer(to, minAmountOut);
-        return minAmountOut;
-    }
-}
-
 contract MockTokeAutoEthStrategy is TokeAutoStrategy {
     constructor(
         address _myt,
@@ -141,7 +58,7 @@ contract MockTokeAutoEthStrategy is TokeAutoStrategy {
     {}
 }
 
-contract TokeAutoETHStrategyTest is BaseStrategyTest {
+contract TokeAutoETHStrategyTest is TokeAutoStrategyTestBase {
     address public constant TOKE_AUTO_ETH_VAULT = 0x0A2b94F6871c1D7A32Fe58E1ab5e6deA2f114E56;
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant REWARDER = 0x60882D6f70857606Cdd37729ccCe882015d1755E;
@@ -154,6 +71,18 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
     // Tokemak custom error selector (0x8d54ba1f / InvalidDataReturned in tests).
     // In this suite it is observed on allocate paths (stake mock), not deallocate.
     bytes4 internal constant ALLOWED_TOKEMAK_REVERT_SELECTOR = 0x8d54ba1f;
+
+    function _autoVault() internal pure override returns (address) {
+        return TOKE_AUTO_ETH_VAULT;
+    }
+
+    function _rewarder() internal pure override returns (address) {
+        return REWARDER;
+    }
+
+    function _navAllocAmount() internal pure override returns (uint256) {
+        return 10e18;
+    }
 
     function getStrategyConfig() internal pure override returns (IMYTStrategy.StrategyParams memory) {
         return IMYTStrategy.StrategyParams({
@@ -185,14 +114,6 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
 
     function getRpcUrl() internal view override returns (string memory) {
         return vm.envString("MAINNET_RPC_URL");
-    }
-
-    function _mockFreshDebtReport(uint256 timestamp) internal {
-        vm.mockCall(
-            TOKE_AUTO_ETH_VAULT,
-            abi.encodeWithSelector(IERC4626Like.oldestDebtReporting.selector),
-            abi.encode(timestamp)
-        );
     }
 
     function _beforeTimeShift(uint256 targetTimestamp) internal override {
@@ -256,23 +177,6 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
         return false;
     }
 
-    // Add any strategy-specific tests here
-    function test_forceDeallocate_direct_disabled_by_default_and_owner_can_enable() public {
-        assertFalse(TokeAutoStrategy(strategy).canForceDeallocate(), "force deallocate should default disabled");
-
-        vm.prank(vault);
-        vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
-        IMYTStrategy(strategy).deallocate(getVaultParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
-
-        vm.prank(admin);
-        TokeAutoStrategy(strategy).setCanForceDeallocate(true);
-        assertTrue(TokeAutoStrategy(strategy).canForceDeallocate(), "force deallocate should be enabled");
-
-        deal(WETH, strategy, 1);
-        vm.prank(vault);
-        IMYTStrategy(strategy).deallocate(getVaultParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
-    }
-
     function test_strategy_deallocate_reverts_due_to_slippage(uint256 amountToAllocate, uint256 amountToDeallocate) public {
         amountToAllocate = bound(amountToAllocate, 1e18, testConfig.vaultInitialDeposit);
         amountToDeallocate = amountToAllocate;
@@ -292,10 +196,9 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
         vm.startPrank(vault);
         uint256 amountToAllocate = 12345 * 10 ** 18;
         deal(testConfig.vaultAsset, strategy, amountToAllocate);
-        uint256 initialIdle = IERC20(WETH).balanceOf(strategy);
 
         /// staking to the REWARDER contract through the TokeAutoEthStrategy's allocate method
-        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(0));        
+        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(0));
         uint256 initialRealAssets = IMYTStrategy(strategy).realAssets();
         require(initialRealAssets > 0, "Initial real assets is 0");
 
@@ -384,47 +287,34 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
     }
 
     function test_claimRewards_emits_event_and_vault_receives_asset() public {
-        // Allocate assets to create a Tokemak position
         bytes memory params = getVaultParams();
         uint256 amountToAllocate = 10e18;
         deal(testConfig.vaultAsset, strategy, amountToAllocate);
         vm.prank(vault);
         IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
 
-        // Configure mock reward claim (stakingDisabled = true via tokeLockDuration == 0)
-        uint256 tokeRewardAmount = 10e18;   // 10 TOKE tokens claimed
-        uint256 mockSwapReturn = 5e15;      // Simulated WETH swap output
+        uint256 tokeRewardAmount = 10e18;
+        uint256 mockSwapReturn = 5e15;
 
-        // Deploy a MockTokeRewarder and etch over the real REWARDER address.
-        // rewardToken = TOKE, tokeLockDuration = 0 → stakingDisabled = true
         MockTokeRewarder mockRew = new MockTokeRewarder(TOKE, tokeRewardAmount, TOKE, 0);
         vm.etch(REWARDER, address(mockRew).code);
         deal(TOKE, REWARDER, tokeRewardAmount);
 
-        // Setup MockSwapExecutor as allowanceHolder to simulate DEX swap.
-        // dexSwap(MYT.asset(), token, ...) measures WETH balance change,
-        // so the mock executor transfers WETH to the strategy.
-        // NOTE: quote must be non-empty so the call hits fallback() not receive().
         MockSwapExecutor mockSwap = new MockSwapExecutor(WETH, mockSwapReturn);
         deal(WETH, address(mockSwap), mockSwapReturn);
 
-        // Point the strategy's allowanceHolder to our mock
-        vm.prank(address(1)); // strategy owner
+        vm.prank(address(1));
         MYTStrategy(strategy).setAllowanceHolder(address(mockSwap));
 
-        // Record vault WETH balance before claiming
         uint256 vaultBalanceBefore = IERC20(WETH).balanceOf(vault);
 
-        // Expect the RewardsClaimed event with correct token and amount
         vm.expectEmit(true, true, false, true, strategy);
         emit IMYTStrategy.RewardsClaimed(TOKE, tokeRewardAmount);
 
-        // Execute claimRewards as strategy owner
         bytes memory quote = hex"01";
         vm.prank(address(1));
         uint256 received = IMYTStrategy(strategy).claimRewards(TOKE, quote, 4.99e15);
 
-        // Verify rewards were received and vault got the asset
         uint256 vaultBalanceAfter = IERC20(WETH).balanceOf(vault);
         assertGt(received, 0, "No rewards received from claim");
         assertEq(received, mockSwapReturn, "Received amount does not match expected swap output");
@@ -432,7 +322,6 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
     }
 
     function test_claimRewards_returns_zero_when_staking_enabled() public {
-        // Allocate assets to create a Tokemak position
         bytes memory params = getVaultParams();
         uint256 amountToAllocate = 10e18;
         deal(testConfig.vaultAsset, strategy, amountToAllocate);
@@ -441,21 +330,16 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
 
         uint256 tokeRewardAmount = 10e18;
 
-        // Deploy a MockTokeRewarder with staking ENABLED:
-        // rewardToken == TOKE AND tokeLockDuration > 0 → stakingDisabled = false
         MockTokeRewarder mockRew = new MockTokeRewarder(TOKE, tokeRewardAmount, TOKE, 1);
         vm.etch(REWARDER, address(mockRew).code);
         deal(TOKE, REWARDER, tokeRewardAmount);
 
-        // Record vault WETH balance before claiming
         uint256 vaultBalanceBefore = IERC20(WETH).balanceOf(vault);
 
-        // Execute claimRewards as strategy owner — should return 0
         bytes memory quote = hex"01";
         vm.prank(address(1));
         uint256 received = IMYTStrategy(strategy).claimRewards(TOKE, quote, 9.99e18);
 
-        // Verify nothing was returned and vault balance is unchanged
         uint256 vaultBalanceAfter = IERC20(WETH).balanceOf(vault);
         assertEq(received, 0, "Should return 0 when staking is enabled");
         assertEq(vaultBalanceAfter, vaultBalanceBefore, "Vault balance should not change when staking is enabled");
@@ -508,45 +392,36 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
         vm.stopPrank();
     }
 
-    // End-to-end test: Full lifecycle with time accumulation for TokeAutoETH
     function test_toke_auto_eth_full_lifecycle_with_time() public {
         vm.startPrank(allocator);
         bytes32 allocationId = IMYTStrategy(strategy).adapterId();
-        
-        // Initial allocation
-        uint256 alloc1 = 2e18; // 2 WETH
+
+        uint256 alloc1 = 2e18;
         IVaultV2(vault).allocate(strategy, getVaultParams(), alloc1);
         uint256 realAssets1 = IMYTStrategy(strategy).realAssets();
         assertGt(realAssets1, 0, "Real assets should be positive after allocation");
         assertApproxEqAbs(IVaultV2(vault).allocation(allocationId), alloc1, 1e15);
-        
-        // Warp forward 14 days
+
         _warpWithHook(14 days);
-        
-        // Additional allocation
-        uint256 alloc2 = 1e18; // 1 WETH
+
+        uint256 alloc2 = 1e18;
         IVaultV2(vault).allocate(strategy, getVaultParams(), alloc2);
         uint256 realAssets2 = IMYTStrategy(strategy).realAssets();
         assertGe(realAssets2, realAssets1, "Real assets should not decrease");
-        
-        // Warp forward 30 days
+
         _warpWithHook(30 days);
-        
-        // Partial deallocation (withdraw 0.5 WETH)
+
         uint256 deallocAmount1 = 0.05e18;
         uint256 deallocPreview1 = IMYTStrategy(strategy).previewAdjustedWithdraw(deallocAmount1);
         IVaultV2(vault).deallocate(strategy, getVaultParams(), deallocPreview1);
         uint256 realAssets3 = IMYTStrategy(strategy).realAssets();
         assertLt(realAssets3, realAssets2, "Real assets should decrease after deallocation");
-        
-        // Warp forward 60 days
+
         _warpWithHook(60 days);
-        
-        // Check vault WETH balance
+
         uint256 vaultWETHBalance = IERC20(WETH).balanceOf(vault);
         assertGt(vaultWETHBalance, 0, "Vault should have WETH");
-        
-        // Full deallocation of remaining
+
         uint256 finalRealAssets = IMYTStrategy(strategy).realAssets();
         if (finalRealAssets > 1e15) {
             uint256 finalTarget = IVaultV2(vault).allocation(allocationId) / 20;
@@ -555,28 +430,24 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
                 IVaultV2(vault).deallocate(strategy, getVaultParams(), finalDeallocPreview);
             }
         }
-        
+
         uint256 finalVaultWETHBalance = IERC20(WETH).balanceOf(vault);
         assertGt(finalVaultWETHBalance, vaultWETHBalance, "Vault WETH should increase after deallocation");
-        
+
         vm.stopPrank();
     }
 
-    // Fuzz test: Multiple random allocations and deallocations with time warps
     function test_fuzz_toke_auto_eth_operations(uint256[] calldata amounts, uint256[] calldata timeDelays) public {
-        // Use bound for array length instead of assume
         uint256 numOps = bound(amounts.length, 1, 8);
-        // Ensure we don't access beyond array bounds
         uint256 maxIterations = numOps < amounts.length ? numOps : amounts.length;
-        
+
         vm.startPrank(allocator);
         bytes32 allocationId = IMYTStrategy(strategy).adapterId();
-        
+
         for (uint256 i = 0; i < maxIterations; i++) {
-            // Alternate between allocation and deallocation
             bool isAllocate = i % 2 == 0;
-            uint256 amount = bound(amounts[i], 0.1e18, 5e18); // 0.1-5 WETH
-            
+            uint256 amount = bound(amounts[i], 0.1e18, 5e18);
+
             if (isAllocate) {
                 IVaultV2(vault).allocate(strategy, getVaultParams(), amount);
             } else {
@@ -593,36 +464,30 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
                     }
                 }
             }
-            
-            // Warp forward (only access if timeDelays has this index)
+
             uint256 timeDelay = i < timeDelays.length ? bound(timeDelays[i], 1 hours, 60 days) : 1 hours;
             _warpWithHook(timeDelay);
         }
-        
-        // Final sanity checks
+
         uint256 finalRealAssets = IMYTStrategy(strategy).realAssets();
         uint256 finalAllocation = IVaultV2(vault).allocation(allocationId);
         uint256 vaultWETHBalance = IERC20(WETH).balanceOf(vault);
-        
+
         assertGe(finalRealAssets, 0, "Real assets should be non-negative");
         assertGe(finalAllocation, 0, "Allocation should be non-negative");
         assertGt(vaultWETHBalance, 0, "Vault should have WETH");
-        
+
         vm.stopPrank();
     }
 
-    // Test: TokeAutoETH with reward claiming over time
     function test_toke_auto_eth_rewards_over_time() public {
         vm.startPrank(allocator);
-        
-        // Allocate initial amount
-        uint256 allocAmount = 3e18; // 3 WETH
+
+        uint256 allocAmount = 3e18;
         IVaultV2(vault).allocate(strategy, getVaultParams(), allocAmount);
-        
-        // Warp 30 days
+
         _warpWithHook(30 days);
-        
-        // Setup reward claiming mock (staking disabled)
+
         uint256 tokeRewardAmount = 10e18;
         uint256 mockSwapReturn = 5e15;
         MockTokeRewarder mockRew = new MockTokeRewarder(TOKE, tokeRewardAmount, TOKE, 0);
@@ -631,35 +496,31 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
         deal(TOKE, REWARDER, tokeRewardAmount);
         MockSwapExecutor mockSwap = new MockSwapExecutor(WETH, mockSwapReturn);
         deal(WETH, address(mockSwap), mockSwapReturn);
-        
+
         vm.stopPrank();
         vm.startPrank(address(1));
         MYTStrategy(strategy).setAllowanceHolder(address(mockSwap));
-        
-        // Claim rewards
+
         bytes memory quote = hex"01";
         vm.stopPrank();
         vm.startPrank(address(1));
         uint256 received = IMYTStrategy(strategy).claimRewards(TOKE, quote, 4.99e15);
-        
+
         assertGt(received, 0, "Should receive rewards");
         vm.etch(REWARDER, rewarderCodeBeforeMock);
-        
-        // Continue with allocations/deallocations
+
         vm.stopPrank();
         vm.startPrank(allocator);
         uint256 realAssets1 = IMYTStrategy(strategy).realAssets();
-        
+
         _warpWithHook(30 days);
-        
-        // Small deallocation
+
         uint256 smallDealloc = 0.05e18;
         uint256 deallocPreview = IMYTStrategy(strategy).previewAdjustedWithdraw(smallDealloc);
         IVaultV2(vault).deallocate(strategy, getVaultParams(), deallocPreview);
-        
+
         _warpWithHook(30 days);
-        
-        // Final deallocation
+
         uint256 finalRealAssets = IMYTStrategy(strategy).realAssets();
         if (finalRealAssets > 1e15) {
             bytes32 allocationId = IMYTStrategy(strategy).adapterId();
@@ -669,9 +530,9 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
                 IVaultV2(vault).deallocate(strategy, getVaultParams(), finalDeallocPreview);
             }
         }
-        
+
         assertLe(IMYTStrategy(strategy).realAssets(), realAssets1, "Final real assets should not exceed prior balance");
-        
+
         vm.stopPrank();
     }
 }

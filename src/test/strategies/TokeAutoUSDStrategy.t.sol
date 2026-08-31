@@ -1,85 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
-// Adjust these imports to your layout
 
-import {IERC4626Like, TokeAutoStrategy} from "../../strategies/TokeAutoStrategy.sol";
-import {IMainRewarder} from "../../strategies/interfaces/ITokemac.sol";
-import {BaseStrategyTest} from "../BaseStrategyTest.sol";
+import {TokeAutoStrategy} from "../../strategies/TokeAutoStrategy.sol";
+import {TokeAutoStrategyTestBase} from "./TokeAutoStrategyTestBase.sol";
+import {MockAutopilotRouter, MockSwapExecutor, MockTokeRewarder} from "./mocks/TokeMocks.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
-import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-
-/// @notice Replaces the Tokemak MainRewarder via vm.etch so that
-///         getReward actually transfers TOKE tokens to the recipient.
-contract MockTokeRewarder {
-    IERC20 public immutable tokeToken;
-    uint256 public immutable rewardAmount;
-    address public immutable rewardTokenAddr;
-    uint256 public immutable lockDuration;
-
-    constructor(address _tokeToken, uint256 _rewardAmount, address _rewardTokenAddr, uint256 _lockDuration) {
-        tokeToken = IERC20(_tokeToken);
-        rewardAmount = _rewardAmount;
-        rewardTokenAddr = _rewardTokenAddr;
-        lockDuration = _lockDuration;
-    }
-
-    function allowExtraRewards() external pure returns (bool) {
-        return false;
-    }
-
-    function getReward(address, address recipient, bool) external {
-        tokeToken.transfer(recipient, rewardAmount);
-    }
-
-    function rewardToken() external view returns (address) {
-        return rewardTokenAddr;
-    }
-
-    function tokeLockDuration() external view returns (uint256) {
-        return lockDuration;
-    }
-}
-
-/// @notice When used as allowanceHolder, transfers a fixed amount of token
-///         to msg.sender on any call (simulates swap output).
-contract MockSwapExecutor {
-    IERC20 public immutable token;
-    uint256 public amountToTransfer;
-
-    constructor(address _token, uint256 _amountToTransfer) {
-        token = IERC20(_token);
-        amountToTransfer = _amountToTransfer;
-    }
-
-    receive() external payable {}
-
-    fallback() external {
-        token.transfer(msg.sender, amountToTransfer);
-    }
-}
-
-contract MockAutopilotRouter {
-    IERC20 public immutable asset;
-
-    constructor(address _asset) {
-        asset = IERC20(_asset);
-    }
-
-    function redeem(
-        IERC4626 vault,
-        address to,
-        uint256 shares,
-        uint256 minAmountOut
-    ) external returns (uint256 amountOut) {
-        IERC20(address(vault)).transferFrom(msg.sender, address(this), shares);
-        asset.transfer(to, minAmountOut);
-        return minAmountOut;
-    }
-}
 
 contract MockTokeAutoUSDStrategy is TokeAutoStrategy {
     constructor(
@@ -97,12 +25,20 @@ contract MockTokeAutoUSDStrategy is TokeAutoStrategy {
     {}
 }
 
-contract TokeAutoUSDStrategyTest is BaseStrategyTest {
+contract TokeAutoUSDStrategyTest is TokeAutoStrategyTestBase {
     address public constant TOKE_AUTO_USD_VAULT = 0xa7569A44f348d3D70d8ad5889e50F78E33d80D35;
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address public constant REWARDER = 0x726104CfBd7ece2d1f5b3654a19109A9e2b6c27B;
     address public constant AUTOPILOT_ROUTER = 0x39ff6d21204B919441d17bef61D19181870835A2;
     address public constant TOKE = 0x2e9d63788249371f1DFC918a52f8d799F4a38C94;
+
+    function _autoVault() internal pure override returns (address) {
+        return TOKE_AUTO_USD_VAULT;
+    }
+
+    function _rewarder() internal pure override returns (address) {
+        return REWARDER;
+    }
 
     function getStrategyConfig() internal pure override returns (IMYTStrategy.StrategyParams memory) {
         return IMYTStrategy.StrategyParams({
@@ -130,460 +66,12 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
         return strat;
     }
 
-    function _mockFreshDebtReport(uint256 timestamp) internal {
-        vm.mockCall(
-            TOKE_AUTO_USD_VAULT,
-            abi.encodeWithSelector(IERC4626Like.oldestDebtReporting.selector),
-            abi.encode(timestamp)
-        );
-    }
-
-    function _beforeTimeShift(uint256 targetTimestamp) internal override {
-        _mockFreshDebtReport(targetTimestamp);
-    }
-
-    function _strategyShares() internal view returns (uint256) {
-        return IMainRewarder(REWARDER).balanceOf(strategy) + IERC20(TOKE_AUTO_USD_VAULT).balanceOf(strategy);
-    }
-
-    function _expectedFrozenRealAssets() internal view returns (uint256) {
-        uint256 idle = IERC20(USDC).balanceOf(strategy);
-        uint256 shares = _strategyShares();
-        if (shares == 0) return idle;
-        return idle + Math.mulDiv(
-            shares, TokeAutoStrategy(strategy).lastGoodSharePrice(), MYTStrategy(strategy).FIXED_POINT_SCALAR()
-        );
-    }
-
-    function _mockPurposeNav(uint256 depositNav, uint256 withdrawNav) internal {
-        vm.mockCall(
-            TOKE_AUTO_USD_VAULT,
-            abi.encodeWithSelector(IERC4626Like.totalAssets.selector, IERC4626Like.TotalAssetPurpose.Deposit),
-            abi.encode(depositNav)
-        );
-        vm.mockCall(
-            TOKE_AUTO_USD_VAULT,
-            abi.encodeWithSelector(IERC4626Like.totalAssets.selector, IERC4626Like.TotalAssetPurpose.Withdraw),
-            abi.encode(withdrawNav)
-        );
-    }
-
-    function _mockStaleDebtReport() internal {
-        _mockFreshDebtReport(block.timestamp - TokeAutoStrategy(strategy).MAX_DEBT_REPORT_AGE() - 1);
-    }
-
-    /// @notice After a usable allocate, a stale report must not double-count idle across deallocate:
-    /// realAssets = idle + remainingShares * lastGoodSharePrice.
-    function test_unusableReport_deallocate_usesPricePerShareFallback() public {
-        bytes memory params = getVaultParams();
-        uint256 amountToAllocate = 100e6;
-
-        vm.startPrank(vault);
-        deal(USDC, strategy, amountToAllocate);
-        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
-        vm.stopPrank();
-
-        uint256 pps = TokeAutoStrategy(strategy).lastGoodSharePrice();
-        uint256 realBefore = IMYTStrategy(strategy).realAssets();
-        uint256 sharesBefore = _strategyShares();
-        assertGt(pps, 0, "usable allocate should snapshot share price");
-        assertGt(sharesBefore, 0, "expected staked shares");
-        assertApproxEqAbs(realBefore, _expectedFrozenRealAssets(), 1, "snapshot PPS should match live mark");
-
-        _mockStaleDebtReport();
-
-        uint256 amountToDeallocate = amountToAllocate / 2;
-        vm.prank(vault);
-        IMYTStrategy(strategy).deallocate(params, amountToDeallocate, "", address(vault));
-
-        uint256 sharesAfter = _strategyShares();
-        uint256 realAfter = IMYTStrategy(strategy).realAssets();
-        uint256 expected = _expectedFrozenRealAssets();
-
-        assertLt(sharesAfter, sharesBefore, "deallocate should burn shares");
-        assertEq(TokeAutoStrategy(strategy).lastGoodSharePrice(), pps, "stale path must not refresh PPS");
-        assertEq(realAfter, expected, "fallback must track remaining shares * PPS + idle");
-        assertLt(realAfter, realBefore, "real assets should decrease after deallocate in unusable window");
-    }
-
-    /// @notice A wide Deposit/Withdraw purpose spread freezes realAssets at last-good PPS instead of
-    /// following the depressed Withdraw NAV.
-    function test_widePurposeSpread_freezesRealAssetsAtLastGoodSharePrice() public {
-        bytes memory params = getVaultParams();
-        uint256 amountToAllocate = 100e6;
-
-        vm.startPrank(vault);
-        deal(USDC, strategy, amountToAllocate);
-        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
-        vm.stopPrank();
-
-        uint256 pps = TokeAutoStrategy(strategy).lastGoodSharePrice();
-        uint256 shares = _strategyShares();
-        uint256 fairReal = IMYTStrategy(strategy).realAssets();
-        assertGt(pps, 0, "usable allocate should snapshot share price");
-
-        // PoC-sized asymmetric distortion: Withdraw depressed, Deposit elevated (~2,720 bps spread).
-        uint256 fairWithdraw = IERC4626Like(TOKE_AUTO_USD_VAULT).totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
-        uint256 lowWithdraw = fairWithdraw / 2;
-        uint256 highDeposit = lowWithdraw + (lowWithdraw * 2720) / 10_000;
-        _mockPurposeNav(highDeposit, lowWithdraw);
-        // Keep age fresh so only the spread gate trips.
-        _mockFreshDebtReport(block.timestamp);
-
-        uint256 frozen = _expectedFrozenRealAssets();
-        uint256 liveWouldBe = IERC20(USDC).balanceOf(strategy)
-            + IERC4626Like(TOKE_AUTO_USD_VAULT).convertToAssets(
-                shares,
-                lowWithdraw,
-                IERC4626Like(TOKE_AUTO_USD_VAULT).totalSupply(),
-                IERC4626Like.Rounding.Down
-            );
-        uint256 realAfter = IMYTStrategy(strategy).realAssets();
-
-        assertEq(realAfter, frozen, "wide spread should use PPS fallback");
-        assertApproxEqRel(realAfter, fairReal, 1e12, "frozen mark should stay near pre-attack fair");
-        assertLt(liveWouldBe, frozen, "live Withdraw path would have marked lower");
-        assertGt(
-            (highDeposit - lowWithdraw) * 10_000 / lowWithdraw,
-            TokeAutoStrategy(strategy).maxNavSpreadBps(),
-            "fixture spread must exceed maxNavSpreadBps"
-        );
-    }
-
-    /// @notice Deploy default is 100 bps; only owner may raise it (cap 10_000); widening under a wide
-    /// purpose mock restores live Withdraw marking.
-    function test_setMaxNavSpreadBps_defaults_and_owner_controls() public {
-        TokeAutoStrategy strat = TokeAutoStrategy(strategy);
-        assertEq(strat.maxNavSpreadBps(), strat.DEFAULT_MAX_NAV_SPREAD_BPS(), "deploy default");
-        assertEq(strat.maxNavSpreadBps(), 100, "default should be 100 bps");
-
-        vm.prank(address(2));
-        vm.expectRevert();
-        strat.setMaxNavSpreadBps(500);
-
-        vm.prank(address(1));
-        vm.expectRevert(bytes("Nav spread too high"));
-        strat.setMaxNavSpreadBps(10_001);
-
-        bytes memory params = getVaultParams();
-        uint256 amountToAllocate = 100e6;
-        vm.startPrank(vault);
-        deal(USDC, strategy, amountToAllocate);
-        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
-        vm.stopPrank();
-
-        uint256 shares = _strategyShares();
-        uint256 fairWithdraw = IERC4626Like(TOKE_AUTO_USD_VAULT).totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
-        uint256 lowWithdraw = fairWithdraw / 2;
-        uint256 highDeposit = lowWithdraw + (lowWithdraw * 2720) / 10_000;
-        _mockPurposeNav(highDeposit, lowWithdraw);
-        _mockFreshDebtReport(block.timestamp);
-
-        uint256 frozen = IMYTStrategy(strategy).realAssets();
-        assertEq(frozen, _expectedFrozenRealAssets(), "pre-widen should freeze at last-good");
-
-        vm.expectEmit(true, true, true, true, strategy);
-        emit TokeAutoStrategy.MaxNavSpreadBpsUpdated(3_000);
-        vm.prank(address(1));
-        strat.setMaxNavSpreadBps(3_000);
-        assertEq(strat.maxNavSpreadBps(), 3_000, "owner should widen spread ceiling");
-
-        uint256 live = IERC20(USDC).balanceOf(strategy)
-            + IERC4626Like(TOKE_AUTO_USD_VAULT).convertToAssets(
-                shares,
-                lowWithdraw,
-                IERC4626Like(TOKE_AUTO_USD_VAULT).totalSupply(),
-                IERC4626Like.Rounding.Down
-            );
-        uint256 realAfter = IMYTStrategy(strategy).realAssets();
-        assertEq(realAfter, live, "widened ceiling should consume live Withdraw NAV");
-        assertLt(realAfter, frozen, "live depressed mark should be below frozen last-good");
-    }
-
-    /// @notice Warping past MAX_DEBT_REPORT_AGE without refreshing the age mock freezes at last-good;
-    /// remocking a fresh oldestDebtReporting restores live Withdraw NAV.
-    function test_staleDebtReport_fallsBackThenRecoversWhenFresh() public {
-        bytes memory params = getVaultParams();
-        uint256 amountToAllocate = 100e6;
-
-        vm.startPrank(vault);
-        deal(USDC, strategy, amountToAllocate);
-        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
-        vm.stopPrank();
-
-        uint256 pps = TokeAutoStrategy(strategy).lastGoodSharePrice();
-        uint256 fairReal = IMYTStrategy(strategy).realAssets();
-        assertGt(pps, 0, "usable allocate should snapshot share price");
-
-        // Warp without _beforeTimeShift so the mocked oldestDebtReporting stays pinned in the past.
-        vm.warp(block.timestamp + TokeAutoStrategy(strategy).MAX_DEBT_REPORT_AGE() + 1);
-
-        uint256 frozen = IMYTStrategy(strategy).realAssets();
-        assertEq(frozen, _expectedFrozenRealAssets(), "stale report should use PPS fallback");
-        assertEq(TokeAutoStrategy(strategy).lastGoodSharePrice(), pps, "stale window must not refresh PPS");
-
-        _mockFreshDebtReport(block.timestamp);
-        uint256 recovered = IMYTStrategy(strategy).realAssets();
-        assertApproxEqRel(recovered, fairReal, 1e12, "fresh report should restore live Withdraw mark");
-        assertEq(TokeAutoStrategy(strategy).lastGoodSharePrice(), pps, "recovery read path must not mutate PPS");
-    }
-
-    /// @notice Allocate/deallocate while the report is unusable must leave lastGoodSharePrice unchanged.
-    function test_unusableAllocateDeallocate_doesNotUpdateLastGoodSharePrice() public {
-        bytes memory params = getVaultParams();
-        uint256 amountToAllocate = 100e6;
-
-        vm.startPrank(vault);
-        deal(USDC, strategy, amountToAllocate);
-        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
-        vm.stopPrank();
-
-        uint256 pps = TokeAutoStrategy(strategy).lastGoodSharePrice();
-        assertGt(pps, 0, "usable allocate should snapshot share price");
-
-        _mockStaleDebtReport();
-
-        vm.startPrank(vault);
-        deal(USDC, strategy, amountToAllocate);
-        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
-        assertEq(TokeAutoStrategy(strategy).lastGoodSharePrice(), pps, "unusable allocate must not refresh PPS");
-
-        IMYTStrategy(strategy).deallocate(params, amountToAllocate / 2, "", address(vault));
-        vm.stopPrank();
-
-        assertEq(TokeAutoStrategy(strategy).lastGoodSharePrice(), pps, "unusable deallocate must not refresh PPS");
-    }
-
-    /// @notice Owner seed before the first allocate: if that allocate lands in an unusable window,
-    /// realAssets must mark the new shares at the seeded PPS instead of collapsing to idle.
-    function test_seededSnapshot_unusableFirstAllocate_doesNotCollapseToIdle() public {
-        TokeAutoStrategy strat = TokeAutoStrategy(strategy);
-        assertEq(strat.lastGoodSharePrice(), 0, "precondition: cold start");
-        assertEq(_strategyShares(), 0, "precondition: no shares before first allocate");
-
-        vm.prank(address(1));
-        strat.snapshotSharePrice();
-
-        uint256 pps = strat.lastGoodSharePrice();
-        assertGt(pps, 0, "owner snapshot should seed PPS before allocate");
-
-        _mockStaleDebtReport();
-
-        bytes memory params = getVaultParams();
-        uint256 amountToAllocate = 100e6;
-        vm.startPrank(vault);
-        deal(USDC, strategy, amountToAllocate);
-        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
-        vm.stopPrank();
-
-        uint256 shares = _strategyShares();
-        uint256 idle = IERC20(USDC).balanceOf(strategy);
-        uint256 real = IMYTStrategy(strategy).realAssets();
-
-        assertGt(shares, 0, "allocate should mint shares");
-        assertEq(strat.lastGoodSharePrice(), pps, "unusable first allocate must not refresh PPS");
-        assertEq(real, _expectedFrozenRealAssets(), "seeded PPS should mark the new shares");
-        assertGt(real, idle, "must not collapse share value to idle");
-    }
-
-    /// @notice reportUsable() must mirror the internal gate across fresh, stale, and wide-spread states.
-    function test_reportUsable_view_reflectsGateStates() public {
-        TokeAutoStrategy strat = TokeAutoStrategy(strategy);
-        assertTrue(strat.reportUsable(), "fresh report should be usable");
-
-        _mockStaleDebtReport();
-        assertFalse(strat.reportUsable(), "stale report should be unusable");
-
-        _mockFreshDebtReport(block.timestamp);
-        assertTrue(strat.reportUsable(), "refreshed report should recover");
-
-        uint256 fairWithdraw = IERC4626Like(TOKE_AUTO_USD_VAULT).totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
-        uint256 lowWithdraw = fairWithdraw / 2;
-        uint256 highDeposit = lowWithdraw + (lowWithdraw * 2720) / 10_000;
-        _mockPurposeNav(highDeposit, lowWithdraw);
-        assertFalse(strat.reportUsable(), "wide purpose spread should be unusable");
-    }
-
-    /// @notice Every lastGoodSharePrice write path (allocate, deallocate, owner snapshot, forceMarkDown)
-    /// must stamp lastSnapshotAt so ops can alert on a stale fallback mark.
-    function test_lastSnapshotAt_writtenOnAllUpdatePaths() public {
-        TokeAutoStrategy strat = TokeAutoStrategy(strategy);
-        assertEq(strat.lastSnapshotAt(), 0, "precondition: no snapshot yet");
-
-        // Owner seed path.
-        vm.prank(address(1));
-        strat.snapshotSharePrice();
-        uint256 t1 = strat.lastSnapshotAt();
-        assertEq(t1, block.timestamp, "owner snapshot should stamp timestamp");
-
-        // Allocate path.
-        vm.warp(block.timestamp + 1 hours);
-        _mockFreshDebtReport(block.timestamp);
-        bytes memory params = getVaultParams();
-        vm.startPrank(vault);
-        deal(USDC, strategy, 100e6);
-        IMYTStrategy(strategy).allocate(params, 100e6, "", address(vault));
-        vm.stopPrank();
-        uint256 t2 = strat.lastSnapshotAt();
-        assertEq(t2, block.timestamp, "usable allocate should stamp timestamp");
-        assertGt(t2, t1, "allocate stamp should advance");
-
-        // Deallocate path.
-        vm.warp(block.timestamp + 1 hours);
-        _mockFreshDebtReport(block.timestamp);
-        vm.prank(vault);
-        IMYTStrategy(strategy).deallocate(params, 50e6, "", address(vault));
-        uint256 t3 = strat.lastSnapshotAt();
-        assertEq(t3, block.timestamp, "usable deallocate should stamp timestamp");
-
-        // Unusable flows must not stamp.
-        vm.warp(block.timestamp + 1 hours);
-        _mockStaleDebtReport();
-        vm.startPrank(vault);
-        deal(USDC, strategy, 100e6);
-        IMYTStrategy(strategy).allocate(params, 100e6, "", address(vault));
-        vm.stopPrank();
-        assertEq(strat.lastSnapshotAt(), t3, "unusable allocate must not stamp timestamp");
-
-        // forceMarkDown path stamps even while unusable.
-        uint256 pps = strat.lastGoodSharePrice();
-        vm.prank(address(1));
-        strat.forceMarkDown(pps - 1);
-        assertEq(strat.lastSnapshotAt(), block.timestamp, "forceMarkDown should stamp timestamp");
-    }
-
-    /// @notice forceMarkDown lowers the frozen mark during an unusable window and realAssets follows;
-    /// it can never raise the mark, set it to zero, or be called by a non-owner.
-    function test_forceMarkDown_lowersFrozenMark_and_enforcesMonotonicDecrease() public {
-        TokeAutoStrategy strat = TokeAutoStrategy(strategy);
-        bytes memory params = getVaultParams();
-        uint256 amountToAllocate = 100e6;
-
-        vm.startPrank(vault);
-        deal(USDC, strategy, amountToAllocate);
-        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
-        vm.stopPrank();
-
-        uint256 pps = strat.lastGoodSharePrice();
-        assertGt(pps, 0, "usable allocate should snapshot share price");
-
-        // Keeper outage: reads freeze at last-good PPS.
-        _mockStaleDebtReport();
-        uint256 frozenBefore = IMYTStrategy(strategy).realAssets();
-        assertEq(frozenBefore, _expectedFrozenRealAssets(), "stale report should freeze at last-good");
-
-        // Non-owner cannot force.
-        vm.prank(address(2));
-        vm.expectRevert();
-        strat.forceMarkDown(pps / 2);
-
-        // Cannot raise the mark or zero it.
-        vm.prank(address(1));
-        vm.expectRevert(bytes("Mark can only decrease"));
-        strat.forceMarkDown(pps + 1);
-        vm.prank(address(1));
-        vm.expectRevert(bytes("Zero share price"));
-        strat.forceMarkDown(0);
-
-        // Owner recognizes a 50% loss while the cached NAV is stale.
-        uint256 markedDown = pps / 2;
-        vm.expectEmit(true, true, true, true, strategy);
-        emit TokeAutoStrategy.LastGoodSharePriceForcedDown(markedDown);
-        vm.prank(address(1));
-        strat.forceMarkDown(markedDown);
-
-        assertEq(strat.lastGoodSharePrice(), markedDown, "mark should be lowered");
-        uint256 frozenAfter = IMYTStrategy(strategy).realAssets();
-        assertEq(frozenAfter, _expectedFrozenRealAssets(), "realAssets should track the lowered mark");
-        assertLt(frozenAfter, frozenBefore, "lowered mark should reduce frozen realAssets");
-
-        // previewAdjustedWithdraw sizes off the lowered mark too.
-        uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(frozenAfter);
-        uint256 shares = _strategyShares();
-        uint256 sharesNeeded = Math.mulDiv(frozenAfter, MYTStrategy(strategy).FIXED_POINT_SCALAR(), markedDown, Math.Rounding.Ceil);
-        if (sharesNeeded > shares) sharesNeeded = shares;
-        uint256 expectedAssets = Math.mulDiv(sharesNeeded, markedDown, MYTStrategy(strategy).FIXED_POINT_SCALAR());
-        assertEq(
-            preview,
-            expectedAssets - (expectedAssets * strategyConfig.slippageBPS / 10_000),
-            "preview must use the lowered mark"
-        );
-    }
-
-    /// @notice previewAdjustedWithdraw must size off last-good PPS when the report is unusable,
-    /// not off a depressed live Withdraw NAV.
-    function test_unusableReport_previewAdjustedWithdraw_usesLastGoodSharePrice() public {
-        bytes memory params = getVaultParams();
-        uint256 amountToAllocate = 100e6;
-
-        vm.startPrank(vault);
-        deal(USDC, strategy, amountToAllocate);
-        IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
-        vm.stopPrank();
-
-        uint256 pps = TokeAutoStrategy(strategy).lastGoodSharePrice();
-        uint256 shares = _strategyShares();
-        uint256 fairReal = IMYTStrategy(strategy).realAssets();
-        assertGt(pps, 0, "usable allocate should snapshot share price");
-        assertGt(fairReal, 0, "usable mark should be positive");
-
-        uint256 fairWithdraw = IERC4626Like(TOKE_AUTO_USD_VAULT).totalAssets(IERC4626Like.TotalAssetPurpose.Withdraw);
-        uint256 lowWithdraw = fairWithdraw / 2;
-        uint256 highDeposit = lowWithdraw + (lowWithdraw * 2720) / 10_000;
-        _mockPurposeNav(highDeposit, lowWithdraw);
-        _mockFreshDebtReport(block.timestamp);
-
-        // Partial previews agree (shares↔assets is identity on one NAV). Full unwind of frozen
-        // realAssets is where live Withdraw would clamp to the depressed mark.
-        uint256 requested = IMYTStrategy(strategy).realAssets();
-        uint256 frozenPreview = IMYTStrategy(strategy).previewAdjustedWithdraw(requested);
-        uint256 sharesNeeded = Math.mulDiv(requested, MYTStrategy(strategy).FIXED_POINT_SCALAR(), pps, Math.Rounding.Ceil);
-        if (sharesNeeded > shares) sharesNeeded = shares;
-        uint256 expectedAssets = Math.mulDiv(sharesNeeded, pps, MYTStrategy(strategy).FIXED_POINT_SCALAR());
-        uint256 expectedPreview = expectedAssets - (expectedAssets * strategyConfig.slippageBPS / 10_000);
-
-        uint256 liveSharesNeeded = IERC4626Like(TOKE_AUTO_USD_VAULT).convertToShares(
-            requested,
-            lowWithdraw,
-            IERC4626Like(TOKE_AUTO_USD_VAULT).totalSupply(),
-            IERC4626Like.Rounding.Up
-        );
-        if (liveSharesNeeded > shares) liveSharesNeeded = shares;
-        uint256 liveAssets = IERC4626Like(TOKE_AUTO_USD_VAULT).convertToAssets(
-            liveSharesNeeded,
-            lowWithdraw,
-            IERC4626Like(TOKE_AUTO_USD_VAULT).totalSupply(),
-            IERC4626Like.Rounding.Down
-        );
-        uint256 livePreview = liveAssets - (liveAssets * strategyConfig.slippageBPS / 10_000);
-
-        assertEq(frozenPreview, expectedPreview, "unusable preview must use last-good PPS");
-        assertApproxEqRel(frozenPreview, fairReal - (fairReal * strategyConfig.slippageBPS / 10_000), 1e12, "frozen preview should stay near pre-attack fair");
-        assertLt(livePreview, frozenPreview, "live Withdraw preview would have sized the unwind lower");
-    }
-
     function getForkBlockNumber() internal pure override returns (uint256) {
         return 22_089_302;
     }
 
     function getRpcUrl() internal view override returns (string memory) {
         return vm.envString("MAINNET_RPC_URL");
-    }
-
-    function test_forceDeallocate_direct_disabled_by_default_and_owner_can_enable() public {
-        assertFalse(TokeAutoStrategy(strategy).canForceDeallocate(), "force deallocate should default disabled");
-
-        vm.prank(vault);
-        vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);
-        IMYTStrategy(strategy).deallocate(getVaultParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
-
-        vm.prank(address(1));
-        TokeAutoStrategy(strategy).setCanForceDeallocate(true);
-        assertTrue(TokeAutoStrategy(strategy).canForceDeallocate(), "force deallocate should be enabled");
-
-        deal(USDC, strategy, 1);
-        vm.prank(vault);
-        IMYTStrategy(strategy).deallocate(getVaultParams(), 1, IVaultV2.forceDeallocate.selector, address(vault));
     }
 
     // Test that full deallocation completes without reverting
@@ -605,45 +93,34 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
     }
 
     function test_claimRewards_emits_event_and_vault_receives_asset() public {
-        // Allocate assets to create a Tokemak position
         bytes memory params = getVaultParams();
         uint256 amountToAllocate = 100e6;
         deal(testConfig.vaultAsset, strategy, amountToAllocate);
         vm.prank(vault);
         IMYTStrategy(strategy).allocate(params, amountToAllocate, "", address(vault));
 
-        // Configure mock reward claim (stakingDisabled = true via tokeLockDuration == 0)
-        uint256 tokeRewardAmount = 10e18;   // 10 TOKE tokens claimed
-        uint256 mockSwapReturn = 5e6;       // Simulated USDC swap output
+        uint256 tokeRewardAmount = 10e18;
+        uint256 mockSwapReturn = 5e6;
 
-        // Deploy a MockTokeRewarder and etch over the real REWARDER address.
-        // rewardToken = TOKE, tokeLockDuration = 0 → stakingDisabled = true
         MockTokeRewarder mockRew = new MockTokeRewarder(TOKE, tokeRewardAmount, TOKE, 0);
         vm.etch(REWARDER, address(mockRew).code);
         deal(TOKE, REWARDER, tokeRewardAmount);
 
-        // Setup MockSwapExecutor as allowanceHolder to simulate DEX swap.
-        // dexSwap(MYT.asset(), token, ...) measures USDC balance change,
         MockSwapExecutor mockSwap = new MockSwapExecutor(USDC, mockSwapReturn);
         deal(USDC, address(mockSwap), mockSwapReturn);
 
-        // Point the strategy's allowanceHolder to our mock
-        vm.prank(address(1)); // strategy owner
+        vm.prank(address(1));
         MYTStrategy(strategy).setAllowanceHolder(address(mockSwap));
 
-        // Record vault USDC balance before claiming
         uint256 vaultBalanceBefore = IERC20(USDC).balanceOf(vault);
 
-        // Expect the RewardsClaimed event with correct token and amount
         vm.expectEmit(true, true, false, true, strategy);
         emit IMYTStrategy.RewardsClaimed(TOKE, tokeRewardAmount);
 
-        // Execute claimRewards as strategy owner
         bytes memory quote = hex"01";
         vm.prank(address(1));
         uint256 received = IMYTStrategy(strategy).claimRewards(TOKE, quote, 4.99e6);
 
-        // Verify rewards were received and vault got the asset
         uint256 vaultBalanceAfter = IERC20(USDC).balanceOf(vault);
         assertGt(received, 0, "No rewards received from claim");
         assertEq(received, mockSwapReturn, "Received amount does not match expected swap output");
@@ -651,7 +128,6 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
     }
 
     function test_claimRewards_returns_zero_when_staking_enabled() public {
-        // Allocate assets to create a Tokemak position
         bytes memory params = getVaultParams();
         uint256 amountToAllocate = 100e6;
         deal(testConfig.vaultAsset, strategy, amountToAllocate);
@@ -660,92 +136,74 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
 
         uint256 tokeRewardAmount = 10e18;
 
-        // Deploy a MockTokeRewarder with staking ENABLED:
-        // rewardToken == TOKE AND tokeLockDuration > 0 → stakingDisabled = false
         MockTokeRewarder mockRew = new MockTokeRewarder(TOKE, tokeRewardAmount, TOKE, 1);
         vm.etch(REWARDER, address(mockRew).code);
         deal(TOKE, REWARDER, tokeRewardAmount);
 
-        // Record vault USDC balance before claiming
         uint256 vaultBalanceBefore = IERC20(USDC).balanceOf(vault);
 
-        // Execute claimRewards as strategy owner — should return 0
         bytes memory quote = hex"01";
         vm.prank(address(1));
         uint256 received = IMYTStrategy(strategy).claimRewards(TOKE, quote, 9.99e18);
 
-        // Verify nothing was returned and vault balance is unchanged
         uint256 vaultBalanceAfter = IERC20(USDC).balanceOf(vault);
         assertEq(received, 0, "Should return 0 when staking is enabled");
         assertEq(vaultBalanceAfter, vaultBalanceBefore, "Vault balance should not change when staking is enabled");
     }
 
-    // End-to-end test: Full lifecycle with time accumulation for TokeAutoUSD
     function test_toke_auto_usd_full_lifecycle_with_time() public {
         vm.startPrank(allocator);
         bytes32 allocationId = IMYTStrategy(strategy).adapterId();
-        
-        // Initial allocation
-        uint256 alloc1 = 300e6; // 300 USDC
+
+        uint256 alloc1 = 300e6;
         IVaultV2(vault).allocate(strategy, getVaultParams(), alloc1);
         uint256 realAssets1 = IMYTStrategy(strategy).realAssets();
         assertGt(realAssets1, 0, "Real assets should be positive after allocation");
         assertApproxEqAbs(IVaultV2(vault).allocation(allocationId), alloc1, 1e5);
-        
-        // Warp forward 14 days
+
         _warpWithHook(14 days);
-        
-        // Additional allocation
-        uint256 alloc2 = 200e6; // 200 USDC
+
+        uint256 alloc2 = 200e6;
         IVaultV2(vault).allocate(strategy, getVaultParams(), alloc2);
         uint256 realAssets2 = IMYTStrategy(strategy).realAssets();
         assertGe(realAssets2, realAssets1, "Real assets should not decrease");
-        
-        // Warp forward 30 days
+
         _warpWithHook(30 days);
-        
-        // Partial deallocation (withdraw 100 USDC)
+
         uint256 deallocAmount1 = 100e6;
         uint256 deallocPreview1 = IMYTStrategy(strategy).previewAdjustedWithdraw(deallocAmount1);
         IVaultV2(vault).deallocate(strategy, getVaultParams(), deallocPreview1);
         uint256 realAssets3 = IMYTStrategy(strategy).realAssets();
         assertLt(realAssets3, realAssets2, "Real assets should decrease after deallocation");
-        
-        // Warp forward 60 days
+
         _warpWithHook(60 days);
-        
-        // Check vault USDC balance
+
         uint256 vaultUSDCBalance = IERC20(USDC).balanceOf(vault);
         assertGt(vaultUSDCBalance, 0, "Vault should have USDC");
-        
-        // Full deallocation of remaining
+
         uint256 finalRealAssets = IMYTStrategy(strategy).realAssets();
         if (finalRealAssets > 1e6) {
             uint256 finalDeallocPreview = IMYTStrategy(strategy).previewAdjustedWithdraw(finalRealAssets);
             IVaultV2(vault).deallocate(strategy, getVaultParams(), finalDeallocPreview);
         }
-        
+
         uint256 finalVaultUSDCBalance = IERC20(USDC).balanceOf(vault);
         assertGt(finalVaultUSDCBalance, vaultUSDCBalance, "Vault USDC should increase after deallocation");
-        
+
         vm.stopPrank();
     }
 
-    // Fuzz test: Multiple random allocations and deallocations with time warps
     function test_fuzz_toke_auto_usd_operations(uint256[] calldata amounts, uint256[] calldata timeDelays) public {
-        // Use bound for array length instead of assume
         uint256 numOps = bound(amounts.length, 1, 8);
-        // Ensure we don't access beyond array bounds
         uint256 maxIterations = numOps < amounts.length ? numOps : amounts.length;
-        
+
         vm.startPrank(allocator);
         bytes32 allocationId = IMYTStrategy(strategy).adapterId();
-        
+
         for (uint256 i = 0; i < maxIterations; i++) {
-            // Alternate between allocation and deallocation
             bool isAllocate = i % 2 == 0;
-            uint256 amount = bound(amounts[i], 10e6, 50e6); // 10-50 USDC
-            
+            uint256 amount = bound(amounts[i], 10e6, 50e6);
+
             if (isAllocate) {
                 IVaultV2(vault).allocate(strategy, getVaultParams(), amount);
             } else {
@@ -761,36 +219,30 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
                     }
                 }
             }
-            
-            // Warp forward (only access if timeDelays has this index)
+
             uint256 timeDelay = i < timeDelays.length ? bound(timeDelays[i], 1 hours, 60 days) : 1 hours;
             _warpWithHook(timeDelay);
         }
-        
-        // Final sanity checks
+
         uint256 finalRealAssets = IMYTStrategy(strategy).realAssets();
         uint256 finalAllocation = IVaultV2(vault).allocation(allocationId);
         uint256 vaultUSDCBalance = IERC20(USDC).balanceOf(vault);
-        
+
         assertGe(finalRealAssets, 0, "Real assets should be non-negative");
         assertGe(finalAllocation, 0, "Allocation should be non-negative");
         assertGt(vaultUSDCBalance, 0, "Vault should have USDC");
-        
+
         vm.stopPrank();
     }
 
-    // Test: TokeAutoUSD with reward claiming over time
     function test_toke_auto_usd_rewards_over_time() public {
         vm.startPrank(allocator);
-        
-        // Allocate initial amount
-        uint256 allocAmount = 250e6; // 250 USDC
+
+        uint256 allocAmount = 250e6;
         IVaultV2(vault).allocate(strategy, getVaultParams(), allocAmount);
-        
-        // Warp 30 days
+
         _warpWithHook(30 days);
-        
-        // Setup reward claiming mock (staking disabled)
+
         uint256 tokeRewardAmount = 10e18;
         uint256 mockSwapReturn = 5e6;
         MockTokeRewarder mockRew = new MockTokeRewarder(TOKE, tokeRewardAmount, TOKE, 0);
@@ -799,44 +251,39 @@ contract TokeAutoUSDStrategyTest is BaseStrategyTest {
         deal(TOKE, REWARDER, tokeRewardAmount);
         MockSwapExecutor mockSwap = new MockSwapExecutor(USDC, mockSwapReturn);
         deal(USDC, address(mockSwap), mockSwapReturn);
-        
+
         vm.stopPrank();
         vm.startPrank(address(1));
         MYTStrategy(strategy).setAllowanceHolder(address(mockSwap));
-        
-        // Claim rewards
+
         bytes memory quote = hex"01";
         vm.stopPrank();
         vm.startPrank(address(1));
         uint256 received = IMYTStrategy(strategy).claimRewards(TOKE, quote, 4.99e6);
-        
+
         assertGt(received, 0, "Should receive rewards");
         vm.etch(REWARDER, rewarderCodeBeforeMock);
-        
-        // Continue with allocations/deallocations
+
         vm.stopPrank();
         vm.startPrank(allocator);
         uint256 realAssets1 = IMYTStrategy(strategy).realAssets();
-        
+
         _warpWithHook(30 days);
-        
-        // Small deallocation
+
         uint256 smallDealloc = 30e6;
         uint256 deallocPreview = IMYTStrategy(strategy).previewAdjustedWithdraw(smallDealloc);
         IVaultV2(vault).deallocate(strategy, getVaultParams(), deallocPreview);
-        
+
         _warpWithHook(30 days);
-        
-        // Final deallocation
+
         uint256 finalRealAssets = IMYTStrategy(strategy).realAssets();
         if (finalRealAssets > 1e6) {
             uint256 finalDeallocPreview = IMYTStrategy(strategy).previewAdjustedWithdraw(finalRealAssets);
             IVaultV2(vault).deallocate(strategy, getVaultParams(), finalDeallocPreview);
         }
-        
-        // Allow small residual dust from share/asset rounding on Tokemak redeem path.
+
         assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), 0, 1e5, "All real assets should be deallocated");
-        
+
         vm.stopPrank();
     }
 }
