@@ -735,7 +735,9 @@ contract E2EStrategyHandler is Test {
         if (globalRiskHeadroom < MIN_ALLOCATE) return (false, 0);
 
         uint256 underlyingMaxDeposit = _getUnderlyingMaxDeposit(strategy);
-        if (underlyingMaxDeposit < MIN_ALLOCATE) return (false, 0);
+        // Morpho-style vaults report maxDeposit(address) == 0 regardless of actual capacity;
+        // ignore sub-minimal values (mirrors the maxWithdraw handling in _computeDeallocateBounds).
+        if (underlyingMaxDeposit != 0 && underlyingMaxDeposit < MIN_ALLOCATE) return (false, 0);
 
         uint256 currentRealAssets = IMYTStrategy(strategy).realAssets();
         uint256 pendingYield = currentRealAssets > currentAllocation ? currentRealAssets - currentAllocation : 0;
@@ -747,7 +749,7 @@ contract E2EStrategyHandler is Test {
         maxAllocate = maxByAbsoluteRemaining;
         if (maxByRelativeCap < maxAllocate) maxAllocate = maxByRelativeCap;
         if (globalRiskHeadroom < maxAllocate) maxAllocate = globalRiskHeadroom;
-        if (underlyingMaxDeposit < maxAllocate) maxAllocate = underlyingMaxDeposit;
+        if (underlyingMaxDeposit >= MIN_ALLOCATE && underlyingMaxDeposit < maxAllocate) maxAllocate = underlyingMaxDeposit;
 
         // Individual risk cap is allocator-enforced (operator path only, matching production).
         if (caller != admin) {
