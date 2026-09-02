@@ -27,7 +27,6 @@ interface IStrategySimulationProvider {
 }
 
 contract E2EStrategyHandler is Test {
-
     IVaultV2 public vault;
     address public allocator;
     address public classifier;
@@ -63,6 +62,7 @@ contract E2EStrategyHandler is Test {
     uint256 public ghost_totalDeallocated;
     mapping(address => uint256) public ghost_userDeposits;
     mapping(address => uint256) public ghost_strategyAllocations;
+    mapping(address => uint256) public ghost_strategyYieldCredited;
     uint256 public ghost_totalCollateralDeposited;
     uint256 public ghost_totalDebtMinted;
     uint256 public ghost_totalDebtRepaid;
@@ -119,7 +119,7 @@ contract E2EStrategyHandler is Test {
         mockStrategyB = p.mockStrategyB;
         mockYieldTokenA = p.mockYieldTokenA;
         mockYieldTokenB = p.mockYieldTokenB;
-        
+
         forceDeallocateEnabled[p.mockStrategyA] = true;
         forceDeallocateEnabled[p.mockStrategyB] = true;
     }
@@ -155,7 +155,7 @@ contract E2EStrategyHandler is Test {
 
         ghost_totalDeposited += amount;
         ghost_userDeposits[currentActor] += amount;
-        _recordAllocationDeltas(snap);
+        _recordAllocationDeltas(snap, 0, 0);
     }
 
     function withdraw(uint256 amount, uint256 actorSeed) external countCall(this.withdraw.selector) useActor(actorSeed) {
@@ -190,7 +190,7 @@ contract E2EStrategyHandler is Test {
         } else {
             ghost_userDeposits[currentActor] = 0;
         }
-        _recordAllocationDeltas(snap);
+        _recordAllocationDeltas(snap, 0, 0);
     }
 
     function mint(uint256 shares, uint256 actorSeed) external countCall(this.mint.selector) useActor(actorSeed) {
@@ -216,7 +216,7 @@ contract E2EStrategyHandler is Test {
 
         ghost_totalDeposited += assetsDeposited;
         ghost_userDeposits[currentActor] += assetsDeposited;
-        _recordAllocationDeltas(snap);
+        _recordAllocationDeltas(snap, 0, 0);
     }
 
     function redeem(uint256 shares, uint256 actorSeed) external countCall(this.redeem.selector) useActor(actorSeed) {
@@ -251,7 +251,7 @@ contract E2EStrategyHandler is Test {
         } else {
             ghost_userDeposits[currentActor] = 0;
         }
-        _recordAllocationDeltas(snap);
+        _recordAllocationDeltas(snap, 0, 0);
     }
 
     function allocate(uint256 strategyIndexSeed, uint256 amount) external countCall(this.allocate.selector) {
@@ -282,7 +282,7 @@ contract E2EStrategyHandler is Test {
         IAllocator(allocator).allocate(strategy, amount);
         executed[selector]++;
 
-        _recordAllocationDeltas(snap);
+        _recordAllocationDeltas(snap, amount, 0);
     }
 
     function deallocate(uint256 strategyIndexSeed, uint256 amount) external countCall(this.deallocate.selector) {
@@ -314,7 +314,7 @@ contract E2EStrategyHandler is Test {
         IAllocator(allocator).deallocate(strategy, preview);
         executed[selector]++;
 
-        _recordAllocationDeltas(snap);
+        _recordAllocationDeltas(snap, 0, preview);
     }
 
     function deallocateAll(uint256 strategyIndexSeed) external countCall(this.deallocateAll.selector) {
@@ -344,7 +344,7 @@ contract E2EStrategyHandler is Test {
         IAllocator(allocator).deallocate(strategy, preview);
         executed[selector]++;
 
-        _recordAllocationDeltas(snap);
+        _recordAllocationDeltas(snap, 0, preview);
     }
 
     /// strategies that have force-deallocate enabled
@@ -404,7 +404,7 @@ contract E2EStrategyHandler is Test {
         vault.forceDeallocate(strategy, data, amount, currentActor);
         executed[selector]++;
 
-        _recordAllocationDeltas(snap);
+        _recordAllocationDeltas(snap, 0, amount);
     }
 
     function reclassifyStrategy(uint256 strategyIndexSeed, uint256 newRiskClassSeed) external countCall(this.reclassifyStrategy.selector) {
@@ -729,7 +729,6 @@ contract E2EStrategyHandler is Test {
         if (absoluteCap == 0) return (false, 0);
         if (currentAllocation >= absoluteCap) return (false, 0);
 
-
         uint8 riskLevel = AlchemistStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
         uint256 globalRiskHeadroom = _remainingGlobalRiskHeadroom(riskLevel);
         if (globalRiskHeadroom < MIN_ALLOCATE) return (false, 0);
@@ -830,7 +829,7 @@ contract E2EStrategyHandler is Test {
         }
     }
 
-    function _recordAllocationDeltas(uint256[] memory beforeAllocations) internal {
+    function _recordAllocationDeltas(uint256[] memory beforeAllocations, uint256 assetsIn, uint256 assetsOut) internal {
         uint256 len = strategies.length;
         for (uint256 i = 0; i < len; i++) {
             address strategy = strategies[i];
@@ -843,6 +842,9 @@ contract E2EStrategyHandler is Test {
                 if (deltaUp > 0) {
                     ghost_totalAllocated += deltaUp;
                     ghost_strategyAllocations[strategy] += deltaUp;
+                    uint256 credited = deltaUp + assetsOut;
+                    uint256 yieldCredited = credited > assetsIn ? credited - assetsIn : 0;
+                    if (yieldCredited > 0) ghost_strategyYieldCredited[strategy] += yieldCredited;
                 }
             } else {
                 uint256 deltaDown = beforeAllocation - afterAllocation;

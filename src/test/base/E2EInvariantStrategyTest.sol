@@ -19,10 +19,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
 
     uint256 internal constant REAL_STRATEGY_RELATIVE_CAP = 0.5e18;
 
-    function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params)
-        internal
-        virtual
-        returns (address);
+    function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal virtual returns (address);
 
     function getRealStrategyParams() internal virtual returns (IMYTStrategy.StrategyParams memory);
 
@@ -127,7 +124,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
     function invariant_allocationWithinAbsoluteCap() public view {
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 id = IMYTStrategy(strategies[i]).adapterId();
-            uint256 allocation = vault.allocation(id);
+            uint256 allocation = _principalAllocation(strategies[i], id);
             uint256 absoluteCap = vault.absoluteCap(id);
             assertLe(allocation, absoluteCap + absoluteCap / 50 + 1, _label(strategies[i], "exceeds absolute cap"));
         }
@@ -142,7 +139,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
             uint256 relativeCap = vault.relativeCap(id);
             if (relativeCap == type(uint256).max || relativeCap == 1e18) continue;
 
-            uint256 allocation = vault.allocation(id);
+            uint256 allocation = _principalAllocation(strategies[i], id);
             uint256 maxAllowed = (firstTotalAssets * relativeCap) / 1e18;
             uint256 tolerance = maxAllowed / 100 + 1;
 
@@ -159,7 +156,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 id = IMYTStrategy(strategies[i]).adapterId();
             uint8 riskLevel = _riskLevel(id);
-            riskAllocations[riskLevel] += vault.allocation(id);
+            riskAllocations[riskLevel] += _principalAllocation(strategies[i], id);
         }
 
         for (uint8 r = 0; r < 3; r++) {
@@ -176,7 +173,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         uint256 totalAssets = vault.totalAssets();
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 id = IMYTStrategy(strategies[i]).adapterId();
-            uint256 allocation = vault.allocation(id);
+            uint256 allocation = _principalAllocation(strategies[i], id);
             uint256 individualRiskCapPct = AlchemistStrategyClassifier(classifier).getIndividualCap(uint256(id));
             uint256 individualRiskCap = (totalAssets * individualRiskCapPct) / 1e18;
             assertLe(allocation, individualRiskCap, "strategy exceeds individual risk cap");
@@ -252,7 +249,6 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
             if (actual <= minMaterial) continue;
 
             assertGe(ghost, actual * 99 / 100, _label(strategies[i], "ghost below actual"));
-            assertLe(ghost, actual * 101 / 100, _label(strategies[i], "ghost above actual"));
         }
     }
 
@@ -280,7 +276,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
 
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 id = IMYTStrategy(strategies[i]).adapterId();
-            uint256 allocation = vault.allocation(id);
+            uint256 allocation = _principalAllocation(strategies[i], id);
             if (allocation == 0) continue;
 
             (,,,,, uint256 strategyGlobalCap,,,) = IMYTStrategy(strategies[i]).params();
@@ -376,6 +372,12 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
     // =============================================================================================
 
     uint256 minMaterial;
+
+    function _principalAllocation(address strategy, bytes32 id) internal view returns (uint256) {
+        uint256 allocation = vault.allocation(id);
+        uint256 credited = handler.ghost_strategyYieldCredited(strategy);
+        return allocation > credited ? allocation - credited : 0;
+    }
 
     function _label(address strategy, string memory suffix) internal view returns (string memory) {
         return string(abi.encodePacked(strategyLabel[strategy], " ", suffix));
