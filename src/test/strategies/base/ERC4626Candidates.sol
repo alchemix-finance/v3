@@ -82,4 +82,29 @@ library ERC4626Candidates {
             zeroMaxWithdrawIsUnbounded: false
         });
     }
+
+    function gauntletUSDCFrontier() internal pure returns (ERC4626Candidate memory) {
+        return ERC4626Candidate({
+            targetVault: 0x1deEfABEe758AAbdC29a542B24ca3b75aFD56765,
+            asset: BASE_USDC,
+            rpcEnv: "BASE_RPC_URL",
+            fallbackRpcUrl: BASE_RPC_FALLBACK,
+            name: "Gauntlet USDC Frontier",
+            protocol: "Morpho V2",
+            riskClass: IMYTStrategy.RiskClass.HIGH,
+            forkBlock: 50_828_803,
+            assetDecimals: 6,
+            shareDecimals: 18,
+            initialDeposit: 10_000e6,
+            absoluteCap: 10_000e6,
+            relativeCap: 0.1e18,
+            strategyCap: 10_000e6,
+            globalCap: 0.1e18,
+            estimatedYield: 483,
+            slippageBPS: 100,
+            additionalIncentives: false,
+            maxWithdrawIsAuthoritative: true,
+            zeroMaxWithdrawIsUnbounded: true
+        });
+    }
 }
