@@ -71,18 +71,17 @@ contract DeployV3BaseScript is Script {
     }
 
     function deployTransmuter(address alAsset) public returns (Transmuter) {
-        // FIXME transmuter params
         ITransmuter.TransmuterInitializationParams memory transmuterParams = ITransmuter.TransmuterInitializationParams({
             syntheticToken: alAsset,
             feeReceiver: protocolFeeReceiver,
-            timeToTransmute: 604_800,
+            timeToTransmute: 1_209_600, // 28 days at Base 2s block time (param is in blocks: block.number + timeToTransmute)
             transmutationFee: 0,
-            exitFee: 100,
+            exitFee: 100, // 1% (BPS)
             graphSize: 365 days
         });
 
         Transmuter deployedTransmuter = new Transmuter(transmuterParams);
-        deployedTransmuter.setDepositCap(0);
+        deployedTransmuter.setDepositCap(uint256(type(int256).max)); // no cap; 0 would brick createRedemption
 
         require(deployedTransmuter.transmutationFee() == 0);
         require(deployedTransmuter.exitFee() == 100);
@@ -91,7 +90,7 @@ contract DeployV3BaseScript is Script {
 
     function deployAlchemist(address alAsset, address underlying, address vault, address transmuter, uint256 cap) public returns (AlchemistV3) {
         AlchemistV3 alchemistLogic = new AlchemistV3();
-        // FIXME alchemist params
+    
         AlchemistInitializationParams memory params = AlchemistInitializationParams({
             admin: deployerAddr,
             debtToken: alAsset,
@@ -102,7 +101,7 @@ contract DeployV3BaseScript is Script {
             liquidationTargetCollateralization: 1_111_111_111_111_111_111,
             globalMinimumCollateralization: 1_052_631_578_950_000_000, // 20/19
             transmuter: transmuter,
-            protocolFee: 25, // 10000 bps -> 0.25%
+            protocolFee: 10, // 10000 bps -> 0.1%
             protocolFeeReceiver: protocolFeeReceiver,
             liquidatorFee: 150,
             repaymentFee: 0,
@@ -117,7 +116,7 @@ contract DeployV3BaseScript is Script {
             alchemParams
         )));
 
-        require(deployedAlchemist.protocolFee() == 25);
+        require(deployedAlchemist.protocolFee() == 10);
         require(deployedAlchemist.liquidatorFee() == 150);
         require(deployedAlchemist.repaymentFee() == 0);
 
@@ -142,8 +141,7 @@ contract DeployV3BaseScript is Script {
         curator.increaseAbsoluteCap(strategy, cap);
         curator.submitIncreaseRelativeCap(strategy, globalCap);
         curator.increaseRelativeCap(strategy, globalCap);
-        // FIXME penalty
-        curator.submitSetForceDeallocatePenalty(strategy, myt, 2e16);
+        curator.submitSetForceDeallocatePenalty(strategy, myt, 2e16); // value stays, switch never enabled
         usdcAllocator.proxy(myt, abi.encodeCall(IVaultV2.setForceDeallocatePenalty, (strategy, 2e16)));
 
         usdcStrategies.push(strategy);
@@ -158,15 +156,14 @@ contract DeployV3BaseScript is Script {
     }
 
     function run() public {
-        // Requires the alUSDb deployed by DeployV3BaseAlUSDb and ADMIN_ROLE granted back to the deployer by the multisig
-        alUSDb = vm.envAddress("ALUSDB_ADDRESS");
-        require(alUSDb != address(0));
+        alUSDb = address(0x877014E21c32feA108B6A1f45f367efc9a2d9B9F);
+
         require(alUSDb.code.length > 0);
         CrossChainCanonicalAlchemicTokenV3 token = CrossChainCanonicalAlchemicTokenV3(alUSDb);
         require(keccak256(abi.encodePacked(token.symbol())) == keccak256("alUSDb"));
         require(Ownable(alUSDb).owner() == newOwner);
         require(token.hasRole(token.ADMIN_ROLE(), deployerAddr));
-        expectedMint = vm.envOr("ALUSDB_INITIAL_MINT", uint256(1e9 * 1e18)); // FIXME must match DeployV3BaseAlUSDb mint amount
+        expectedMint = vm.envOr("ALUSDB_INITIAL_MINT", uint256(10 * 1e18));
 
         vm.startBroadcast(deployerAddr);
 
@@ -183,14 +180,18 @@ contract DeployV3BaseScript is Script {
         // Set vault curator immediately
         usdcVault.setCurator(address(curator));
 
+        // MYT yield fee 17.5% to protocol fee receiver
+        usdcVault.setPerformanceFeeRecipient(protocolFeeReceiver);
+        usdcVault.setPerformanceFee(0.175e18);
+
         // Deploy AlchemistAllocator
         usdcAllocator = new AlchemistAllocator(address(usdcVault), deployerAddr, deployerAddr, address(classifier));
 
         // Deploy Transmuter
         usdcTransmuter = deployTransmuter(alUSDb);
 
-        // Deploy Alchemist
-        usdcAlchemist = deployAlchemist(alUSDb, USDC, address(usdcVault), address(usdcTransmuter), 0);
+        // Deploy Alchemist (deposit cap 5m USDC)
+        usdcAlchemist = deployAlchemist(alUSDb, USDC, address(usdcVault), address(usdcTransmuter), 5_000_000e6);
 
         // Deploy Router
         usdcRouter = new AlchemistRouter(address(usdcAlchemist));
@@ -248,10 +249,10 @@ contract DeployV3BaseScript is Script {
             STEAKHOUSE_USDC_VAULT
         );
 
-        // FIXME set max rate
-        usdcAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
+        // max rate 10%/yr (1e17 / 365 days)
+        usdcAllocator.setMaxRate(3170979198);
 
-        // FIXME set force deallocate penalty
+
         usdcAllocator.setPermissionedCall(IVaultV2.setForceDeallocatePenalty.selector, true);
 
         usdcVault.setOwner(newOwner);
@@ -297,6 +298,11 @@ contract DeployV3BaseScript is Script {
         require(curator.pendingAdmin() == newOwner);
         require(usdcAllocator.pendingAdmin() == newOwner);
         require(usdcVault.maxRate() == 3170979198);
+        require(usdcVault.performanceFee() == 0.175e18);
+        require(usdcVault.performanceFeeRecipient() == protocolFeeReceiver);
+        require(usdcAlchemist.depositCap() == 5_000_000e6);
+        require(usdcTransmuter.depositCap() == uint256(type(int256).max));
+        require(usdcTransmuter.timeToTransmute() == 1_209_600); // 28 days in 2s
         require(usdcVault.owner() == newOwner);
         require(usdcVault.curator() == address(curator));
         require(usdcVault.isAllocator(address(usdcAllocator)));
