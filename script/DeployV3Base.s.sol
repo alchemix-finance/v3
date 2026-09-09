@@ -35,6 +35,11 @@ contract DeployV3BaseScript is Script {
     address public USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // native USDC on Base
     address public alUSDb;
 
+    // ERC4626 target vaults on Base
+    address public constant GAUNTLET_USDC_FRONTIER_VAULT = 0x1deEfABEe758AAbdC29a542B24ca3b75aFD56765;
+    address public constant YEARN_OG_USDC_V2_VAULT = 0xe7D0DBE3493830e2Ab62619211A2BfF0Fc60dB42;
+    address public constant STEAKHOUSE_USDC_VAULT = 0xbeeff7aE5E00Aae3Db302e4B0d8C883810a58100;
+
     // Fee and receiver addresses
     address public protocolFeeReceiver = 0x24E9cbB9DdDa1247ae4b4eEEE3C569A2190ac401;
 
@@ -194,7 +199,54 @@ contract DeployV3BaseScript is Script {
         curator.submitSetAllocator(address(usdcVault), address(usdcAllocator), true);
         usdcVault.setIsAllocator(address(usdcAllocator), true);
 
-        // No candidate strategies yet, use deployStrategy/registerStrategy helpers once selected
+        // Deploy USDC strategies
+        deployStrategy(
+            address(usdcVault),
+            IMYTStrategy.StrategyParams({
+                owner: deployerAddr,
+                name: "Gauntlet USDC Frontier",
+                protocol: "Morpho V2",
+                riskClass: IMYTStrategy.RiskClass.HIGH, // FIXME confirm risk class
+                cap: 10_000e6, // FIXME
+                globalCap: 0.1e18, // FIXME
+                estimatedYield: 483, // FIXME
+                additionalIncentives: false, // FIXME
+                slippageBPS: 100 // FIXME
+            }),
+            GAUNTLET_USDC_FRONTIER_VAULT
+        );
+
+        deployStrategy(
+            address(usdcVault),
+            IMYTStrategy.StrategyParams({
+                owner: deployerAddr,
+                name: "Yearn OG USDC V2",
+                protocol: "Morpho V2",
+                riskClass: IMYTStrategy.RiskClass.MEDIUM, // FIXME confirm risk class
+                cap: 10_000e6, // FIXME
+                globalCap: 0.25e18, // FIXME
+                estimatedYield: 531, // FIXME
+                additionalIncentives: false, // FIXME
+                slippageBPS: 50 // FIXME
+            }),
+            YEARN_OG_USDC_V2_VAULT
+        );
+
+        deployStrategy(
+            address(usdcVault),
+            IMYTStrategy.StrategyParams({
+                owner: deployerAddr,
+                name: "Steakhouse High Yield USDC",
+                protocol: "Steakhouse",
+                riskClass: IMYTStrategy.RiskClass.LOW, // FIXME confirm risk class
+                cap: 10_000e6, // FIXME
+                globalCap: 1e18, // FIXME
+                estimatedYield: 100e6, // FIXME placeholder from test candidates, no reviewed value yet
+                additionalIncentives: false, // FIXME
+                slippageBPS: 1 // FIXME placeholder from test candidates, no reviewed value yet
+            }),
+            STEAKHOUSE_USDC_VAULT
+        );
 
         // FIXME set max rate
         usdcAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
@@ -230,6 +282,10 @@ contract DeployV3BaseScript is Script {
         console.log("USDC Allocator deployed at:", address(usdcAllocator));
         console.log("USDC Router deployed at:", address(usdcRouter));
 
+        for (uint256 i = 0; i < usdcStrategies.length; i++) {
+            console.log("USDC strategy deployed at:", usdcStrategies[i]);
+        }
+
         console.log("USDC Alchemist NFT deployed at:", usdcAlchemist.alchemistPositionNFT());
         console.log("USDC Alchemist Fee Vault deployed at:", usdcAlchemist.alchemistFeeVault());
 
@@ -256,6 +312,13 @@ contract DeployV3BaseScript is Script {
         require(AlchemistTokenVault(usdcAlchemist.alchemistFeeVault()).authorized(address(usdcAlchemist)));
         require(Ownable(usdcAlchemist.alchemistFeeVault()).owner() == newOwner);
         require(usdcRouter.alchemist() == address(usdcAlchemist));
+        require(usdcStrategies.length == 3);
+        for (uint256 i = 0; i < usdcStrategies.length; i++) {
+            ERC4626Strategy s = ERC4626Strategy(payable(usdcStrategies[i]));
+            require(s.owner() == newOwner);
+            require(s.killSwitch());
+            require(s.vault().asset() == USDC);
+        }
         require(Ownable(alUSDb).owner() == newOwner);
         require(IERC20(alUSDb).balanceOf(newOwner) == expectedMint);
         require(AlAsset(alUSDb).whitelisted(address(usdcAlchemist)));
