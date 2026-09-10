@@ -38,6 +38,12 @@ interface IAutoEthMath {
         uint256 supply,
         Rounding rounding
     ) external view returns (uint256);
+
+    function previewRedeem(uint256 shares) external view returns (uint256 assets);
+}
+
+interface IRewarderBalance {
+    function balanceOf(address account) external view returns (uint256);
 }
 
 /// @notice Replaces the Tokemak MainRewarder via vm.etch so that
@@ -495,6 +501,49 @@ contract TokeAutoETHStrategyTest is BaseStrategyTest {
         vm.expectRevert(ALLOWED_TOKEMAK_REVERT_SELECTOR);
         IVaultV2(vault).allocate(strategy, getVaultParams(), amountToAllocate);
         vm.stopPrank();
+    }
+
+    function test_regression_preview_adjusted_withdraw_ignores_idle_assets() public {
+        vm.startPrank(vault);
+        deal(WETH, strategy, 1e18);
+
+        uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(1e18);
+        assertEq(preview, 0, "preview should ignore idle-only WETH and return zero");
+
+        bytes32[] memory strategyIds;
+        (strategyIds,) = IMYTStrategy(strategy).deallocate(getVaultParams(), 1e18, "", address(vault));
+        assertEq(strategyIds.length, 1, "strategy should return its adapter id");
+        assertEq(strategyIds[0], IMYTStrategy(strategy).adapterId(), "unexpected adapter id");
+        assertEq(IERC20(WETH).allowance(strategy, vault), 1e18, "idle-only deallocate should still approve vault withdrawal");
+        vm.stopPrank();
+    }
+
+    function test_regression_preview_adjusted_withdraw_can_overstate_live_unwind() public {
+        _seedPreviewOverstatementScenario();
+
+        uint256 realAssetsBefore = IMYTStrategy(strategy).realAssets();
+        uint256 idleAssetsBefore = IERC20(WETH).balanceOf(strategy);
+        uint256 previewAmount = IMYTStrategy(strategy).previewAdjustedWithdraw(realAssetsBefore);
+
+        assertGt(realAssetsBefore, 0, "scenario should leave real assets");
+        assertGt(previewAmount, idleAssetsBefore, "preview should ask for more than the currently idle balance");
+
+        vm.expectRevert();
+        IVaultV2(vault).deallocate(strategy, getVaultParams(), previewAmount);
+        vm.stopPrank();
+    }
+
+    function _seedPreviewOverstatementScenario() internal {
+        vm.startPrank(allocator);
+        IVaultV2(vault).allocate(strategy, getVaultParams(), 2e18);
+        _warpWithHook(7 days);
+
+        IVaultV2(vault).allocate(strategy, getVaultParams(), 1e18);
+        _warpWithHook(14 days);
+
+        uint256 deallocPreview = IMYTStrategy(strategy).previewAdjustedWithdraw(0.05e18);
+        IVaultV2(vault).deallocate(strategy, getVaultParams(), deallocPreview);
+        _warpWithHook(30 days);
     }
 
     // End-to-end test: Full lifecycle with time accumulation for TokeAutoETH

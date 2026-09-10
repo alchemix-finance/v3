@@ -857,6 +857,105 @@ contract AlchemistRouterTest is Test {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    //  selfLiquidate
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function test_selfLiquidateUnderlying() public {
+        deal(underlying, user, AMOUNT);
+
+        vm.startPrank(user);
+        IERC20(underlying).approve(address(router), AMOUNT);
+        uint256 tokenId = router.depositUnderlying(0, AMOUNT, BORROW_AMOUNT, 0, _deadline());
+
+        (uint256 collateralBefore, uint256 debtBefore,) = alchemist.getCDP(tokenId);
+        uint256 expectedSharesOut = collateralBefore - alchemist.convertDebtTokensToYield(debtBefore);
+        uint256 expectedUnderlyingOut = IVaultV2(mytVault).previewRedeem(expectedSharesOut);
+        uint256 underlyingBefore = IERC20(underlying).balanceOf(user);
+
+        IERC721(address(nft)).approve(address(router), tokenId);
+        router.selfLiquidateToUnderlying(tokenId, 0, _deadline());
+        vm.stopPrank();
+
+        (uint256 collateralAfter, uint256 debtAfter, uint256 earmarkedAfter) = alchemist.getCDP(tokenId);
+        assertEq(collateralAfter, 0, "Collateral should be fully cleared");
+        assertEq(debtAfter, 0, "Debt should be fully cleared");
+        assertEq(earmarkedAfter, 0, "Earmarked debt should be fully cleared");
+        assertEq(nft.ownerOf(tokenId), user, "NFT should be returned to the owner");
+        assertApproxEqAbs(
+            IERC20(underlying).balanceOf(user) - underlyingBefore,
+            expectedUnderlyingOut,
+            1,
+            "Unexpected underlying returned"
+        );
+        assertEq(IERC20(underlying).balanceOf(address(router)), 0, "Underlying stuck");
+        assertEq(IERC20(mytVault).balanceOf(address(router)), 0, "MYT stuck");
+    }
+
+    function test_selfLiquidateETH() public {
+        address ethUser = address(0xBEEF);
+        vm.deal(ethUser, AMOUNT);
+
+        vm.startPrank(ethUser);
+        uint256 tokenId = router.depositETH{value: AMOUNT}(0, BORROW_AMOUNT, 0, _deadline());
+        uint256 ethBefore = ethUser.balance;
+
+        IERC721(address(nft)).approve(address(router), tokenId);
+        router.selfLiquidateToETH(tokenId, 0, _deadline());
+        vm.stopPrank();
+
+        (uint256 collateralAfter, uint256 debtAfter, uint256 earmarkedAfter) = alchemist.getCDP(tokenId);
+        assertEq(collateralAfter, 0, "Collateral should be fully cleared");
+        assertEq(debtAfter, 0, "Debt should be fully cleared");
+        assertEq(earmarkedAfter, 0, "Earmarked debt should be fully cleared");
+        assertEq(nft.ownerOf(tokenId), ethUser, "NFT should be returned to the owner");
+        assertGt(ethUser.balance, ethBefore, "No ETH returned");
+        assertEq(IERC20(underlying).balanceOf(address(router)), 0, "WETH stuck");
+        assertEq(IERC20(mytVault).balanceOf(address(router)), 0, "MYT stuck");
+        assertEq(address(router).balance, 0, "ETH stuck");
+    }
+
+    function test_revert_selfLiquidateUnderlying_notOwner() public {
+        deal(underlying, user, AMOUNT);
+
+        vm.startPrank(user);
+        IERC20(underlying).approve(address(router), AMOUNT);
+        uint256 tokenId = router.depositUnderlying(0, AMOUNT, BORROW_AMOUNT, 0, _deadline());
+        IERC721(address(nft)).approve(address(router), tokenId);
+        vm.stopPrank();
+
+        address attacker = makeAddr("attacker");
+        vm.startPrank(attacker);
+        vm.expectRevert(bytes("Not position owner"));
+        router.selfLiquidateToUnderlying(tokenId, 0, _deadline());
+        vm.stopPrank();
+    }
+
+    function test_revert_selfLiquidateUnderlying_slippage() public {
+        deal(underlying, user, AMOUNT);
+
+        vm.startPrank(user);
+        IERC20(underlying).approve(address(router), AMOUNT);
+        uint256 tokenId = router.depositUnderlying(0, AMOUNT, BORROW_AMOUNT, 0, _deadline());
+        IERC721(address(nft)).approve(address(router), tokenId);
+
+        vm.expectRevert(bytes("Slippage"));
+        router.selfLiquidateToUnderlying(tokenId, type(uint256).max, _deadline());
+        vm.stopPrank();
+    }
+
+    function test_revert_selfLiquidateUnderlying_noDebt() public {
+        deal(underlying, user, AMOUNT);
+
+        vm.startPrank(user);
+        IERC20(underlying).approve(address(router), AMOUNT);
+        uint256 tokenId = router.depositUnderlying(0, AMOUNT, 0, 0, _deadline());
+        IERC721(address(nft)).approve(address(router), tokenId);
+        vm.expectRevert();
+        router.selfLiquidateToUnderlying(tokenId, 0, _deadline());
+        vm.stopPrank();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     //  Security: mintFrom allowance theft prevention
     // ═══════════════════════════════════════════════════════════════════════
 
