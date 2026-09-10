@@ -30,7 +30,7 @@ interface AlAsset {
 }
 
 contract DeployV3BaseScript is Script {
-    address deployerAddr = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // FIXME
+    address deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
 
     address public USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // native USDC on Base
     address public alUSDb;
@@ -181,11 +181,16 @@ contract DeployV3BaseScript is Script {
         usdcVault.setCurator(address(curator));
 
         // MYT yield fee 17.5% to protocol fee receiver
+        curator.submitSetPerformanceFeeRecipient(address(usdcVault), protocolFeeReceiver);
         usdcVault.setPerformanceFeeRecipient(protocolFeeReceiver);
+        curator.submitSetPerformanceFee(address(usdcVault), 0.175e18);
         usdcVault.setPerformanceFee(0.175e18);
 
         // Deploy AlchemistAllocator
         usdcAllocator = new AlchemistAllocator(address(usdcVault), deployerAddr, deployerAddr, address(classifier));
+
+        // Allow allocator to execute setForceDeallocatePenalty via proxy (needed by registerStrategy)
+        usdcAllocator.setPermissionedCall(IVaultV2.setForceDeallocatePenalty.selector, true);
 
         // Deploy Transmuter
         usdcTransmuter = deployTransmuter(alUSDb);
@@ -207,12 +212,12 @@ contract DeployV3BaseScript is Script {
                 owner: deployerAddr,
                 name: "Gauntlet USDC Frontier",
                 protocol: "Morpho V2",
-                riskClass: IMYTStrategy.RiskClass.HIGH, // FIXME confirm risk class
-                cap: 10_000e6, // FIXME
-                globalCap: 0.1e18, // FIXME
-                estimatedYield: 483, // FIXME
-                additionalIncentives: false, // FIXME
-                slippageBPS: 100 // FIXME
+                riskClass: IMYTStrategy.RiskClass.HIGH, // risk class 2
+                cap: 2_000_000e6,
+                globalCap: 0.2e18, // relative cap inherited from risk class 2
+                estimatedYield: 534, // all time APY
+                additionalIncentives: false,
+                slippageBPS: 10
             }),
             GAUNTLET_USDC_FRONTIER_VAULT
         );
@@ -222,13 +227,13 @@ contract DeployV3BaseScript is Script {
             IMYTStrategy.StrategyParams({
                 owner: deployerAddr,
                 name: "Yearn OG USDC V2",
-                protocol: "Morpho V2",
-                riskClass: IMYTStrategy.RiskClass.MEDIUM, // FIXME confirm risk class
-                cap: 10_000e6, // FIXME
-                globalCap: 0.25e18, // FIXME
-                estimatedYield: 531, // FIXME
-                additionalIncentives: false, // FIXME
-                slippageBPS: 50 // FIXME
+                protocol: "Yearn",
+                riskClass: IMYTStrategy.RiskClass.LOW, // risk class 0
+                cap: 100_000e6,
+                globalCap: 1e18, // relative cap inherited from risk class 0
+                estimatedYield: 534, // all time APY
+                additionalIncentives: false,
+                slippageBPS: 10
             }),
             YEARN_OG_USDC_V2_VAULT
         );
@@ -239,21 +244,18 @@ contract DeployV3BaseScript is Script {
                 owner: deployerAddr,
                 name: "Steakhouse High Yield USDC",
                 protocol: "Steakhouse",
-                riskClass: IMYTStrategy.RiskClass.LOW, // FIXME confirm risk class
-                cap: 10_000e6, // FIXME
-                globalCap: 1e18, // FIXME
-                estimatedYield: 100e6, // FIXME placeholder from test candidates, no reviewed value yet
-                additionalIncentives: false, // FIXME
-                slippageBPS: 1 // FIXME placeholder from test candidates, no reviewed value yet
+                riskClass: IMYTStrategy.RiskClass.LOW, // risk class 0
+                cap: 14_000_000e6,
+                globalCap: 1e18, // relative cap inherited from risk class 0
+                estimatedYield: 527, // all time APY
+                additionalIncentives: false,
+                slippageBPS: 10
             }),
             STEAKHOUSE_USDC_VAULT
         );
 
         // max rate 10%/yr (1e17 / 365 days)
         usdcAllocator.setMaxRate(3170979198);
-
-
-        usdcAllocator.setPermissionedCall(IVaultV2.setForceDeallocatePenalty.selector, true);
 
         usdcVault.setOwner(newOwner);
 
