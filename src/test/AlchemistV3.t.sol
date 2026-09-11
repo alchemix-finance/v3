@@ -1701,6 +1701,31 @@ contract AlchemistV3Test is Test {
         assertEq(IERC20(address(vault)).balanceOf(address(10)), alchemist.convertYieldTokensToDebt(25e18) * 100 / 10_000);
     }
 
+    function testRepayWithEarmarkedDebtRoundsProtocolFeeUpForDustRepay() external {
+        vm.prank(alOwner);
+        alchemist.setProtocolFee(100);
+
+        uint256 amount = 100e18;
+        vm.startPrank(address(0xbeef));
+        SafeERC20.safeApprove(address(vault), address(alchemist), type(uint256).max);
+        alchemist.deposit(amount, address(0xbeef), 0);
+        uint256 tokenId = AlchemistNFTHelper.getFirstTokenId(address(0xbeef), address(alchemistNFT));
+        alchemist.mint(tokenId, 1e18, address(0xbeef));
+        vm.stopPrank();
+
+        vm.startPrank(address(0xdad));
+        SafeERC20.safeApprove(address(alToken), address(transmuterLogic), 1e18);
+        transmuterLogic.createRedemption(1e18, address(0xdad));
+        vm.stopPrank();
+
+        vm.roll(block.number + 5_256_000);
+
+        vm.prank(address(0xbeef));
+        alchemist.repay(90, tokenId);
+
+        assertEq(IERC20(address(vault)).balanceOf(protocolFeeReceiver), 1);
+    }
+
     function testRepayWithEarmarkedDebtPartial() external {
         uint256 amount = 100e18;
         vm.startPrank(address(0xbeef));
@@ -5933,4 +5958,3 @@ contract AlchemistV3Test is Test {
         return a > b ? a - b : b - a;
     }
 }
-
