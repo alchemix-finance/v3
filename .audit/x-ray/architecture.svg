@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2513" height="800" viewBox="0 0 1005 320" font-family="Arial, sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 8 6" refX="8" refY="3"
+      markerWidth="4" markerHeight="3" orient="auto">
+      <path d="M0.5,0.5 L7,3 L0.5,5.5" fill="none" stroke="#94A3B8"
+        stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    </marker>
+    <filter id="shadow" x="-6%" y="-8%" width="112%" height="128%">
+      <feDropShadow dx="0" dy="0.5" stdDeviation="0.8"
+        flood-color="#000" flood-opacity="0.05"/>
+    </filter>
+  </defs>
+  <rect width="1005" height="320" fill="#F8F9FB" rx="3"/>
+  <text x="503" y="11" text-anchor="middle" font-size="6" font-weight="700" fill="#1E293B">Alchemix V3 Architecture</text>
+  <rect x="428" y="16" width="150" height="10" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <rect x="433" y="18.5" width="5" height="5" rx="2.5" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <text x="441" y="22.5" font-size="3.5" fill="#1E293B">Actor</text>
+  <rect x="473" y="18.5" width="5" height="5" rx="1.5" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <rect x="474" y="19.5" width="0.8" height="3" rx="0.4" fill="#3B82F6"/>
+  <text x="481" y="22.5" font-size="3.5" fill="#1E293B">Protocol</text>
+  <rect x="521" y="18.5" width="5" height="5" rx="1.5" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <rect x="522" y="19.5" width="0.8" height="3" rx="0.4" fill="#F59E0B"/>
+  <text x="529" y="22.5" font-size="3.5" fill="#1E293B">External</text>
+  <path d="M70.2,46.0 C70.2,70.0 76.0,70.0 76.0,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M250.4,46.0 C250.4,70.0 334.4,70.0 334.4,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M351.2,46.0 C351.2,70.0 431.6,70.0 431.6,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M452.6,46.0 C452.6,70.0 431.6,70.0 431.6,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M559.4,46.0 C559.4,70.0 557.6,70.0 557.6,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M122.0,112.0 C204.0,134.0 313.3,134.0 395.2,114.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M373.2,112.0 C379.8,126.0 388.6,126.0 395.2,114.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M431.6,114.0 C431.6,135.0 338.2,135.0 338.2,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M431.6,114.0 C431.6,135.0 443.2,135.0 443.2,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M431.6,114.0 C431.6,135.0 551.8,135.0 551.8,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M431.6,114.0 C431.6,135.0 651.4,135.0 651.4,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M334.4,114.0 C334.4,135.0 651.4,135.0 651.4,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M557.6,114.0 C557.6,135.0 651.4,135.0 651.4,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M651.4,176.0 C651.4,197.0 620.3,197.0 620.3,218.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M718.5,236.0 C725.1,258.0 733.9,258.0 740.5,238.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M718.5,236.0 C763.6,250.0 823.8,250.0 868.9,238.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M620.3,238.0 C620.3,259.0 618.7,259.0 618.7,280.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <g filter="url(#shadow)">
+    <rect x="41.0" y="32.0" width="58.4" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="70.2" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Borrower</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="206.8" y="32.0" width="87.2" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="250.4" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">alAsset Staker</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="316.0" y="32.0" width="70.4" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="351.2" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Liquidator</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="408.4" y="32.0" width="88.4" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="452.6" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">DAO Admin</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="518.8" y="32.0" width="81.2" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="559.4" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Operator</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="30.0" y="94.0" width="92.0" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="33.0" y="97.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="76.0" y="103.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">AlchemistRouter</text>
+    <text x="76.0" y="108.5" text-anchor="middle" font-size="3.5" fill="#64748B">Composability</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="395.2" y="94.0" width="72.8" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="398.2" y="97.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="431.6" y="103.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">AlchemistV3</text>
+    <text x="431.6" y="108.5" text-anchor="middle" font-size="3.5" fill="#64748B">CDP Engine</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="295.6" y="94.0" width="77.6" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="298.6" y="97.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="334.4" y="103.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Transmuter</text>
+    <text x="334.4" y="108.5" text-anchor="middle" font-size="3.5" fill="#64748B">Redemption queue</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="490.0" y="94.0" width="135.2" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="493.0" y="97.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="557.6" y="103.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Yield Ops</text>
+    <text x="557.6" y="108.5" text-anchor="middle" font-size="3.5" fill="#64748B">Allocator / Curator / Classifier</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="299.4" y="156.0" width="77.6" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="302.4" y="159.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="338.2" y="165.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Position NFT</text>
+    <text x="338.2" y="170.5" text-anchor="middle" font-size="3.5" fill="#64748B">ERC721 CDP id</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="399.0" y="156.0" width="88.4" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="402.0" y="159.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="443.2" y="165.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">alAsset</text>
+    <text x="443.2" y="170.5" text-anchor="middle" font-size="3.5" fill="#64748B">AlTokenV3 synthetic</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="509.4" y="156.0" width="84.8" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="512.4" y="159.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="551.8" y="165.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Fee Vaults</text>
+    <text x="551.8" y="170.5" text-anchor="middle" font-size="3.5" fill="#64748B">ETH + Token vaults</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="616.2" y="156.0" width="70.4" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="619.2" y="159.0" width="1.4" height="14" rx="0.6" fill="#F59E0B"/>
+    <text x="651.4" y="165.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">MYT Vault</text>
+    <text x="651.4" y="170.5" text-anchor="middle" font-size="3.5" fill="#64748B">Morpho VaultV2</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="522.1" y="218.0" width="196.4" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="525.1" y="221.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="620.3" y="227.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">MYT Strategies</text>
+    <text x="620.3" y="232.5" text-anchor="middle" font-size="3.5" fill="#64748B">Aave/Moonwell/wstETH/sfrxETH/eETH/siUSD/Toke/4626</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="740.5" y="218.0" width="106.4" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="743.5" y="221.0" width="1.4" height="14" rx="0.6" fill="#F59E0B"/>
+    <text x="793.7" y="227.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Oracles</text>
+    <text x="793.7" y="232.5" text-anchor="middle" font-size="3.5" fill="#64748B">Chainlink + Frax adapter</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="868.9" y="218.0" width="106.4" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="871.9" y="221.0" width="1.4" height="14" rx="0.6" fill="#F59E0B"/>
+    <text x="922.1" y="227.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">0x AllowanceHolder</text>
+    <text x="922.1" y="232.5" text-anchor="middle" font-size="3.5" fill="#64748B">DEX swaps</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="500.7" y="280.0" width="236.0" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="503.7" y="283.0" width="1.4" height="14" rx="0.6" fill="#F59E0B"/>
+    <text x="618.7" y="289.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Yield Protocols</text>
+    <text x="618.7" y="294.5" text-anchor="middle" font-size="3.5" fill="#64748B">Aave / Moonwell / Lido / Frax / EtherFi / InfiniFi / Tokemak</text>
+  </g>
+  <rect x="51.9" y="65.0" width="42.4" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="73.1" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">deposit &amp; borrow</text>
+  <rect x="274.8" y="65.0" width="35.2" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="292.4" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">stake alAsset</text>
+  <rect x="378.6" y="65.0" width="25.6" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="391.4" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">liquidate</text>
+  <rect x="428.1" y="65.0" width="28.0" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="442.1" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">set params</text>
+  <rect x="539.7" y="65.0" width="37.6" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="558.5" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">manage capital</text>
+  <rect x="239.8" y="133.0" width="37.6" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="258.6" y="138.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">composed calls</text>
+  <rect x="361.8" y="125.0" width="44.8" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="384.2" y="130.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">redeem collateral</text>
+  <rect x="366.1" y="134.0" width="37.6" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="384.9" y="139.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">mint positions</text>
+  <rect x="412.6" y="130.0" width="49.6" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="437.4" y="135.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">mint/burn synthetic</text>
+  <rect x="471.7" y="130.0" width="40.0" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="491.7" y="135.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">liquidator fees</text>
+  <rect x="520.3" y="130.0" width="42.4" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="541.5" y="135.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">price collateral</text>
+  <rect x="475.3" y="122.0" width="35.2" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="492.9" y="127.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">payout shares</text>
+  <rect x="584.5" y="130.0" width="40.0" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="604.5" y="135.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">caps &amp; adapters</text>
+  <rect x="614.6" y="192.0" width="42.4" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="635.8" y="197.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">allocate capital</text>
+  <rect x="709.5" y="257.0" width="40.0" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="729.5" y="262.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">value positions</text>
+  <rect x="778.5" y="249.0" width="30.4" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="793.7" y="254.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">swap routes</text>
+  <rect x="598.3" y="254.0" width="42.4" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="619.5" y="259.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">deposit &amp; redeem</text>
+</svg>
