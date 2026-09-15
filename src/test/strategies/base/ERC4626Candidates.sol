@@ -6,7 +6,9 @@ import {ERC4626Candidate} from "./ERC4626StrategyTestBase.sol";
 
 library ERC4626Candidates {
     address internal constant BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address internal constant MAINNET_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     string internal constant BASE_RPC_FALLBACK = "https://base.gateway.tenderly.co";
+    string internal constant MAINNET_RPC_FALLBACK = "https://mainnet.gateway.tenderly.co";
 
     function steakhouseUSDC() internal pure returns (ERC4626Candidate memory) {
         return ERC4626Candidate({
@@ -105,6 +107,32 @@ library ERC4626Candidates {
             additionalIncentives: false,
             maxWithdrawIsAuthoritative: true,
             zeroMaxWithdrawIsUnbounded: true
+        });
+    }
+
+    /// @notice Yearn V3 WETH-2 multi-strategy vault. Higher-risk sibling of WETH-1.
+    function yearnWETH2() internal pure returns (ERC4626Candidate memory) {
+        return ERC4626Candidate({
+            targetVault: 0xAc37729B76db6438CE62042AE1270ee574CA7571,
+            asset: MAINNET_WETH,
+            rpcEnv: "MAINNET_RPC_URL",
+            fallbackRpcUrl: MAINNET_RPC_FALLBACK,
+            name: "Yearn Mainnet WETH-2",
+            protocol: "Yearn",
+            riskClass: IMYTStrategy.RiskClass.LOW,
+            forkBlock: 25_970_000,
+            assetDecimals: 18,
+            shareDecimals: 18,
+            initialDeposit: 1000e18,
+            absoluteCap: 10_000e18,
+            relativeCap: 1e18,
+            strategyCap: 10_000e18,
+            globalCap: 1e18,
+            estimatedYield: 700,
+            slippageBPS: 50,
+            additionalIncentives: false,
+            maxWithdrawIsAuthoritative: true,
+            zeroMaxWithdrawIsUnbounded: false
         });
     }
 }
