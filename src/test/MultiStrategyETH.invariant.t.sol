@@ -606,11 +606,15 @@ contract MultiStrategyETHHandler is Test {
     ///      the strategy's existing allocation plus current aggregate in that class.
     function reclassifyStrategy(uint256 strategyIndexSeed, uint256 newRiskClassSeed) external countCall(this.reclassifyStrategy.selector) {
         bytes4 selector = this.reclassifyStrategy.selector;
-        if (strategies.length == 0) _markNoop(selector);
-        return;
+        if (strategies.length == 0) {
+            _markNoop(selector);
+            return;
+        }
 
-        if (newRiskClassSeed % 100 != 0) _markNoop(selector);
-        return;
+        if (newRiskClassSeed % 100 != 0) {
+            _markNoop(selector);
+            return;
+        }
 
         uint256 idx = strategyIndexSeed % strategies.length;
         address strategy = strategies[idx];
@@ -632,8 +636,10 @@ contract MultiStrategyETHHandler is Test {
         }
 
         uint256 strategyAllocation = vault.allocation(allocationId);
-        if (existingInNewClass + strategyAllocation > newGlobalCap) _markNoop(selector);
-        return;
+        if (existingInNewClass + strategyAllocation > newGlobalCap) {
+            _markNoop(selector);
+            return;
+        }
 
         _markAttempt(selector);
         vm.prank(admin);
@@ -647,8 +653,10 @@ contract MultiStrategyETHHandler is Test {
     ///      New local cap >= largest individual allocation in that class.
     function modifyRiskClassCaps(uint256 riskClassSeed, uint256 capSeed) external countCall(this.modifyRiskClassCaps.selector) {
         bytes4 selector = this.modifyRiskClassCaps.selector;
-        if (capSeed % 100 != 0) _markNoop(selector);
-        return;
+        if (capSeed % 100 != 0) {
+            _markNoop(selector);
+            return;
+        }
 
         uint8 riskClass = uint8(riskClassSeed % 3);
         uint256 totalAssets = vault.totalAssets();
@@ -666,13 +674,17 @@ contract MultiStrategyETHHandler is Test {
 
         uint256 minGlobalPct = currentAggregate > 0 ? ((currentAggregate + MIN_ALLOCATE) * 1e18 + totalAssets - 1) / totalAssets : 0.01e18;
         uint256 maxGlobalPct = 1e18;
-        if (minGlobalPct > maxGlobalPct) _markNoop(selector);
-        return;
+        if (minGlobalPct > maxGlobalPct) {
+            _markNoop(selector);
+            return;
+        }
 
         uint256 minLocalPct = maxIndividual > 0 ? ((maxIndividual + MIN_ALLOCATE) * 1e18 + totalAssets - 1) / totalAssets : 0.01e18;
         uint256 maxLocalPct = 1e18;
-        if (minLocalPct > maxLocalPct) _markNoop(selector);
-        return;
+        if (minLocalPct > maxLocalPct) {
+            _markNoop(selector);
+            return;
+        }
 
         uint256 newGlobalPct = bound(capSeed / 10, minGlobalPct, maxGlobalPct);
         uint256 newLocalPct = bound(capSeed / 100, minLocalPct, maxLocalPct);
@@ -687,8 +699,10 @@ contract MultiStrategyETHHandler is Test {
 
     function changePerformanceFee(uint256 feeSeed) external countCall(this.changePerformanceFee.selector) {
         bytes4 selector = this.changePerformanceFee.selector;
-        if (feeSeed % 200 != 0) _markNoop(selector);
-        return;
+        if (feeSeed % 200 != 0) {
+            _markNoop(selector);
+            return;
+        }
 
         uint256 newFee = bound(feeSeed / 200, 0, 0.5e18);
 
@@ -898,6 +912,7 @@ contract MultiStrategyETHInvariantTest is Test {
     address public curatorContract;
     address public admin = address(0x1);
     address public operator = address(0x3);
+    address public feeRecipient = address(0x2);
 
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant EULER_WETH_VAULT = 0xD8b27CF359b7D15710a5BE299AF6e7Bf904984C2;
@@ -924,7 +939,7 @@ contract MultiStrategyETHInvariantTest is Test {
     function setUp() public {
         // Fork mainnet at specific block
         string memory rpc = vm.envString("MAINNET_RPC_URL");
-        forkId = vm.createFork(rpc);
+        forkId = vm.createFork(rpc, 25_977_679);
         vm.selectFork(forkId);
 
         // Setup vault
@@ -1116,8 +1131,8 @@ contract MultiStrategyETHInvariantTest is Test {
 
     function _setPerformanceFee(address _curator) internal {
         AlchemistCurator curator = AlchemistCurator(_curator);
-        curator.submitSetPerformanceFeeRecipient(address(vault), admin);
-        vault.setPerformanceFeeRecipient(admin);
+        curator.submitSetPerformanceFeeRecipient(address(vault), feeRecipient);
+        vault.setPerformanceFeeRecipient(feeRecipient);
         curator.submitSetPerformanceFee(address(vault), 15e16);
         vault.setPerformanceFee(15e16);
     }
