@@ -6,7 +6,6 @@ import {ERC4626Mock} from "@openzeppelin/contracts/mocks/token/ERC4626Mock.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {DeployYvWETH2StrategyScript} from "../../script/DeployYvWETH2Strategy.s.sol";
 import {IMYTStrategy} from "../interfaces/IMYTStrategy.sol";
-import {AlchemistCurator} from "../AlchemistCurator.sol";
 import {ERC4626Strategy} from "../strategies/ERC4626Strategy.sol";
 import {TestERC20} from "./mocks/TestERC20.sol";
 import {MockMYTVault} from "./mocks/MockMYTVault.sol";
@@ -37,7 +36,6 @@ contract DeployYvWETH2StrategyScriptTest is Test {
     uint256 internal constant MAINNET_FORK_BLOCK = 25_970_000;
 
     DeployYvWETH2StrategyScript internal deployScript;
-    AlchemistCurator internal curator;
     TestERC20 internal weth;
     ERC4626Mock internal yearnVault;
     MockMYTForYvWETH2DeployTest internal myt;
@@ -45,7 +43,6 @@ contract DeployYvWETH2StrategyScriptTest is Test {
 
     function setUp() public {
         deployScript = new DeployYvWETH2StrategyScript();
-        curator = new AlchemistCurator(address(deployScript), address(deployScript));
 
         weth = new TestERC20(1_000_000e18, 18);
         yearnVault = new ERC4626Mock(address(weth));
@@ -61,7 +58,7 @@ contract DeployYvWETH2StrategyScriptTest is Test {
         DeployYvWETH2StrategyScript.YvWETH2DeployConfig memory config =
             DeployYvWETH2StrategyScript.YvWETH2DeployConfig({myt: address(myt), yearnVault: address(yearnVault), params: params});
 
-        address strategyAddr = deployScript.deployYvWETH2Strategy(curator, newOwner, config);
+        address strategyAddr = deployScript.deployYvWETH2Strategy(newOwner, config);
         ERC4626Strategy strategy = ERC4626Strategy(strategyAddr);
 
         assertEq(address(strategy.MYT()), address(myt), "unexpected MYT address");
@@ -100,7 +97,6 @@ contract DeployYvWETH2StrategyScriptTest is Test {
         vm.createSelectFork(vm.envOr("MAINNET_RPC_URL", string("https://mainnet.gateway.tenderly.co")), MAINNET_FORK_BLOCK);
 
         DeployYvWETH2StrategyScript forkDeployScript = new DeployYvWETH2StrategyScript();
-        AlchemistCurator forkCurator = new AlchemistCurator(address(forkDeployScript), address(forkDeployScript));
         MockMYTVault forkMYT = new MockMYTVault(address(this), MAINNET_WETH);
         address forkOwner = makeAddr("forkOwner");
 
@@ -110,7 +106,7 @@ contract DeployYvWETH2StrategyScriptTest is Test {
         DeployYvWETH2StrategyScript.YvWETH2DeployConfig memory config =
             DeployYvWETH2StrategyScript.YvWETH2DeployConfig({myt: address(forkMYT), yearnVault: YV_WETH_2_VAULT, params: params});
 
-        ERC4626Strategy strategy = ERC4626Strategy(forkDeployScript.deployYvWETH2Strategy(forkCurator, forkOwner, config));
+        ERC4626Strategy strategy = ERC4626Strategy(forkDeployScript.deployYvWETH2Strategy(forkOwner, config));
         assertEq(address(strategy.vault()), YV_WETH_2_VAULT, "unexpected Yearn vault");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled after deploy");
 

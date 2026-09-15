@@ -3,7 +3,6 @@ pragma solidity 0.8.28;
 
 import {Script, console} from "forge-std/Script.sol";
 import {IMYTStrategy} from "../src/interfaces/IMYTStrategy.sol";
-import {AlchemistCurator} from "../src/AlchemistCurator.sol";
 import {ERC4626Strategy} from "../src/strategies/ERC4626Strategy.sol";
 
 /// @notice Reusable deploy helper for the Yearn WETH-2 ERC4626 vault strategy on Ethereum mainnet.
@@ -37,8 +36,7 @@ contract DeployYvWETH2StrategyScript is Script {
         });
     }
 
-    function deployYvWETH2Strategy(AlchemistCurator curator, address targetOwner, YvWETH2DeployConfig memory config) public returns (address strategyAddr) {
-        curator;
+    function deployYvWETH2Strategy(address targetOwner, YvWETH2DeployConfig memory config) public returns (address strategyAddr) {
         ERC4626Strategy strategy = new ERC4626Strategy(config.myt, config.params, config.yearnVault);
         strategyAddr = address(strategy);
         strategy.setKillSwitch(true);
@@ -46,12 +44,10 @@ contract DeployYvWETH2StrategyScript is Script {
     }
 
     function run() public returns (address strategyAddr) {
-        AlchemistCurator curator = AlchemistCurator(curatorAddr);
-
         YvWETH2DeployConfig memory config = YvWETH2DeployConfig({myt: ethMYT, yearnVault: YV_WETH_2_VAULT, params: defaultParams()});
 
         vm.startBroadcast(deployerAddr);
-        strategyAddr = deployYvWETH2Strategy(curator, newOwner, config);
+        strategyAddr = deployYvWETH2Strategy(newOwner, config);
         vm.stopBroadcast();
 
         console.log("Yearn Mainnet WETH-2 ERC4626Strategy deployed at:", strategyAddr);
