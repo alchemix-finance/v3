@@ -30,10 +30,15 @@ interface AlAsset {
 }
 
 contract DeployV3BaseScript is Script {
-    address deployerAddr = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // FIXME
+    address deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
 
     address public USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // native USDC on Base
     address public alUSDb;
+
+    // ERC4626 target vaults on Base
+    address public constant GAUNTLET_USDC_FRONTIER_VAULT = 0x1deEfABEe758AAbdC29a542B24ca3b75aFD56765;
+    address public constant YEARN_OG_USDC_V2_VAULT = 0xe7D0DBE3493830e2Ab62619211A2BfF0Fc60dB42;
+    address public constant STEAKHOUSE_USDC_VAULT = 0xbeeff7aE5E00Aae3Db302e4B0d8C883810a58100;
 
     // Fee and receiver addresses
     address public protocolFeeReceiver = 0x24E9cbB9DdDa1247ae4b4eEEE3C569A2190ac401;
@@ -66,18 +71,17 @@ contract DeployV3BaseScript is Script {
     }
 
     function deployTransmuter(address alAsset) public returns (Transmuter) {
-        // FIXME transmuter params
         ITransmuter.TransmuterInitializationParams memory transmuterParams = ITransmuter.TransmuterInitializationParams({
             syntheticToken: alAsset,
             feeReceiver: protocolFeeReceiver,
-            timeToTransmute: 604_800,
+            timeToTransmute: 1_209_600, // 28 days at Base 2s block time (param is in blocks: block.number + timeToTransmute)
             transmutationFee: 0,
-            exitFee: 100,
+            exitFee: 100, // 1% (BPS)
             graphSize: 365 days
         });
 
         Transmuter deployedTransmuter = new Transmuter(transmuterParams);
-        deployedTransmuter.setDepositCap(0);
+        deployedTransmuter.setDepositCap(uint256(type(int256).max)); // no cap; 0 would brick createRedemption
 
         require(deployedTransmuter.transmutationFee() == 0);
         require(deployedTransmuter.exitFee() == 100);
@@ -86,7 +90,7 @@ contract DeployV3BaseScript is Script {
 
     function deployAlchemist(address alAsset, address underlying, address vault, address transmuter, uint256 cap) public returns (AlchemistV3) {
         AlchemistV3 alchemistLogic = new AlchemistV3();
-        // FIXME alchemist params
+    
         AlchemistInitializationParams memory params = AlchemistInitializationParams({
             admin: deployerAddr,
             debtToken: alAsset,
@@ -97,7 +101,7 @@ contract DeployV3BaseScript is Script {
             liquidationTargetCollateralization: 1_111_111_111_111_111_111,
             globalMinimumCollateralization: 1_052_631_578_950_000_000, // 20/19
             transmuter: transmuter,
-            protocolFee: 25, // 10000 bps -> 0.25%
+            protocolFee: 10, // 10000 bps -> 0.1%
             protocolFeeReceiver: protocolFeeReceiver,
             liquidatorFee: 150,
             repaymentFee: 0,
@@ -112,7 +116,7 @@ contract DeployV3BaseScript is Script {
             alchemParams
         )));
 
-        require(deployedAlchemist.protocolFee() == 25);
+        require(deployedAlchemist.protocolFee() == 10);
         require(deployedAlchemist.liquidatorFee() == 150);
         require(deployedAlchemist.repaymentFee() == 0);
 
@@ -137,8 +141,7 @@ contract DeployV3BaseScript is Script {
         curator.increaseAbsoluteCap(strategy, cap);
         curator.submitIncreaseRelativeCap(strategy, globalCap);
         curator.increaseRelativeCap(strategy, globalCap);
-        // FIXME penalty
-        curator.submitSetForceDeallocatePenalty(strategy, myt, 2e16);
+        curator.submitSetForceDeallocatePenalty(strategy, myt, 2e16); // value stays, switch never enabled
         usdcAllocator.proxy(myt, abi.encodeCall(IVaultV2.setForceDeallocatePenalty, (strategy, 2e16)));
 
         usdcStrategies.push(strategy);
@@ -153,15 +156,14 @@ contract DeployV3BaseScript is Script {
     }
 
     function run() public {
-        // Requires the alUSDb deployed by DeployV3BaseAlUSDb and ADMIN_ROLE granted back to the deployer by the multisig
-        alUSDb = vm.envAddress("ALUSDB_ADDRESS");
-        require(alUSDb != address(0));
+        alUSDb = address(0x877014E21c32feA108B6A1f45f367efc9a2d9B9F);
+
         require(alUSDb.code.length > 0);
         CrossChainCanonicalAlchemicTokenV3 token = CrossChainCanonicalAlchemicTokenV3(alUSDb);
         require(keccak256(abi.encodePacked(token.symbol())) == keccak256("alUSDb"));
         require(Ownable(alUSDb).owner() == newOwner);
         require(token.hasRole(token.ADMIN_ROLE(), deployerAddr));
-        expectedMint = vm.envOr("ALUSDB_INITIAL_MINT", uint256(1e9 * 1e18)); // FIXME must match DeployV3BaseAlUSDb mint amount
+        expectedMint = vm.envOr("ALUSDB_INITIAL_MINT", uint256(10 * 1e18));
 
         vm.startBroadcast(deployerAddr);
 
@@ -178,14 +180,23 @@ contract DeployV3BaseScript is Script {
         // Set vault curator immediately
         usdcVault.setCurator(address(curator));
 
+        // MYT yield fee 17.5% to protocol fee receiver
+        curator.submitSetPerformanceFeeRecipient(address(usdcVault), protocolFeeReceiver);
+        usdcVault.setPerformanceFeeRecipient(protocolFeeReceiver);
+        curator.submitSetPerformanceFee(address(usdcVault), 0.175e18);
+        usdcVault.setPerformanceFee(0.175e18);
+
         // Deploy AlchemistAllocator
         usdcAllocator = new AlchemistAllocator(address(usdcVault), deployerAddr, deployerAddr, address(classifier));
+
+        // Allow allocator to execute setForceDeallocatePenalty via proxy (needed by registerStrategy)
+        usdcAllocator.setPermissionedCall(IVaultV2.setForceDeallocatePenalty.selector, true);
 
         // Deploy Transmuter
         usdcTransmuter = deployTransmuter(alUSDb);
 
-        // Deploy Alchemist
-        usdcAlchemist = deployAlchemist(alUSDb, USDC, address(usdcVault), address(usdcTransmuter), 0);
+        // Deploy Alchemist (deposit cap 5m USDC)
+        usdcAlchemist = deployAlchemist(alUSDb, USDC, address(usdcVault), address(usdcTransmuter), 5_000_000e6);
 
         // Deploy Router
         usdcRouter = new AlchemistRouter(address(usdcAlchemist));
@@ -194,13 +205,57 @@ contract DeployV3BaseScript is Script {
         curator.submitSetAllocator(address(usdcVault), address(usdcAllocator), true);
         usdcVault.setIsAllocator(address(usdcAllocator), true);
 
-        // No candidate strategies yet, use deployStrategy/registerStrategy helpers once selected
+        // Deploy USDC strategies
+        deployStrategy(
+            address(usdcVault),
+            IMYTStrategy.StrategyParams({
+                owner: deployerAddr,
+                name: "Gauntlet USDC Frontier",
+                protocol: "Morpho V2",
+                riskClass: IMYTStrategy.RiskClass.HIGH, // risk class 2
+                cap: 2_000_000e6,
+                globalCap: 0.2e18, // relative cap inherited from risk class 2
+                estimatedYield: 534, // all time APY
+                additionalIncentives: false,
+                slippageBPS: 10
+            }),
+            GAUNTLET_USDC_FRONTIER_VAULT
+        );
 
-        // FIXME set max rate
-        usdcAllocator.setMaxRate(3170979198); // 1e17 / 365 days = 10%
+        deployStrategy(
+            address(usdcVault),
+            IMYTStrategy.StrategyParams({
+                owner: deployerAddr,
+                name: "Yearn OG USDC V2",
+                protocol: "Yearn",
+                riskClass: IMYTStrategy.RiskClass.LOW, // risk class 0
+                cap: 100_000e6,
+                globalCap: 1e18, // relative cap inherited from risk class 0
+                estimatedYield: 534, // all time APY
+                additionalIncentives: false,
+                slippageBPS: 10
+            }),
+            YEARN_OG_USDC_V2_VAULT
+        );
 
-        // FIXME set force deallocate penalty
-        usdcAllocator.setPermissionedCall(IVaultV2.setForceDeallocatePenalty.selector, true);
+        deployStrategy(
+            address(usdcVault),
+            IMYTStrategy.StrategyParams({
+                owner: deployerAddr,
+                name: "Steakhouse High Yield USDC",
+                protocol: "Steakhouse",
+                riskClass: IMYTStrategy.RiskClass.LOW, // risk class 0
+                cap: 14_000_000e6,
+                globalCap: 1e18, // relative cap inherited from risk class 0
+                estimatedYield: 527, // all time APY
+                additionalIncentives: false,
+                slippageBPS: 10
+            }),
+            STEAKHOUSE_USDC_VAULT
+        );
+
+        // max rate 10%/yr (1e17 / 365 days)
+        usdcAllocator.setMaxRate(3170979198);
 
         usdcVault.setOwner(newOwner);
 
@@ -230,6 +285,10 @@ contract DeployV3BaseScript is Script {
         console.log("USDC Allocator deployed at:", address(usdcAllocator));
         console.log("USDC Router deployed at:", address(usdcRouter));
 
+        for (uint256 i = 0; i < usdcStrategies.length; i++) {
+            console.log("USDC strategy deployed at:", usdcStrategies[i]);
+        }
+
         console.log("USDC Alchemist NFT deployed at:", usdcAlchemist.alchemistPositionNFT());
         console.log("USDC Alchemist Fee Vault deployed at:", usdcAlchemist.alchemistFeeVault());
 
@@ -241,6 +300,11 @@ contract DeployV3BaseScript is Script {
         require(curator.pendingAdmin() == newOwner);
         require(usdcAllocator.pendingAdmin() == newOwner);
         require(usdcVault.maxRate() == 3170979198);
+        require(usdcVault.performanceFee() == 0.175e18);
+        require(usdcVault.performanceFeeRecipient() == protocolFeeReceiver);
+        require(usdcAlchemist.depositCap() == 5_000_000e6);
+        require(usdcTransmuter.depositCap() == uint256(type(int256).max));
+        require(usdcTransmuter.timeToTransmute() == 1_209_600); // 28 days in 2s
         require(usdcVault.owner() == newOwner);
         require(usdcVault.curator() == address(curator));
         require(usdcVault.isAllocator(address(usdcAllocator)));
@@ -256,6 +320,13 @@ contract DeployV3BaseScript is Script {
         require(AlchemistTokenVault(usdcAlchemist.alchemistFeeVault()).authorized(address(usdcAlchemist)));
         require(Ownable(usdcAlchemist.alchemistFeeVault()).owner() == newOwner);
         require(usdcRouter.alchemist() == address(usdcAlchemist));
+        require(usdcStrategies.length == 3);
+        for (uint256 i = 0; i < usdcStrategies.length; i++) {
+            ERC4626Strategy s = ERC4626Strategy(payable(usdcStrategies[i]));
+            require(s.owner() == newOwner);
+            require(s.killSwitch());
+            require(s.vault().asset() == USDC);
+        }
         require(Ownable(alUSDb).owner() == newOwner);
         require(IERC20(alUSDb).balanceOf(newOwner) == expectedMint);
         require(AlAsset(alUSDb).whitelisted(address(usdcAlchemist)));

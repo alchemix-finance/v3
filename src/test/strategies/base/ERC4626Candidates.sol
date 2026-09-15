@@ -83,28 +83,28 @@ library ERC4626Candidates {
         });
     }
 
-    function fluidUSDCBase() internal pure returns (ERC4626Candidate memory) {
+    function gauntletUSDCFrontier() internal pure returns (ERC4626Candidate memory) {
         return ERC4626Candidate({
-            targetVault: 0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169,
+            targetVault: 0x1deEfABEe758AAbdC29a542B24ca3b75aFD56765,
             asset: BASE_USDC,
             rpcEnv: "BASE_RPC_URL",
             fallbackRpcUrl: BASE_RPC_FALLBACK,
-            name: "Fluid USDC Base",
-            protocol: "Fluid",
-            riskClass: IMYTStrategy.RiskClass.MEDIUM,
-            forkBlock: 51_051_016,
+            name: "Gauntlet USDC Frontier",
+            protocol: "Morpho V2",
+            riskClass: IMYTStrategy.RiskClass.HIGH,
+            forkBlock: 50_828_803,
             assetDecimals: 6,
-            shareDecimals: 6,
+            shareDecimals: 18,
             initialDeposit: 10_000e6,
             absoluteCap: 10_000e6,
-            relativeCap: 0.25e18,
+            relativeCap: 0.1e18,
             strategyCap: 10_000e6,
-            globalCap: 0.25e18,
-            estimatedYield: 489,
-            slippageBPS: 50,
+            globalCap: 0.1e18,
+            estimatedYield: 483,
+            slippageBPS: 100,
             additionalIncentives: false,
             maxWithdrawIsAuthoritative: true,
-            zeroMaxWithdrawIsUnbounded: false
+            zeroMaxWithdrawIsUnbounded: true
         });
     }
 }
