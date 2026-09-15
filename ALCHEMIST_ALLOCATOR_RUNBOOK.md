@@ -356,6 +356,7 @@ Notes:
   On-chain this maps to:
   - `params.slippageBPS` — the execution tolerance applied to the virtual price floor on both entry and exit (`setSlippageBPS`).
   - `withdrawBufferBps` — the extra LP sizing buffer used when exiting via `remove_liquidity_one_coin` (`setWithdrawBufferBps`).
+  - `minCurveLpPerWeth` / `minWethPerCurveLp` — loose absolute circuit breakers on LP per WETH in (allocate) and WETH per LP out (deallocate). The virtual price bound from `slippageBPS` is the routine limit. Do not tighten these per transaction unless a revert is `CurveLpOutputBelowFloor` / `CurveLpPriceBelowFloor` after the VP check should have passed.
 5. Updating these parameters is owner/multisig gated (strategy `onlyOwner`).
   A tightening must land in a prior transaction from the strategy owner before the allocator transaction executes. 
 
