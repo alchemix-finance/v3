@@ -11,38 +11,40 @@ This note documents the practical caller rules for every allocation and dealloca
 ## Shared Rules
 
 1. `amount` is always the vault asset amount you want back from the strategy.
-   For the ETH strategies in this repo, that means the requested `WETH` out.
-
+  For the ETH strategies in this repo, that means the requested `WETH` out.
 2. The allocator only wraps parameters and forwards the request to the vault.
-   The real path taken after that depends on the strategy and the `ActionType` encoded into the allocator call.
-
+  The real path taken after that depends on the strategy and the `ActionType` encoded into the allocator call.
 3. `deallocate()` should only be used when the strategy supports a direct unwind into the vault asset without DEX calldata.
-   Example: a strategy that can redeem or withdraw back into `WETH` directly.
-
+  Example: a strategy that can redeem or withdraw back into `WETH` directly.
 4. `deallocateWithSwap()` should only be used when the strategy can sell its oracle token directly into the vault asset.
-   Example: `WstethStrategy` can sell `wstETH -> WETH` in one swap.
-
+  Example: `WstethStrategy` can sell `wstETH -> WETH` in one swap.
 5. `deallocateWithUnwrapAndSwap()` should be used when the held position token is not the same token that must be sold to the DEX.
-   Example: `SFraxETHStrategy` holds `sfrxETH`, unwraps to `frxETH`, then sells `frxETH -> WETH`.
-
+  Example: `SFraxETHStrategy` holds `sfrxETH`, unwraps to `frxETH`, then sells `frxETH -> WETH`.
 6. For any swap-based deallocation, `txData` must be a 0x allowance-holder quote built for the strategy address as the taker.
-   The strategy approves the allowance holder and then executes `allowanceHolder.call(txData)`.
-
+  The strategy approves the allowance holder and then executes `allowanceHolder.call(txData)`.
 7. For any swap-based allocation, `txData` must also be a 0x allowance-holder quote built for the strategy address as the taker.
-   The strategy receives vault assets first, approves the allowance holder, and then executes the quote inside the strategy.
+  The strategy receives vault assets first, approves the allowance holder, and then executes the quote inside the strategy.
+
+
 
 ## `allocate()`
+
+
 
 ### What the caller provides
 
 - `adapter`
 - `amount`
 
+
+
 ### What the allocator encodes
 
 - `action = IMYTStrategy.ActionType.direct`
 - no swap calldata
 - no intermediate output requirement
+
+
 
 ### End-to-end flow
 
@@ -52,11 +54,15 @@ This note documents the practical caller rules for every allocation and dealloca
 4. `MYTStrategy.allocate(...)`
 5. Strategy handles the direct path in `_allocate(uint256 amount)`
 
+
+
 ### Practical rule
 
 Use this only when the strategy can deploy the vault asset directly into its target position without needing a DEX quote.
 
 ## `allocateWithSwap()`
+
+
 
 ### What the caller provides
 
@@ -64,11 +70,15 @@ Use this only when the strategy can deploy the vault asset directly into its tar
 - `amount`
 - `txData`
 
+
+
 ### What the allocator encodes
 
 - `action = IMYTStrategy.ActionType.swap`
 - `swapParams.txData = txData`
 - `swapParams.minIntermediateOut = 0`
+
+
 
 ### End-to-end flow
 
@@ -79,24 +89,33 @@ Use this only when the strategy can deploy the vault asset directly into its tar
 5. Strategy handles the swap path in `_allocate(uint256 amount, bytes memory txData)`
 6. Strategy executes the DEX quote and continues any post-swap position setup
 
+
+
 ### Practical rules
 
 1. `txData` must describe the swap from the vault asset into the token the strategy expects on its swap path.
-
 2. This path should be used when the strategy either cannot allocate directly or when market execution is intentionally preferred over protocol-native minting.
 
+
+
 ## `deallocate()`
+
+
 
 ### What the caller provides
 
 - `adapter`
 - `amount`
 
+
+
 ### What the allocator encodes
 
 - `action = IMYTStrategy.ActionType.direct`
 - no swap calldata
 - no intermediate output requirement
+
+
 
 ### End-to-end flow
 
@@ -107,11 +126,15 @@ Use this only when the strategy can deploy the vault asset directly into its tar
 5. Strategy approves the vault asset back to the vault
 6. The vault pulls the asset
 
+
+
 ### Practical rule
 
 Use this only when the strategy itself can unwind back into the vault asset with no swap quote.
 
 ## `deallocateWithSwap()`
+
+
 
 ### What the caller provides
 
@@ -119,11 +142,15 @@ Use this only when the strategy itself can unwind back into the vault asset with
 - `amount`
 - `txData`
 
+
+
 ### What the allocator encodes
 
 - `action = IMYTStrategy.ActionType.swap`
 - `swapParams.txData = txData`
 - `swapParams.minIntermediateOut = 0`
+
+
 
 ### End-to-end flow
 
@@ -136,17 +163,21 @@ Use this only when the strategy itself can unwind back into the vault asset with
 7. Strategy approves the vault asset back to the vault
 8. The vault pulls the asset
 
+
+
 ### Practical rules
 
 1. `txData` must describe the oracle token swap.
-   For `WstethStrategy`, that means `wstETH -> WETH`.
-
+  For `WstethStrategy`, that means `wstETH -> WETH`.
 2. This path only works when the token the strategy sells to the DEX is the same token used by the strategy's oracle math.
-
 3. Do not use this path for `SFraxETHStrategy`.
-   `SFraxETHStrategy` intentionally rejects the plain swap route so callers do not accidentally skip the unwrap step.
+  `SFraxETHStrategy` intentionally rejects the plain swap route so callers do not accidentally skip the unwrap step.
+
+
 
 ## `deallocateWithUnwrapAndSwap()`
+
+
 
 ### What the caller provides
 
@@ -155,11 +186,15 @@ Use this only when the strategy itself can unwind back into the vault asset with
 - `txData`
 - `minIntermediateOut`
 
+
+
 ### What the allocator encodes
 
 - `action = IMYTStrategy.ActionType.unwrapAndSwap`
 - `swapParams.txData = txData`
 - `swapParams.minIntermediateOut = minIntermediateOut`
+
+
 
 ### End-to-end flow
 
@@ -174,16 +209,18 @@ For `SFraxETHStrategy`, the call path is:
 7. `dexSwap(WETH, frxETH, minIntermediateOut, shortfall, txData)`
 8. The strategy approves `WETH` back to the vault and the vault pulls it
 
+
+
 ### Practical rules
 
 1. `txData` must describe the intermediate token swap, not the held position token swap.
-   For `SFraxETHStrategy`, the swap is `frxETH -> WETH`, not `sfrxETH -> WETH`.
-
+  For `SFraxETHStrategy`, the swap is `frxETH -> WETH`, not `sfrxETH -> WETH`.
 2. `minIntermediateOut` should match the quote `sellAmount`.
-   For `SFraxETHStrategy`, this is the exact `frxETH` amount the strategy must unwrap before it calls 0x.
-
+  For `SFraxETHStrategy`, this is the exact `frxETH` amount the strategy must unwrap before it calls 0x.
 3. `minIntermediateOut` must be fundable by the strategy's oracle-token amount after oracle and slippage checks.
-   For `SFraxETHStrategy`, the oracle prices `frxETH`, and the strategy converts `sfrxETH` shares into `frxETH` via ERC-4626 math before swapping.
+  For `SFraxETHStrategy`, the oracle prices `frxETH`, and the strategy converts `sfrxETH` shares into `frxETH` via ERC-4626 math before swapping.
+
+
 
 ### Example scenario
 
@@ -227,21 +264,18 @@ Supported allocator paths:
 Notes:
 
 1. `allocate()` uses the native Lido mint path.
-   The strategy unwraps `WETH` into native `ETH` and deposits directly into `wstETH`.
-
+  The strategy unwraps `WETH` into native `ETH` and deposits directly into `wstETH`.
 2. `allocateWithSwap()` buys `wstETH` on the market and enforces an oracle-based minimum output.
-
 3. The direct path mints at protocol par, but the strategy values the position using the `stETH / ETH` oracle.
-   If the oracle reports `stETH < ETH`, the freshly minted `wstETH` can be marked below the `WETH` spent immediately after allocation.
-
+  If the oracle reports `stETH < ETH`, the freshly minted `wstETH` can be marked below the `WETH` spent immediately after allocation.
 4. When the market already reflects a `stETH` discount, `allocateWithSwap()` can acquire more `wstETH` per `WETH` than the direct mint path and avoid the same entry markdown.
-
 5. Operationally:
-   direct allocation is simpler under normal conditions,
+  direct allocation is simpler under normal conditions,
    `allocateWithSwap()` is usually preferable when `stETH` is materially below par,
    and direct allocation is generally better when `stETH` trades at a premium.
-
 6. On exit, use `deallocateWithSwap()` with `txData` for `wstETH -> WETH`.
+
+
 
 ### `WstETHL2Strategy`
 
@@ -253,13 +287,12 @@ Supported allocator paths:
 Notes:
 
 1. Direct allocation is not supported.
-   The strategy cannot mint `wstETH` natively on L2, so `allocate()` reverts.
-
+  The strategy cannot mint `wstETH` natively on L2, so `allocate()` reverts.
 2. `allocateWithSwap()` should use a quote for `WETH -> wstETH`.
-
 3. `deallocateWithSwap()` should use a quote for `wstETH -> WETH`.
-
 4. Because the oracle already prices `wstETH` directly on L2, there is no mainnet-style mint-versus-oracle mismatch to manage here.
+
+
 
 ### `SFraxETHStrategy`
 
@@ -272,16 +305,15 @@ Supported allocator paths:
 Notes:
 
 1. `allocate()` uses Frax's native path.
-   The strategy unwraps `WETH`, mints into the Frax flow, and receives `sfrxETH`.
-
+  The strategy unwraps `WETH`, mints into the Frax flow, and receives `sfrxETH`.
 2. `allocateWithSwap()` first acquires `frxETH` on the market, then deposits that `frxETH` into `sfrxETH`.
-   The quote should therefore be for `WETH -> frxETH`, not `WETH -> sfrxETH`.
-
+  The quote should therefore be for `WETH -> frxETH`, not `WETH -> sfrxETH`.
 3. `deallocateWithSwap()` is intentionally unsupported.
-   The strategy holds `sfrxETH`, but the sell token for the DEX leg is `frxETH`.
-
+  The strategy holds `sfrxETH`, but the sell token for the DEX leg is `frxETH`.
 4. `deallocateWithUnwrapAndSwap()` is the correct exit path.
-   Use `minIntermediateOut` as the exact `frxETH` amount that must be produced before the `frxETH -> WETH` swap executes.
+  Use `minIntermediateOut` as the exact `frxETH` amount that must be produced before the `frxETH -> WETH` swap executes.
+
+
 
 ### `SiUSDStrategy`
 
@@ -294,15 +326,40 @@ Supported allocator paths:
 Notes:
 
 1. `allocate()` is the only allocation path.
-   The strategy mints and stakes directly through the InfiniFi gateway, so `allocateWithSwap()` is not supported.
-
+  The strategy mints and stakes directly through the InfiniFi gateway, so `allocateWithSwap()` is not supported.
 2. `deallocate()` is the preferred direct exit when the strategy can unstake `siUSD`, receive `iUSD`, and redeem back to `USDC` through the gateway.
-
 3. `deallocateWithSwap()` is not supported.
-   The swap-based fallback is the unwrap path because the strategy must first move from `siUSD` into `iUSD`.
-
+  The swap-based fallback is the unwrap path because the strategy must first move from `siUSD` into `iUSD`.
 4. `deallocateWithUnwrapAndSwap()` should use a quote for `iUSD -> USDC`, not `siUSD -> USDC`.
-   `minIntermediateOut` is the `iUSD` amount the strategy must have available before calling the DEX.
+  `minIntermediateOut` is the `iUSD` amount the strategy must have available before calling the DEX.
+
+
+
+### `StakeDAOWETHStrategy`
+
+Supported allocator paths:
+
+- `allocate()`
+- `allocateWithSwap()`
+- `deallocate()`
+- `deallocateWithSwap()`
+
+Notes:
+
+1. `allocate()` uses the direct Curve path.
+  The strategy deposits `WETH` single-sided into the ETH+/WETH Curve pool and stakes the LP into the StakeDAO RewardVault.
+2. `allocateWithSwap()` and `deallocateWithSwap()` use Enso routes, not 0x quotes.
+  `txData` must be Enso `tx.data` built for the strategy address (see `src/test/strategies/utils/offchain/STAKE_DAO_ENSO_NOTES.md`).
+3. `deallocate()` exits directly via `remove_liquidity_one_coin` back into `WETH`.
+  `deallocateWithUnwrapAndSwap()` is not supported.
+4. Before any sizeable `allocate()` or `deallocate()`, check the current withdraw tolerance first ("withdraw buffer" in the Curve LP section of the control UI) and update it if needed.
+  On-chain this maps to:
+  - `params.slippageBPS` — the execution tolerance applied to the virtual price floor on both entry and exit (`setSlippageBPS`).
+  - `withdrawBufferBps` — the extra LP sizing buffer used when exiting via `remove_liquidity_one_coin` (`setWithdrawBufferBps`).
+5. Updating these parameters is owner/multisig gated (strategy `onlyOwner`).
+  A tightening must land in a prior transaction from the strategy owner before the allocator transaction executes. 
+
+
 
 ### `EtherfiEETHMYTStrategy`
 
@@ -316,11 +373,9 @@ Supported allocator paths:
 Notes:
 
 1. `allocate()` uses the Ether.fi deposit adapter and directly mints into `weETH`.
-
 2. `allocateWithSwap()` can be used when buying `weETH` on the market is preferable to the native mint path.
-   The quote should be for `WETH -> weETH`.
-
+  The quote should be for `WETH -> weETH`.
 3. `deallocate()` uses Ether.fi instant redemption.
-   This path is liquidity-dependent and reverts if instant redemption is unavailable.
-
+  This path is liquidity-dependent and reverts if instant redemption is unavailable.
 4. `deallocateWithSwap()` remains useful as the market exit path when the operator prefers to sell `weETH -> WETH` rather than rely on the redemption manager.
+
