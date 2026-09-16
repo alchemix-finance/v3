@@ -243,7 +243,8 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     /// @notice Unwrap weETH and enter the Ether.fi withdrawal queue; the minted
     ///         WithdrawRequestNFT is tracked until claimed. One exit at a time:
     ///         a finalized previous exit is auto-claimed first, an unfinalized
-    ///         one reverts `ExitPending`.
+    ///         one reverts `ExitPending`. The queued eETH is clamped to the
+    ///         pool's `maxWithdrawAmount` and must be at least `minWithdrawAmount`.
     function requestExits(uint256 wethAmount) external onlyKeeperOrOwner returns (uint256 tokenId, uint96 shares) {
         if (wethAmount == 0) revert InvalidAmount(1, 0);
         _settleFinalizedExit();
@@ -252,8 +253,12 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         uint256 weETHBalance = weETH.balanceOf(address(this));
         require(weETHBalance > 0, "No weETH available");
 
-        uint256 weETHToUnwrap = weETH.getWeETHByeETH(wethAmount);
-        if (weETHToUnwrap == 0 || weETH.getEETHByWeETH(weETHToUnwrap) < wethAmount) {
+        ILiquidityPoolLike pool = _liquidityPool();
+        uint256 targetEEth = wethAmount > pool.maxWithdrawAmount() ? pool.maxWithdrawAmount() : wethAmount;
+        require(targetEEth >= pool.minWithdrawAmount(), "Exit amount out of pool bounds");
+
+        uint256 weETHToUnwrap = weETH.getWeETHByeETH(targetEEth);
+        if (weETHToUnwrap == 0 || weETH.getEETHByWeETH(weETHToUnwrap) < targetEEth) {
             weETHToUnwrap += 1;
         }
         if (weETHToUnwrap > weETHBalance) weETHToUnwrap = weETHBalance;
@@ -262,7 +267,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         uint256 eEthToExit = weETH.unwrap(weETHToUnwrap);
         require(eEthToExit > 0, "No eETH to exit");
 
-        ILiquidityPoolLike pool = _liquidityPool();
         TokenUtils.safeApprove(address(eETH), address(pool), eEthToExit);
         tokenId = pool.requestWithdraw(address(this), eEthToExit);
         TokenUtils.safeApprove(address(eETH), address(pool), 0);
@@ -304,11 +308,17 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         emit ExitClaimed(tokenId, ethClaimed);
     }
 
-    /// @dev Claims the pending exit once finalized; no-op otherwise.
+    /// @dev Claims the pending exit once finalized and payable; no-op otherwise.
+    ///      Mirrors the SFrax settle tolerance: a finalized-but-underfunded claim
+    ///      (LP cannot cover the payout) is skipped so deallocate/requestExits
+    ///      keep working; `claimExits()` stays loud for the explicit path.
     function _settleFinalizedExit() internal {
         uint256 tokenId = _pendingExit.tokenId;
         if (tokenId == 0) return;
-        if (_withdrawRequestNFT().isFinalized(tokenId)) _claimExit();
+        if (!_withdrawRequestNFT().isFinalized(tokenId)) return;
+        uint256 claimable = _withdrawRequestNFT().getClaimableAmount(tokenId);
+        if (address(_liquidityPool()).balance < claimable) return;
+        _claimExit();
     }
 
     /// @dev Claim hook for the base contract; only the tracked exit is claimable.
@@ -318,7 +328,8 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     }
 
     /// @notice Idle WETH + loose eETH + weETH at the canonical rate + pending claim
-    ///         (finalized at claimable amount, otherwise share value minus haircut).
+    ///         (finalized at claimable amount, otherwise the request's payout ceiling
+    ///         — face vs live share value — minus haircut; invalidated claims are 0).
     function _totalValue() internal view override returns (uint256) {
         return _idleAssets() + eETH.balanceOf(address(this)) + weETH.getEETHByWeETH(weETH.balanceOf(address(this))) + _pendingExitValue();
     }
@@ -330,10 +341,16 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     function _pendingExitValue() internal view returns (uint256) {
         uint256 tokenId = _pendingExit.tokenId;
         if (tokenId == 0) return 0;
+        IWithdrawRequestNFT.WithdrawRequest memory request = _withdrawRequestNFT().getRequest(tokenId);
+        if (!request.isValid) return 0;
         if (_withdrawRequestNFT().isFinalized(tokenId)) {
             return _withdrawRequestNFT().getClaimableAmount(tokenId);
         }
-        return (_liquidityPool().amountForShare(_pendingExit.shareOfEEth) * (BPS - pendingHaircutBps)) / BPS;
+        // Realizable payout is capped at the request-time face; share-value above it
+        // is forfeit to the LP, so never mark above the ceiling.
+        uint256 payout = _liquidityPool().amountForShare(_pendingExit.shareOfEEth);
+        if (payout > request.amountOfEEth) payout = request.amountOfEEth;
+        return (payout * (BPS - pendingHaircutBps)) / BPS;
     }
 
     /// @notice Instant capacity only; pending queue claims are excluded.

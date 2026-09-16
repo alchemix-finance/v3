@@ -276,6 +276,8 @@ contract MockLiquidityPool {
     uint256 public minWithdrawAmount = 0.005e18;
     uint256 public maxWithdrawAmount = 1000e18;
     bool public instantWithdrawAllowed = true;
+    /// @dev eETH-per-share multiplier (1e18 = identity); models LP rebase accrual.
+    uint256 public shareRate = 1e18;
 
     constructor(address _eETH, address _withdrawRequestNFT) payable {
         eETH = _eETH;
@@ -288,16 +290,21 @@ contract MockLiquidityPool {
         _;
     }
 
-    function amountForShare(uint256 shares) external pure returns (uint256) {
-        return shares;
+    function amountForShare(uint256 shares) external view returns (uint256) {
+        return (shares * shareRate) / 1e18;
     }
 
-    function sharesForAmount(uint256 amount) external pure returns (uint256) {
+    function sharesForAmount(uint256 amount) external view returns (uint256) {
         return amount;
     }
 
-    function sharesForWithdrawalAmount(uint256 amount) external pure returns (uint256) {
+    function sharesForWithdrawalAmount(uint256 amount) external view returns (uint256) {
         return amount;
+    }
+
+    function setShareRate(uint256 newRate) external onlyAdmin {
+        require(newRate > 0, "zero rate");
+        shareRate = newRate;
     }
 
     function setWithdrawBounds(uint256 minW, uint256 maxW) external onlyAdmin {
@@ -983,21 +990,106 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.prank(address(1));
         localStrategy.removeInvalidExit();
 
+        uint256 valueBeforeInvalidation = IMYTStrategy(address(localStrategy)).realAssets();
+        uint256 pendingValue = (uint256(shares) * (10_000 - localStrategy.pendingHaircutBps())) / 10_000;
+
         MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).invalidateRequest(tokenId);
+
+        // invalidated claim is unclaimable: valuation writes it down to zero immediately
+        assertApproxEqRel(
+            IMYTStrategy(address(localStrategy)).realAssets() + pendingValue,
+            valueBeforeInvalidation,
+            1e15,
+            "invalidation should immediately write the pending claim down to zero"
+        );
 
         uint256 valueWithInvalid = IMYTStrategy(address(localStrategy)).realAssets();
 
         vm.prank(address(1));
         localStrategy.removeInvalidExit();
         assertEq(localStrategy.pendingExitCount(), 0, "invalid exit should be removed");
-        // Removal realizes the seized amount: pending value (shares minus haircut) stops counting.
-        uint256 pendingValueAtRemoval = (uint256(shares) * (10_000 - localStrategy.pendingHaircutBps())) / 10_000;
-        assertApproxEqRel(
-            IMYTStrategy(address(localStrategy)).realAssets() + pendingValueAtRemoval,
-            valueWithInvalid,
-            1e15,
-            "removal should realize exactly the seized pending value"
+        // Removal is value-neutral: the write-down already happened at invalidation.
+        assertApproxEqRel(IMYTStrategy(address(localStrategy)).realAssets(), valueWithInvalid, 1e15, "removal should not change value");
+    }
+
+    function test_async_pending_exit_value_capped_at_request_face() public {
+        (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) = _deployMockStrategy();
+        _mockAllocate(localStrategy, 5e18);
+
+        vm.prank(address(1));
+        (uint256 tokenId,) = localStrategy.requestExits(5e18);
+        assertEq(localStrategy.pendingExitCount(), 1, "one pending exit expected");
+
+        // LP rebase accrual raises live share value above the request-time face;
+        // the payout stays capped at face, so accounting must not mark above it.
+        MockLiquidityPool(payable(env.liquidityPool())).setShareRate(1.04e18);
+
+        uint96 face = MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).getRequest(tokenId).amountOfEEth;
+        uint256 expected = (uint256(face) * (10_000 - localStrategy.pendingHaircutBps())) / 10_000;
+        assertEq(IMYTStrategy(address(localStrategy)).realAssets(), expected, "pending value must be capped at the request face");
+        assertLt(
+            IMYTStrategy(address(localStrategy)).realAssets(),
+            (uint256(face) * 104 * (10_000 - localStrategy.pendingHaircutBps())) / 100 / 10_000,
+            "pending value must not count forfeited rebase accrual"
         );
+
+        // Claim still pays face; the released haircut lands as idle WETH.
+        MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).finalizeRequests(tokenId);
+        MockLiquidityPool(payable(env.liquidityPool())).setShareRate(1e18);
+        localStrategy.claimExits();
+        assertEq(IERC20(WETH).balanceOf(address(localStrategy)), uint256(face), "claim should pay exactly the capped face");
+    }
+
+    function test_async_request_clamped_to_pool_withdraw_bounds() public {
+        (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) = _deployMockStrategy();
+        _mockAllocate(localStrategy, 2000e18);
+
+        // oversized request clamps to the pool max instead of reverting deep in the protocol
+        vm.prank(address(1));
+        (uint256 tokenId,) = localStrategy.requestExits(2500e18);
+        uint256 queued = MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).getRequest(tokenId).amountOfEEth;
+        assertEq(queued, 1000e18, "queued eETH must be clamped to maxWithdrawAmount");
+
+        // undersized request fails fast
+        vm.prank(address(1));
+        MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).finalizeRequests(tokenId);
+        localStrategy.claimExits();
+        vm.prank(address(1));
+        vm.expectRevert(bytes("Exit amount out of pool bounds"));
+        localStrategy.requestExits(0.001e18);
+    }
+
+    function test_async_settle_skips_unpayable_finalized_exit() public {
+        (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) = _deployMockStrategy();
+        _mockAllocate(localStrategy, 20e18);
+
+        vm.prank(address(1));
+        (uint256 tokenId,) = localStrategy.requestExits(6e18);
+        MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).finalizeRequests(tokenId);
+
+        // finalized but the LP cannot cover the payout
+        vm.deal(env.liquidityPool(), 0);
+        deal(WETH, address(localStrategy), 10e18);
+
+        // idle-covered deallocate must succeed despite the unpayable claim
+        IMYTStrategy.VaultAdapterParams memory directDealloc;
+        directDealloc.action = IMYTStrategy.ActionType.direct;
+        vm.prank(vault);
+        IMYTStrategy(address(localStrategy)).deallocate(abi.encode(directDealloc), 1e18, "", address(vault));
+        assertEq(localStrategy.pendingExitCount(), 1, "unpayable claim must be skipped, not settled");
+
+        // the explicit claim path stays loud
+        vm.expectRevert(bytes("InsufficientLiquidity()"));
+        localStrategy.claimExits();
+
+        // once the pool is funded again, the next settle auto-claims
+        uint256 claimable = localStrategy.claimableExits();
+        vm.deal(env.liquidityPool(), claimable + 1e18);
+        uint256 wethBefore = IERC20(WETH).balanceOf(address(localStrategy));
+        vm.prank(vault);
+        IMYTStrategy(address(localStrategy)).deallocate(abi.encode(directDealloc), 1e18, "", address(vault));
+        assertGe(IERC20(WETH).balanceOf(address(localStrategy)), wethBefore + claimable, "funded claim should be auto-settled");
+        assertEq(localStrategy.pendingExitCount(), 0, "pending exit should be settled");
     }
 
     function test_async_value_continuity_across_finalize_boundary() public {

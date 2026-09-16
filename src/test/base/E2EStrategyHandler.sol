@@ -406,8 +406,13 @@ contract E2EStrategyHandler is Test, StrategyRevertUtils {
             executed[selector]++;
             ghost_asyncExitsRequested++;
         } catch (bytes memory errData) {
-            // tolerated: position entirely in the loose intermediate token (eETH/frxETH)
-            _revertUnlessWhitelisted(errData, errorStringEquals(errData, "No weETH available") || errorStringEquals(errData, "No sfrxETH available"));
+            // tolerated: position entirely in the loose intermediate token (eETH/frxETH),
+            // or the requested eETH is below the pool's minWithdrawAmount
+            _revertUnlessWhitelisted(
+                errData,
+                errorStringEquals(errData, "No weETH available") || errorStringEquals(errData, "No sfrxETH available")
+                    || errorStringEquals(errData, "Exit amount out of pool bounds")
+            );
             skips[selector]++;
         }
     }
