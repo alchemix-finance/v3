@@ -32,6 +32,9 @@ interface IFluidFTokenData {
 contract FluidUSDCBaseStrategyTest is ERC4626StrategyUnitTestBase {
     // FluidLiquidityError(uint256) — observed on dust-sized Fluid deposits.
     bytes4 internal constant ALLOWED_FLUID_REVERT_SELECTOR = 0xdcab82e2;
+    /// @dev Smallest USDC amount that does not revert with FluidLiquidityError on the pinned Base fork.
+    ///      1 unit reverts, 2 units (0.000002 USDC) succeeds.
+    uint256 internal constant MIN_ALLOCATE_WITHOUT_FLUID_LIQUIDITY_ERROR = 2;
 
     function _candidate() internal pure override returns (ERC4626Candidate memory) {
         return ERC4626Candidates.fluidUSDCBase();
@@ -47,6 +50,24 @@ contract FluidUSDCBaseStrategyTest is ERC4626StrategyUnitTestBase {
     function isMytRevertAllowed(bytes4 selector, RevertContext context) external pure override returns (bool) {
         bool isAllocationFuzz = context == RevertContext.HandlerAllocate || context == RevertContext.FuzzAllocate;
         return isAllocationFuzz && selector == ErrorsLib.RelativeCapExceeded.selector;
+    }
+
+    function _getMinAllocateAmount() internal view override returns (uint256) {
+        uint256 suiteMin = super._getMinAllocateAmount();
+        return suiteMin > MIN_ALLOCATE_WITHOUT_FLUID_LIQUIDITY_ERROR ? suiteMin : MIN_ALLOCATE_WITHOUT_FLUID_LIQUIDITY_ERROR;
+    }
+
+    function test_fluidUsdcBase_dustAllocateRevertsAndMinSuccessfulAmountIsKnown() public {
+        for (uint256 amount = 1; amount < MIN_ALLOCATE_WITHOUT_FLUID_LIQUIDITY_ERROR; amount++) {
+            _expectFluidLiquidityErrorOnAllocate(amount);
+        }
+
+        assertGe(_getMinAllocateAmount(), MIN_ALLOCATE_WITHOUT_FLUID_LIQUIDITY_ERROR, "fuzz deposits must be at or above Fluid dust floor");
+
+        vm.prank(allocator);
+        IVaultV2(vault).allocate(strategy, getVaultParams(), MIN_ALLOCATE_WITHOUT_FLUID_LIQUIDITY_ERROR);
+        assertGt(IMYTStrategy(strategy).realAssets(), 0, "floor allocate should credit strategy value");
+        assertGt(IERC20(_candidate().targetVault).balanceOf(strategy), 0, "floor allocate should mint Fluid shares");
     }
 
     function test_fluidUsdcBase_isLendingFTokenNotLite() public view {
@@ -91,6 +112,12 @@ contract FluidUSDCBaseStrategyTest is ERC4626StrategyUnitTestBase {
         assertGt(IERC20(candidate.asset).balanceOf(vault), mytUsdcBefore, "MYT should receive USDC");
         assertLt(IMYTStrategy(strategy).realAssets(), realAssetsAfterAllocation, "strategy value should decrease");
         assertGt(IERC20(candidate.targetVault).balanceOf(strategy), 0, "strategy should retain shares after partial exit");
+    }
+
+    function _expectFluidLiquidityErrorOnAllocate(uint256 amount) internal {
+        vm.prank(allocator);
+        vm.expectPartialRevert(ALLOWED_FLUID_REVERT_SELECTOR);
+        IVaultV2(vault).allocate(strategy, getVaultParams(), amount);
     }
 }
 
