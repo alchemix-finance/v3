@@ -371,7 +371,7 @@ After the deployer broadcasts the strategy, the curator must register and config
   `classifier.assignStrategyRiskLevel(uint256(IMYTStrategy(strategy).adapterId()), uint8(riskClass))`.
    This should match the strategy metadata `params.riskClass`; allocator cap enforcement reads from `AlchemistStrategyClassifier`, not from the strategy metadata.
    Note : This multisig action can also be done via the official dashboard `https://control.alchemix.fi/` via : "vault" tab -> selected vault -> "Strategies" section -> specific strategy -> "Controls" section -> "Classifier Risk" section. You may also adjust the strategy metadata before any respective classifier update in the paired "Param Risk" section.
-7. After registration, cap, penalty, classifier assignment, ownership, source verification, and smoke-test checks are complete, the myt owner should call `strategy.setKillSwitch(false)`.
+7. After registration, cap, penalty, classifier assignment, ownership, and source verification are complete, the myt owner should call `strategy.setKillSwitch(false)` so the allocation/deallocation smoke test can run. Re-enable the kill switch if the smoke test fails or an issue is found.
 
 For live deployments with nonzero timelocks, split submission and execution into separate transactions after the timelock expires. If the vault curator is the `AlchemistCurator` proxy, allowlist `IVaultV2.setForceDeallocatePenalty.selector` and execute the penalty call with `curator.proxy(...)`.
 
@@ -390,7 +390,7 @@ After broadcasting, verify:
 - The strategy source is verified on the target explorer.
 - `strategy.killSwitch() == false` after the multisig enables allocation.
 
-Only disable the kill switch after registration, caps, penalty, ownership, source verification, and a small allocation/deallocation smoke test are complete.
+Disable the kill switch after registration, caps, penalty, ownership, and source verification so the small allocation/deallocation smoke test can run. Re-enable it if the smoke test fails or an issue is found.
 
 ### Allocation/Deallocation Verification
 
