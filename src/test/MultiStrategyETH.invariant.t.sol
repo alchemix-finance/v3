@@ -27,11 +27,11 @@ contract MultiStrategyETHHandler is Test {
     address public admin;
     address public operator;
     address public asset;
-    
+
     // Actors for user operations
     address[] public actors;
     address internal currentActor;
-    
+
     // Ghost variables for tracking cumulative state
     uint256 public ghost_totalDeposited;
     uint256 public ghost_totalWithdrawn;
@@ -40,7 +40,7 @@ contract MultiStrategyETHHandler is Test {
     mapping(address => uint256) public ghost_userDeposits;
     mapping(address => uint256) public ghost_strategyAllocations;
     mapping(uint8 => uint256) public ghost_liquidityAdapterBypass;
-    
+
     // Call counters
     mapping(bytes4 => uint256) public calls;
     mapping(bytes4 => uint256) public opAttempts;
@@ -49,20 +49,20 @@ contract MultiStrategyETHHandler is Test {
     mapping(bytes4 => uint256) public opNoops;
     mapping(address => uint256) public allocatorRoleAttempts;
     uint256 internal allocatorRoleNonce;
-    
+
     // Strategy name tracking for debugging
     mapping(address => string) public strategyNames;
-    
+
     // Minimum amounts for operations
     uint256 public constant MIN_DEPOSIT = 1e15; // 0.001 ETH
     uint256 public constant MIN_ALLOCATE = 1e14; // 0.0001 ETH
     uint256 public constant MAX_USERS = 10;
-    
+
     modifier countCall(bytes4 selector) {
         calls[selector]++;
         _;
     }
-    
+
     modifier useActor(uint256 actorSeed) {
         currentActor = actors[bound(actorSeed, 0, actors.length - 1)];
         vm.startPrank(currentActor);
@@ -92,7 +92,7 @@ contract MultiStrategyETHHandler is Test {
         allocatorRoleNonce++;
         allocatorRoleAttempts[caller]++;
     }
-    
+
     constructor(
         address _vault,
         address[] memory _strategies,
@@ -111,7 +111,7 @@ contract MultiStrategyETHHandler is Test {
         admin = _admin;
         operator = _operator;
         asset = vault.asset();
-        
+
         // Initialize actors with varying balances
         for (uint256 i = 0; i < MAX_USERS; i++) {
             address actor = makeAddr(string(abi.encodePacked("ethActor", i)));
@@ -119,15 +119,15 @@ contract MultiStrategyETHHandler is Test {
             // Give actors different initial balances for position size variation
             deal(asset, actor, (i + 1) * 100 ether); // 100 to 1000 ETH
         }
-        
+
         // Map strategy names for debugging
         for (uint256 i = 0; i < _strategies.length; i++) {
             strategyNames[_strategies[i]] = _strategyNames[i];
         }
     }
-    
+
     // ============ USER OPERATIONS ============
-    
+
     /// @notice User deposits WETH into the vault
     function deposit(uint256 amount, uint256 actorSeed) external countCall(this.deposit.selector) useActor(actorSeed) {
         bytes4 selector = this.deposit.selector;
@@ -136,9 +136,9 @@ contract MultiStrategyETHHandler is Test {
             _markNoop(selector);
             return;
         }
-        
+
         amount = bound(amount, MIN_DEPOSIT, balance);
-        
+
         IERC20(asset).approve(address(vault), amount);
         (uint256[] memory allocationSnapshot, uint256 totalBefore, uint256 totalYield) = _snapshotAllocations();
 
@@ -156,7 +156,7 @@ contract MultiStrategyETHHandler is Test {
             _markRevert(selector);
         }
     }
-    
+
     /// @notice User withdraws WETH from the vault
     function withdraw(uint256 amount, uint256 actorSeed) external countCall(this.withdraw.selector) useActor(actorSeed) {
         bytes4 selector = this.withdraw.selector;
@@ -191,7 +191,7 @@ contract MultiStrategyETHHandler is Test {
             _markRevert(selector);
         }
     }
-    
+
     /// @notice User mints shares
     function mint(uint256 shares, uint256 actorSeed) external countCall(this.mint.selector) useActor(actorSeed) {
         bytes4 selector = this.mint.selector;
@@ -226,7 +226,7 @@ contract MultiStrategyETHHandler is Test {
             _markRevert(selector);
         }
     }
-    
+
     /// @notice User redeems shares
     function redeem(uint256 shares, uint256 actorSeed) external countCall(this.redeem.selector) useActor(actorSeed) {
         bytes4 selector = this.redeem.selector;
@@ -255,9 +255,9 @@ contract MultiStrategyETHHandler is Test {
             _markRevert(selector);
         }
     }
-    
+
     // ============ ADMIN OPERATIONS ============
-    
+
     function _remainingGlobalRiskHeadroom(uint8 riskLevel, address strategyToAllocate) internal view returns (uint256) {
         uint256 globalRiskCapPct = AlchemistStrategyClassifier(classifier).getGlobalCap(riskLevel);
         uint256 globalRiskCap = (vault.totalAssets() * globalRiskCapPct) / 1e18;
@@ -282,7 +282,7 @@ contract MultiStrategyETHHandler is Test {
         if (effectiveAllocation >= globalRiskCap) return 0;
         return globalRiskCap - effectiveAllocation;
     }
-    
+
     /// @notice Admin allocates assets to a specific strategy
     /// @dev Attempts adapters sequentially from a random start index.
     function allocate(uint256 strategyIndexSeed, uint256 amount) external countCall(this.allocate.selector) {
@@ -300,13 +300,9 @@ contract MultiStrategyETHHandler is Test {
             ghost_strategyAllocations[strategies[strategyIndex]] += allocatedAmount;
         }
     }
-    
+
     /// @notice Attempts to allocate to a specific strategy, returns success and amount allocated
-    function _tryAllocate(
-        address strategy, 
-        uint256 amount,
-        uint256 roleSeed
-    ) internal returns (bool success, uint256 allocatedAmount) {
+    function _tryAllocate(address strategy, uint256 amount, uint256 roleSeed) internal returns (bool success, uint256 allocatedAmount) {
         bytes4 selector = this.allocate.selector;
         bytes32 allocationId = IMYTStrategy(strategy).adapterId();
 
@@ -351,16 +347,11 @@ contract MultiStrategyETHHandler is Test {
         uint256 pendingYield = currentRealAssets > currentAllocation ? currentRealAssets - currentAllocation : 0;
         uint256 effectiveAllocation = currentAllocation + pendingYield;
 
-        uint256 allocatorRelativeCapValue =
-            relativeCap == type(uint256).max ? type(uint256).max : (totalAssets * relativeCap) / 1e18;
-        uint256 vaultRelativeCapValue =
-            relativeCap == type(uint256).max ? type(uint256).max : (firstTotalAssets * relativeCap) / 1e18;
-        uint256 maxByAllocatorRelative =
-            allocatorRelativeCapValue > effectiveAllocation ? allocatorRelativeCapValue - effectiveAllocation : 0;
-        uint256 maxByVaultRelative =
-            vaultRelativeCapValue > effectiveAllocation ? vaultRelativeCapValue - effectiveAllocation : 0;
-        uint256 maxByRelativeCap =
-            maxByAllocatorRelative < maxByVaultRelative ? maxByAllocatorRelative : maxByVaultRelative;
+        uint256 allocatorRelativeCapValue = relativeCap == type(uint256).max ? type(uint256).max : (totalAssets * relativeCap) / 1e18;
+        uint256 vaultRelativeCapValue = relativeCap == type(uint256).max ? type(uint256).max : (firstTotalAssets * relativeCap) / 1e18;
+        uint256 maxByAllocatorRelative = allocatorRelativeCapValue > effectiveAllocation ? allocatorRelativeCapValue - effectiveAllocation : 0;
+        uint256 maxByVaultRelative = vaultRelativeCapValue > effectiveAllocation ? vaultRelativeCapValue - effectiveAllocation : 0;
+        uint256 maxByRelativeCap = maxByAllocatorRelative < maxByVaultRelative ? maxByAllocatorRelative : maxByVaultRelative;
         uint256 maxByAbsoluteRemaining = absoluteCap > effectiveAllocation ? absoluteCap - effectiveAllocation : 0;
 
         uint256 maxAllocate = maxByAbsoluteRemaining < maxByRelativeCap ? maxByAbsoluteRemaining : maxByRelativeCap;
@@ -399,16 +390,16 @@ contract MultiStrategyETHHandler is Test {
             return (false, 0);
         }
     }
-    
+
     /// @notice Admin deallocates assets from a specific strategy
     function deallocate(uint256 strategyIndex, uint256 amount) external countCall(this.deallocate.selector) {
         bytes4 selector = this.deallocate.selector;
         strategyIndex = bound(strategyIndex, 0, strategies.length - 1);
         address strategy = strategies[strategyIndex];
-        
+
         bytes32 allocationId = IMYTStrategy(strategy).adapterId();
         uint256 currentAllocation = vault.allocation(allocationId);
-        
+
         if (currentAllocation < MIN_ALLOCATE) {
             _markNoop(selector);
             return;
@@ -423,15 +414,15 @@ contract MultiStrategyETHHandler is Test {
             _markNoop(selector);
             return;
         }
-        
+
         amount = bound(amount, MIN_ALLOCATE, maxDeallocate);
-        
+
         uint256 previewAmount = IMYTStrategy(strategy).previewAdjustedWithdraw(amount);
         if (previewAmount == 0) {
             _markNoop(selector);
             return;
         }
-        
+
         _markAttempt(selector);
         (uint256[] memory allocationSnapshot,,) = _snapshotAllocations();
         address allocatorCaller = _pickAllocatorCaller(amount);
@@ -444,7 +435,7 @@ contract MultiStrategyETHHandler is Test {
             return;
         }
     }
-    
+
     /// @notice Deallocate all assets from a specific strategy
     function deallocateAll(uint256 strategyIndex) external countCall(this.deallocateAll.selector) {
         bytes4 selector = this.deallocateAll.selector;
@@ -486,12 +477,8 @@ contract MultiStrategyETHHandler is Test {
             return;
         }
     }
-    
 
-    function setLiquidityAdapter(uint256 strategySeed, uint256 modeSeed)
-        external
-        countCall(this.setLiquidityAdapter.selector)
-    {
+    function setLiquidityAdapter(uint256 strategySeed, uint256 modeSeed) external countCall(this.setLiquidityAdapter.selector) {
         bytes4 selector = this.setLiquidityAdapter.selector;
         if (strategies.length == 0) {
             _markNoop(selector);
@@ -573,9 +560,8 @@ contract MultiStrategyETHHandler is Test {
                 ghost_liquidityAdapterBypass[riskLevel] += afterAllocation - beforeAllocations[i];
             } else if (beforeAllocations[i] > afterAllocation) {
                 uint256 decrease = beforeAllocations[i] - afterAllocation;
-                ghost_liquidityAdapterBypass[riskLevel] = ghost_liquidityAdapterBypass[riskLevel] > decrease
-                    ? ghost_liquidityAdapterBypass[riskLevel] - decrease
-                    : 0;
+                ghost_liquidityAdapterBypass[riskLevel] =
+                    ghost_liquidityAdapterBypass[riskLevel] > decrease ? ghost_liquidityAdapterBypass[riskLevel] - decrease : 0;
             }
         }
     }
@@ -602,10 +588,8 @@ contract MultiStrategyETHHandler is Test {
             firstTotalAssets = totalAssets;
         }
 
-        uint256 allocatorRelativeCapValue =
-            relativeCap == type(uint256).max ? type(uint256).max : (totalAssets * relativeCap) / 1e18;
-        uint256 vaultRelativeCapValue =
-            relativeCap == type(uint256).max ? type(uint256).max : (firstTotalAssets * relativeCap) / 1e18;
+        uint256 allocatorRelativeCapValue = relativeCap == type(uint256).max ? type(uint256).max : (totalAssets * relativeCap) / 1e18;
+        uint256 vaultRelativeCapValue = relativeCap == type(uint256).max ? type(uint256).max : (firstTotalAssets * relativeCap) / 1e18;
         uint256 relativeLimit = allocatorRelativeCapValue < vaultRelativeCapValue ? allocatorRelativeCapValue : vaultRelativeCapValue;
         uint256 hardLimit = absoluteCap < relativeLimit ? absoluteCap : relativeLimit;
 
@@ -620,14 +604,17 @@ contract MultiStrategyETHHandler is Test {
     /// @notice Reclassify a strategy to a different risk level (low frequency ~10%)
     /// @dev Only reclassifies if the target risk class's global cap can accommodate
     ///      the strategy's existing allocation plus current aggregate in that class.
-    function reclassifyStrategy(uint256 strategyIndexSeed, uint256 newRiskClassSeed)
-        external
-        countCall(this.reclassifyStrategy.selector)
-    {
+    function reclassifyStrategy(uint256 strategyIndexSeed, uint256 newRiskClassSeed) external countCall(this.reclassifyStrategy.selector) {
         bytes4 selector = this.reclassifyStrategy.selector;
-        if (strategies.length == 0) { _markNoop(selector); return; }
+        if (strategies.length == 0) {
+            _markNoop(selector);
+            return;
+        }
 
-        if (newRiskClassSeed % 100 != 0) { _markNoop(selector); return; }
+        if (newRiskClassSeed % 100 != 0) {
+            _markNoop(selector);
+            return;
+        }
 
         uint256 idx = strategyIndexSeed % strategies.length;
         address strategy = strategies[idx];
@@ -635,7 +622,7 @@ contract MultiStrategyETHHandler is Test {
 
         uint8 currentRisk = AlchemistStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
         uint8 newRisk = uint8((newRiskClassSeed / 10) % 3);
-        if (newRisk == currentRisk) { newRisk = (newRisk + 1) % 3; }
+        if (newRisk == currentRisk) newRisk = (newRisk + 1) % 3;
 
         uint256 totalAssets = vault.totalAssets();
         uint256 newGlobalCap = (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(newRisk)) / 1e18;
@@ -649,7 +636,10 @@ contract MultiStrategyETHHandler is Test {
         }
 
         uint256 strategyAllocation = vault.allocation(allocationId);
-        if (existingInNewClass + strategyAllocation > newGlobalCap) { _markNoop(selector); return; }
+        if (existingInNewClass + strategyAllocation > newGlobalCap) {
+            _markNoop(selector);
+            return;
+        }
 
         _markAttempt(selector);
         vm.prank(admin);
@@ -661,12 +651,12 @@ contract MultiStrategyETHHandler is Test {
     /// @dev Only tightens caps to levels that still accommodate existing allocations.
     ///      New global cap >= current aggregate allocation in that class + MIN_ALLOCATE.
     ///      New local cap >= largest individual allocation in that class.
-    function modifyRiskClassCaps(uint256 riskClassSeed, uint256 capSeed)
-        external
-        countCall(this.modifyRiskClassCaps.selector)
-    {
+    function modifyRiskClassCaps(uint256 riskClassSeed, uint256 capSeed) external countCall(this.modifyRiskClassCaps.selector) {
         bytes4 selector = this.modifyRiskClassCaps.selector;
-        if (capSeed % 100 != 0) { _markNoop(selector); return; }
+        if (capSeed % 100 != 0) {
+            _markNoop(selector);
+            return;
+        }
 
         uint8 riskClass = uint8(riskClassSeed % 3);
         uint256 totalAssets = vault.totalAssets();
@@ -682,17 +672,19 @@ contract MultiStrategyETHHandler is Test {
             }
         }
 
-        uint256 minGlobalPct = currentAggregate > 0
-            ? ((currentAggregate + MIN_ALLOCATE) * 1e18 + totalAssets - 1) / totalAssets
-            : 0.01e18;
+        uint256 minGlobalPct = currentAggregate > 0 ? ((currentAggregate + MIN_ALLOCATE) * 1e18 + totalAssets - 1) / totalAssets : 0.01e18;
         uint256 maxGlobalPct = 1e18;
-        if (minGlobalPct > maxGlobalPct) { _markNoop(selector); return; }
+        if (minGlobalPct > maxGlobalPct) {
+            _markNoop(selector);
+            return;
+        }
 
-        uint256 minLocalPct = maxIndividual > 0
-            ? ((maxIndividual + MIN_ALLOCATE) * 1e18 + totalAssets - 1) / totalAssets
-            : 0.01e18;
+        uint256 minLocalPct = maxIndividual > 0 ? ((maxIndividual + MIN_ALLOCATE) * 1e18 + totalAssets - 1) / totalAssets : 0.01e18;
         uint256 maxLocalPct = 1e18;
-        if (minLocalPct > maxLocalPct) { _markNoop(selector); return; }
+        if (minLocalPct > maxLocalPct) {
+            _markNoop(selector);
+            return;
+        }
 
         uint256 newGlobalPct = bound(capSeed / 10, minGlobalPct, maxGlobalPct);
         uint256 newLocalPct = bound(capSeed / 100, minLocalPct, maxLocalPct);
@@ -705,12 +697,12 @@ contract MultiStrategyETHHandler is Test {
 
     // ============ TIME OPERATIONS ============
 
-    function changePerformanceFee(uint256 feeSeed)
-        external
-        countCall(this.changePerformanceFee.selector)
-    {
+    function changePerformanceFee(uint256 feeSeed) external countCall(this.changePerformanceFee.selector) {
         bytes4 selector = this.changePerformanceFee.selector;
-        if (feeSeed % 200 != 0) { _markNoop(selector); return; }
+        if (feeSeed % 200 != 0) {
+            _markNoop(selector);
+            return;
+        }
 
         uint256 newFee = bound(feeSeed / 200, 0, 0.5e18);
 
@@ -727,70 +719,62 @@ contract MultiStrategyETHHandler is Test {
         timeDelta = bound(timeDelta, 1 hours, 365 days);
         vm.warp(block.timestamp + timeDelta);
     }
-    
+
     /// @notice Advance time with oracle mocking for Tokemak
     function warpTimeWithTokemakOracle(uint256 timeDelta) external countCall(this.warpTimeWithTokemakOracle.selector) {
         timeDelta = bound(timeDelta, 1 hours, 365 days);
-        
+
         // Mock Tokemak oracle calls for strategies that need it
         _mockTokemakOracle();
-        
+
         vm.warp(block.timestamp + timeDelta);
     }
-    
+
     // ============ REWARD OPERATIONS ============
-    
+
     /// @notice Claim rewards from Tokemak strategy (mocked)
     function claimTokemakRewards(uint256 strategyIndex, uint256 minAmountOut) external countCall(this.claimTokemakRewards.selector) {
         strategyIndex = bound(strategyIndex, 0, strategies.length - 1);
         address strategy = strategies[strategyIndex];
-        
+
         // Only Tokemak strategies have rewards
         string memory name = strategyNames[strategy];
         if (keccak256(bytes(name)) != keccak256(bytes("TokeAutoEth Mainnet"))) return;
-        
+
         bytes memory quote = hex"01"; // Mock quote
         minAmountOut = bound(minAmountOut, 0, 1e18); // Reasonable min out
-        
+
         vm.prank(admin);
-        try IMYTStrategy(strategy).claimRewards(
-            0x2e9d63788249371f1DFC918a52f8d799F4a38C94, // TOKE
-            quote,
-            minAmountOut
-        ) returns (uint256) {
-            // Success
-        } catch {
+        try IMYTStrategy(strategy)
+            .claimRewards(
+                0x2e9d63788249371f1DFC918a52f8d799F4a38C94, // TOKE
+                quote,
+                minAmountOut
+            ) returns (
+            uint256
+        ) {
+        // Success
+        }
+            catch {
             // Expected if no rewards or swap fails
         }
     }
-    
+
     // ============ HELPER FUNCTIONS ============
-    
+
     function _mockTokemakOracle() internal {
         address oracle = 0x61F8BE7FD721e80C0249829eaE6f0DAf21bc2CaC;
-        
+
         // Mock oracle calls
-        vm.mockCall(
-            oracle,
-            abi.encodeWithSignature("getPriceInEth(address)"),
-            abi.encode(1e18)
-        );
-        vm.mockCall(
-            oracle,
-            abi.encodeWithSignature("getCeilingPrice(address,address,address)"),
-            abi.encode(1.1e18)
-        );
-        vm.mockCall(
-            oracle,
-            abi.encodeWithSignature("getFloorPrice(address,address,address)"),
-            abi.encode(0.9e18)
-        );
+        vm.mockCall(oracle, abi.encodeWithSignature("getPriceInEth(address)"), abi.encode(1e18));
+        vm.mockCall(oracle, abi.encodeWithSignature("getCeilingPrice(address,address,address)"), abi.encode(1.1e18));
+        vm.mockCall(oracle, abi.encodeWithSignature("getFloorPrice(address,address,address)"), abi.encode(0.9e18));
     }
-    
+
     function getStrategyCount() external view returns (uint256) {
         return strategies.length;
     }
-    
+
     /// @notice Returns the net allocated amount from ghost variables
     function ghost_netAllocated() external view returns (uint256) {
         if (ghost_totalAllocated >= ghost_totalDeallocated) {
@@ -798,7 +782,7 @@ contract MultiStrategyETHHandler is Test {
         }
         return 0;
     }
-    
+
     /// @notice Returns the sum of all ghost strategy allocations
     function ghost_sumStrategyAllocations() external view returns (uint256) {
         uint256 sum = 0;
@@ -807,7 +791,7 @@ contract MultiStrategyETHHandler is Test {
         }
         return sum;
     }
-    
+
     /// @notice Returns the sum of actual vault allocations
     function vault_totalAllocations() external view returns (uint256) {
         uint256 sum = 0;
@@ -817,7 +801,7 @@ contract MultiStrategyETHHandler is Test {
         }
         return sum;
     }
-    
+
     function getStrategy(uint256 index) external view returns (address) {
         return strategies[index];
     }
@@ -826,11 +810,7 @@ contract MultiStrategyETHHandler is Test {
         return calls[selector];
     }
 
-    function getOperationStats(bytes4 selector)
-        external
-        view
-        returns (uint256 attempts_, uint256 successes_, uint256 reverts_, uint256 noops_)
-    {
+    function getOperationStats(bytes4 selector) external view returns (uint256 attempts_, uint256 successes_, uint256 reverts_, uint256 noops_) {
         return (opAttempts[selector], opSuccesses[selector], opReverts[selector], opNoops[selector]);
     }
 
@@ -845,7 +825,7 @@ contract MultiStrategyETHHandler is Test {
         console.log("    reverts:", opReverts[selector]);
         console.log("    noops:", opNoops[selector]);
     }
-    
+
     /// @dev Get the maximum deposit amount for the underlying protocol vault
     /// This accounts for protocol-level supply caps (e.g., Euler's E_SupplyCapExceeded)
     function _getUnderlyingMaxDeposit(address strategy) internal view returns (uint256) {
@@ -881,7 +861,7 @@ contract MultiStrategyETHHandler is Test {
             underlyingVault = abi.decode(data, (address));
         }
     }
-    
+
     function callSummary() external view {
         console.log("=== ETH Multi-Strategy Handler Call Summary ===");
         console.log("User Operations:");
@@ -925,14 +905,15 @@ contract MultiStrategyETHHandler is Test {
 contract MultiStrategyETHInvariantTest is Test {
     IVaultV2 public vault;
     MultiStrategyETHHandler public handler;
-    
+
     address[] public strategies;
     address public allocator;
     address public classifier;
     address public curatorContract;
     address public admin = address(0x1);
     address public operator = address(0x3);
-    
+    address public feeRecipient = address(0x2);
+
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant EULER_WETH_VAULT = 0xD8b27CF359b7D15710a5BE299AF6e7Bf904984C2;
     address public constant PEAPODS_ETH_VAULT = 0x9a42e1bEA03154c758BeC4866ec5AD214D4F2191;
@@ -945,72 +926,71 @@ contract MultiStrategyETHInvariantTest is Test {
     address public constant AAVE_V3_ETH_POOL_ADDRESS_PROVIDER = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
     address public constant AAVE_REWARDS_CONTROLLER = 0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb;
     address public constant AAVE_REWARD_TOKEN = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; // wstETH
-    
+    address public constant YV_WETH_2_VAULT = 0xAc37729B76db6438CE62042AE1270ee574CA7571;
+
     uint256 public constant INITIAL_VAULT_DEPOSIT = 10_000 ether;
     uint256 public constant ABSOLUTE_CAP = 50_000 ether;
     uint256 public constant RELATIVE_CAP = 0.5e18;
-    
+
     uint256 public initialSharePrice;
-    
+
     uint256 private forkId;
-    
+
     function setUp() public {
         // Fork mainnet at specific block
         string memory rpc = vm.envString("MAINNET_RPC_URL");
-        forkId = vm.createFork(rpc);
+        forkId = vm.createFork(rpc, 25_977_679);
         vm.selectFork(forkId);
-        
+
         // Setup vault
         vm.startPrank(admin);
         vault = _setupVault(WETH);
-        
+
         // Setup strategies
-        string[] memory strategyNames = new string[](4);
+        string[] memory strategyNames = new string[](5);
         strategyNames[0] = "Euler Mainnet WETH";
         strategyNames[1] = "Peapods Mainnet ETH";
         strategyNames[2] = "TokeAutoEth Mainnet";
         strategyNames[3] = "AaveV3 Mainnet WETH";
-        
+        strategyNames[4] = "Yearn Mainnet WETH-2";
+
         // Deploy Euler WETH Strategy
         strategies.push(_deployEulerStrategy());
-        
+
         // Deploy Peapods ETH Strategy
         strategies.push(_deployPeapodsStrategy());
-        
+
         // Deploy TokeAuto ETH Strategy
         strategies.push(_deployTokeStrategy());
-        
+
         // Deploy Aave V3 WETH Strategy
         strategies.push(_deployAaveWethStrategy());
-        
+
+        // Deploy Yearn WETH-2 as the default liquidity adapter
+        strategies.push(_deployYvWETH2Strategy());
+
         // Setup classifier and allocator
         _setupClassifierAndAllocator();
-        
+
         // Add strategies to vault
         _addStrategiesToVault();
-        
+
         // Make initial deposit to vault
         _makeInitialDeposit();
-        
+
+        // Route subsequent deposit/withdraw flow through Yearn WETH-2.
+        AlchemistAllocator(allocator).setLiquidityAdapter(strategies[4], _directLiquidityData());
+
         initialSharePrice = (vault.totalAssets() * 1e18) / vault.totalSupply();
-        
+
         vm.stopPrank();
-        
+
         // Create handler
-        handler = new MultiStrategyETHHandler(
-            address(vault),
-            strategies,
-            allocator,
-            classifier,
-            curatorContract,
-            admin,
-            operator,
-            strategyNames
-        );
-        
+        handler = new MultiStrategyETHHandler(address(vault), strategies, allocator, classifier, curatorContract, admin, operator, strategyNames);
+
         // Target the handler
         targetContract(address(handler));
-        
+
         // Target specific functions
         bytes4[] memory selectors = new bytes4[](12);
         selectors[0] = handler.deposit.selector;
@@ -1025,15 +1005,15 @@ contract MultiStrategyETHInvariantTest is Test {
         selectors[9] = handler.reclassifyStrategy.selector;
         selectors[10] = handler.modifyRiskClassCaps.selector;
         selectors[11] = handler.changePerformanceFee.selector;
-        
+
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
-    
+
     function _setupVault(address asset) internal returns (IVaultV2) {
         VaultV2Factory factory = new VaultV2Factory();
         return IVaultV2(factory.createVaultV2(admin, asset, bytes32(0)));
     }
-    
+
     function _deployEulerStrategy() internal returns (address) {
         IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({
             owner: admin,
@@ -1046,10 +1026,10 @@ contract MultiStrategyETHInvariantTest is Test {
             additionalIncentives: false,
             slippageBPS: 50
         });
-        
+
         return address(new ERC4626Strategy(address(vault), params, EULER_WETH_VAULT));
     }
-    
+
     function _deployPeapodsStrategy() internal returns (address) {
         IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({
             owner: admin,
@@ -1062,10 +1042,10 @@ contract MultiStrategyETHInvariantTest is Test {
             additionalIncentives: false,
             slippageBPS: 50
         });
-        
+
         return address(new ERC4626Strategy(address(vault), params, PEAPODS_ETH_VAULT));
     }
-    
+
     function _deployTokeStrategy() internal returns (address) {
         IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({
             owner: admin,
@@ -1078,19 +1058,10 @@ contract MultiStrategyETHInvariantTest is Test {
             additionalIncentives: false,
             slippageBPS: 50
         });
-        
-        return address(new TokeAutoStrategy(
-            address(vault),
-            params,
-            WETH,
-            TOKE_AUTO_ETH_VAULT,
-            TOKE_REWARDER_ETH,
-            TOKE,
-            TOKE_AUTOPILOT_ROUTER,
-            600
-        ));
+
+        return address(new TokeAutoStrategy(address(vault), params, WETH, TOKE_AUTO_ETH_VAULT, TOKE_REWARDER_ETH, TOKE, TOKE_AUTOPILOT_ROUTER, 600));
     }
-    
+
     function _deployAaveWethStrategy() internal returns (address) {
         IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({
             owner: admin,
@@ -1103,67 +1074,82 @@ contract MultiStrategyETHInvariantTest is Test {
             additionalIncentives: false,
             slippageBPS: 1
         });
-        
-        return address(new AaveStrategy(
-            address(vault),
-            params,
-            WETH,
-            AAVE_V3_ETH_WETH_ATOKEN,
-            AAVE_V3_ETH_POOL_ADDRESS_PROVIDER,
-            AAVE_REWARDS_CONTROLLER,
-            AAVE_REWARD_TOKEN
-        ));
+
+        return address(
+            new AaveStrategy(
+                address(vault), params, WETH, AAVE_V3_ETH_WETH_ATOKEN, AAVE_V3_ETH_POOL_ADDRESS_PROVIDER, AAVE_REWARDS_CONTROLLER, AAVE_REWARD_TOKEN
+            )
+        );
     }
-    
+
+    function _deployYvWETH2Strategy() internal returns (address) {
+        IMYTStrategy.StrategyParams memory params = IMYTStrategy.StrategyParams({
+            owner: admin,
+            name: "Yearn Mainnet WETH-2",
+            protocol: "Yearn",
+            riskClass: IMYTStrategy.RiskClass.LOW,
+            cap: 10_000 ether,
+            globalCap: 1e18,
+            estimatedYield: 700,
+            additionalIncentives: false,
+            slippageBPS: 50
+        });
+
+        return address(new ERC4626Strategy(address(vault), params, YV_WETH_2_VAULT));
+    }
+
+    function _directLiquidityData() internal pure returns (bytes memory) {
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        return abi.encode(params);
+    }
+
     function _setupClassifierAndAllocator() internal {
         classifier = address(new AlchemistStrategyClassifier(admin));
-        
+
         // Set up risk classes matching constructor defaults (WAD: 1e18 = 100%)
         AlchemistStrategyClassifier(classifier).setRiskClass(0, 1e18, 1e18); // LOW: 100%/100%
         AlchemistStrategyClassifier(classifier).setRiskClass(1, 0.4e18, 0.25e18); // MEDIUM: 40%/25%
         AlchemistStrategyClassifier(classifier).setRiskClass(2, 0.1e18, 0.1e18); // HIGH: 10%/10%
-        
+
         // Assign risk levels
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 strategyId = IMYTStrategy(strategies[i]).adapterId();
-            (,,,IMYTStrategy.RiskClass riskClass,,,,,) = IMYTStrategy(strategies[i]).params();
-            AlchemistStrategyClassifier(classifier).assignStrategyRiskLevel(
-                uint256(strategyId),
-                uint8(riskClass)
-            );
+            (,,, IMYTStrategy.RiskClass riskClass,,,,,) = IMYTStrategy(strategies[i]).params();
+            AlchemistStrategyClassifier(classifier).assignStrategyRiskLevel(uint256(strategyId), uint8(riskClass));
         }
-        
+
         // Deploy curator for timelocked operations
         curatorContract = address(new AlchemistCurator(admin, admin));
-        
+
         // Set curator on vault (owner can do this directly)
         VaultV2(address(vault)).setCurator(curatorContract);
         _setPerformanceFee(curatorContract);
-        
+
         allocator = address(new AlchemistAllocator(address(vault), admin, operator, classifier));
     }
 
     function _setPerformanceFee(address _curator) internal {
         AlchemistCurator curator = AlchemistCurator(_curator);
-        curator.submitSetPerformanceFeeRecipient(address(vault), admin);
-        vault.setPerformanceFeeRecipient(admin);
+        curator.submitSetPerformanceFeeRecipient(address(vault), feeRecipient);
+        vault.setPerformanceFeeRecipient(feeRecipient);
         curator.submitSetPerformanceFee(address(vault), 15e16);
         vault.setPerformanceFee(15e16);
     }
-    
+
     function _addStrategiesToVault() internal {
         // Use curator for timelocked operations
         AlchemistCurator curator = AlchemistCurator(curatorContract);
-        
+
         // Submit and set allocator through curator
         curator.submitSetAllocator(address(vault), allocator, true);
         vault.setIsAllocator(allocator, true);
-        
+
         for (uint256 i = 0; i < strategies.length; i++) {
             // Submit and add adapter through curator
             curator.submitSetStrategy(strategies[i], address(vault));
             curator.setStrategy(strategies[i], address(vault));
-            
+
             // Submit and set caps through curator
             curator.submitIncreaseAbsoluteCap(strategies[i], ABSOLUTE_CAP);
             curator.increaseAbsoluteCap(strategies[i], ABSOLUTE_CAP);
@@ -1175,15 +1161,34 @@ contract MultiStrategyETHInvariantTest is Test {
 
         AlchemistAllocator(allocator).setMaxRate(200e16 / uint256(365 days));
     }
-    
+
     function _makeInitialDeposit() internal {
         deal(WETH, admin, INITIAL_VAULT_DEPOSIT);
         IERC20(WETH).approve(address(vault), INITIAL_VAULT_DEPOSIT);
         vault.deposit(INITIAL_VAULT_DEPOSIT, admin);
     }
-    
+
+    function test_yvWeth2_isDefaultLiquidityAdapter() public {
+        address yvWeth2 = strategies[4];
+        assertEq(vault.liquidityAdapter(), yvWeth2, "yvWETH-2 should be the default liquidity adapter");
+        assertEq(address(ERC4626Strategy(yvWeth2).vault()), YV_WETH_2_VAULT, "unexpected Yearn vault");
+
+        address user = makeAddr("yvWeth2User");
+        uint256 amount = 10 ether;
+        uint256 realAssetsBefore = IMYTStrategy(yvWeth2).realAssets();
+
+        deal(WETH, user, amount);
+        vm.startPrank(user);
+        IERC20(WETH).approve(address(vault), amount);
+        vault.deposit(amount, user);
+        vm.stopPrank();
+
+        assertGt(IMYTStrategy(yvWeth2).realAssets(), realAssetsBefore, "deposit should flow into yvWETH-2");
+        assertApproxEqAbs(IMYTStrategy(yvWeth2).realAssets() - realAssetsBefore, amount, 1e15, "liquidity adapter should receive the deposit");
+    }
+
     // ============ INVARIANTS ============
-    
+
     /// @notice Invariant: All strategies must have non-negative real assets
     function invariant_realAssets_nonNegative() public view {
         for (uint256 i = 0; i < strategies.length; i++) {
@@ -1191,7 +1196,7 @@ contract MultiStrategyETHInvariantTest is Test {
             assertGe(realAssets, 0, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " has negative real assets")));
         }
     }
-    
+
     /// @notice Invariant: No strategy allocation exceeds absolute cap
     function invariant_allocationWithinAbsoluteCap() public view {
         for (uint256 i = 0; i < strategies.length; i++) {
@@ -1201,16 +1206,16 @@ contract MultiStrategyETHInvariantTest is Test {
             uint256 ra = IMYTStrategy(strategies[i]).realAssets();
             uint256 yieldGap = ra > allocation ? ra - allocation : 0;
             uint256 tolerance = absoluteCap / 20 + yieldGap;
-            
+
             assertLe(allocation, absoluteCap + tolerance, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " exceeds absolute cap")));
         }
     }
-    
+
     /// @notice Invariant: No strategy allocation exceeds relative cap
     function invariant_allocationWithinRelativeCap() public view {
         uint256 firstTotalAssets = vault.firstTotalAssets();
         if (firstTotalAssets == 0) return;
-        
+
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
             uint256 allocation = vault.allocation(allocationId);
@@ -1219,11 +1224,13 @@ contract MultiStrategyETHInvariantTest is Test {
 
             uint256 maxAllowed = (firstTotalAssets * relativeCap) / 1e18;
             uint256 tolerance = maxAllowed / 100; // 1%
-            
-            assertLe(allocation, maxAllowed + tolerance + 1, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " exceeds relative cap")));
+
+            assertLe(
+                allocation, maxAllowed + tolerance + 1, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " exceeds relative cap"))
+            );
         }
     }
-    
+
     /// @notice Invariant: No strategy allocation exceeds global risk cap for its risk level
     function invariant_allocationWithinGlobalRiskCap() public view {
         uint256 totalAssets = vault.totalAssets();
@@ -1255,30 +1262,30 @@ contract MultiStrategyETHInvariantTest is Test {
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
             uint256 allocation = vault.allocation(allocationId);
-            
+
             uint256 individualRiskCapPct = AlchemistStrategyClassifier(classifier).getIndividualCap(uint256(allocationId));
             uint256 individualRiskCap = (totalAssets * individualRiskCapPct) / 1e18;
-            
+
             assertLe(allocation, individualRiskCap, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " exceeds individual risk cap")));
         }
     }
-    
+
     /// @notice Invariant: Total allocations per risk level don't exceed aggregate limits
     function invariant_riskLevelAggregateCaps() public view {
         uint256 totalAssets = vault.totalAssets();
         uint256[3] memory riskLevelAllocations;
         uint256[3] memory yieldGaps;
-        
+
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
             uint256 allocation = vault.allocation(allocationId);
             uint8 riskLevel = AlchemistStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
-            
+
             riskLevelAllocations[riskLevel] += allocation;
             uint256 ra = IMYTStrategy(strategies[i]).realAssets();
             if (ra > allocation) yieldGaps[riskLevel] += ra - allocation;
         }
-        
+
         uint256 lowCap = (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(0)) / 1e18;
         uint256 medCap = (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(1)) / 1e18;
         uint256 highCap = (totalAssets * AlchemistStrategyClassifier(classifier).getGlobalCap(2)) / 1e18;
@@ -1286,12 +1293,12 @@ contract MultiStrategyETHInvariantTest is Test {
         assertLe(riskLevelAllocations[1], medCap + handler.ghost_liquidityAdapterBypass(1) + yieldGaps[1], "MEDIUM risk aggregate exceeds global cap");
         assertLe(riskLevelAllocations[2], highCap + handler.ghost_liquidityAdapterBypass(2) + yieldGaps[2], "HIGH risk aggregate exceeds global cap");
     }
-    
+
     /// @notice Invariant: Sum of all allocations bounded by vault assets
     function invariant_totalAllocationsBounded() public view {
         uint256 totalAllocations = 0;
         uint256 totalRealAssets = IERC20(vault.asset()).balanceOf(address(vault));
-        
+
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
             totalAllocations += vault.allocation(allocationId);
@@ -1300,22 +1307,22 @@ contract MultiStrategyETHInvariantTest is Test {
 
         assertLe(totalAllocations, totalRealAssets * 110 / 100 + 1, "Total allocations exceed real assets by more than 10%");
     }
-    
+
     /// @notice Invariant: Real assets consistent with allocation
     function invariant_realAssetsConsistentWithAllocation() public view {
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
             uint256 allocation = vault.allocation(allocationId);
             uint256 realAssets = IMYTStrategy(strategies[i]).realAssets();
-            
+
             if (allocation > 1e15) {
                 uint256 minExpected = allocation * 90 / 100;
-                
+
                 assertGe(realAssets, minExpected, string(abi.encodePacked("Strategy ", handler.strategyNames(strategies[i]), " real assets below allocation")));
             }
         }
     }
-    
+
     function invariant_sharePriceNonDecreasing() public view {
         uint256 totalSupply = vault.totalSupply();
         if (totalSupply == 0) return;
@@ -1335,36 +1342,34 @@ contract MultiStrategyETHInvariantTest is Test {
         uint256 feeShares = vault.balanceOf(vault.performanceFeeRecipient());
         assertLe(feeShares, vault.totalSupply() / 2, "fee shares exceed 50% of totalSupply");
     }
-    
+
     /// @notice Invariant: User balance consistency
     function invariant_userBalanceConsistency() public view {
         uint256 totalUserDeposits = handler.ghost_totalDeposited();
         uint256 totalUserWithdrawals = handler.ghost_totalWithdrawn();
-        uint256 netDeposits = totalUserDeposits > totalUserWithdrawals 
-            ? totalUserDeposits - totalUserWithdrawals 
-            : 0;
-        
+        uint256 netDeposits = totalUserDeposits > totalUserWithdrawals ? totalUserDeposits - totalUserWithdrawals : 0;
+
         uint256 vaultBalance = IERC20(WETH).balanceOf(address(vault));
 
         uint256 totalStrategyValue = 0;
         for (uint256 i = 0; i < strategies.length; i++) {
             totalStrategyValue += IMYTStrategy(strategies[i]).realAssets();
         }
-        
+
         uint256 totalValue = vaultBalance + totalStrategyValue;
         uint256 totalExpected = INITIAL_VAULT_DEPOSIT + netDeposits;
         if (totalExpected > 1e15) {
             assertGe(totalValue, totalExpected * 90 / 100, "Total value significantly less than expected deposits");
         }
     }
-    
+
     /// @notice Invariant: Ghost allocations match actual vault allocations per strategy
     function invariant_ghostAllocationsMatchVault() public view {
         for (uint256 i = 0; i < strategies.length; i++) {
             bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
             uint256 actualAllocation = vault.allocation(allocationId);
             uint256 ghostAllocation = handler.ghost_strategyAllocations(strategies[i]);
-            
+
             // Allow 5% tolerance for yield/rounding differences
             if (actualAllocation > 1e15) {
                 uint256 minExpected = actualAllocation * 95 / 100;
@@ -1374,24 +1379,24 @@ contract MultiStrategyETHInvariantTest is Test {
             }
         }
     }
-    
+
     /// @notice Invariant: Net ghost allocations match sum of vault allocations
     function invariant_netAllocationsConsistent() public view {
         uint256 ghostNet = handler.ghost_netAllocated();
         uint256 vaultTotal = handler.vault_totalAllocations();
-        
+
         // Allow 10% tolerance for yield accumulation and rounding
         if (vaultTotal > 1e15) {
             assertGe(ghostNet, vaultTotal * 90 / 100, "Ghost net allocations below vault total");
             assertLe(ghostNet, vaultTotal * 110 / 100, "Ghost net allocations above vault total");
         }
     }
-    
+
     /// @notice Invariant: Ghost sum of strategy allocations is internally consistent
     function invariant_ghostSumConsistent() public view {
         uint256 ghostSum = handler.ghost_sumStrategyAllocations();
         uint256 ghostNet = handler.ghost_netAllocated();
-        
+
         // ghost_sumStrategyAllocations should equal ghost_netAllocated
         // Allow small tolerance for rounding
         if (ghostNet > 1e15) {
@@ -1420,7 +1425,7 @@ contract MultiStrategyETHInvariantTest is Test {
             );
         }
     }
-    
+
     /// @notice Invariant: Strategy-specific checks for Tokemak
     function invariant_tokemakSharesConsistent() public view {
         for (uint256 i = 0; i < strategies.length; i++) {
@@ -1430,7 +1435,7 @@ contract MultiStrategyETHInvariantTest is Test {
                 uint256 realAssets = IMYTStrategy(strategies[i]).realAssets();
                 bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
                 uint256 allocation = vault.allocation(allocationId);
-                
+
                 if (allocation > 0) {
                     // Real assets should exist for Tokemak
                     assertGt(realAssets, 0, "Tokemak strategy has allocation but no real assets");
@@ -1438,7 +1443,7 @@ contract MultiStrategyETHInvariantTest is Test {
             }
         }
     }
-    
+
     /// @notice Ensures allocate path is exercised and not a no-op.
     function invariant_allocatePathHasProgress() public view {
         uint256 allocateCalls = handler.getCalls(handler.allocate.selector);
@@ -1479,10 +1484,8 @@ contract MultiStrategyETHInvariantTest is Test {
     }
 
     function invariant_userPathIsNotSilentlyReverting() public view {
-        (uint256 withdrawAttempts, uint256 withdrawSuccesses, uint256 withdrawReverts, ) =
-            handler.getOperationStats(handler.withdraw.selector);
-        (uint256 redeemAttempts, uint256 redeemSuccesses, uint256 redeemReverts, ) =
-            handler.getOperationStats(handler.redeem.selector);
+        (uint256 withdrawAttempts, uint256 withdrawSuccesses, uint256 withdrawReverts,) = handler.getOperationStats(handler.withdraw.selector);
+        (uint256 redeemAttempts, uint256 redeemSuccesses, uint256 redeemReverts,) = handler.getOperationStats(handler.redeem.selector);
 
         if (withdrawAttempts >= 5) {
             assertGt(withdrawSuccesses, 0, "Withdraw attempted repeatedly but never succeeded");
@@ -1499,10 +1502,10 @@ contract MultiStrategyETHInvariantTest is Test {
         uint256 deallocateAttempts;
         uint256 deallocateAllAttempts;
         uint256 setLiquidityAttempts;
-        (allocateAttempts, , , ) = handler.getOperationStats(handler.allocate.selector);
-        (deallocateAttempts, , , ) = handler.getOperationStats(handler.deallocate.selector);
-        (deallocateAllAttempts, , , ) = handler.getOperationStats(handler.deallocateAll.selector);
-        (setLiquidityAttempts, , , ) = handler.getOperationStats(handler.setLiquidityAdapter.selector);
+        (allocateAttempts,,,) = handler.getOperationStats(handler.allocate.selector);
+        (deallocateAttempts,,,) = handler.getOperationStats(handler.deallocate.selector);
+        (deallocateAllAttempts,,,) = handler.getOperationStats(handler.deallocateAll.selector);
+        (setLiquidityAttempts,,,) = handler.getOperationStats(handler.setLiquidityAdapter.selector);
 
         uint256 totalAllocatorAttempts = allocateAttempts + deallocateAttempts + deallocateAllAttempts + setLiquidityAttempts;
         if (totalAllocatorAttempts >= 10) {
