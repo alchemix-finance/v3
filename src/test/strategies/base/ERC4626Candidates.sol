@@ -135,4 +135,28 @@ library ERC4626Candidates {
             zeroMaxWithdrawIsUnbounded: false
         });
     }
+    function fluidUSDCBase() internal pure returns (ERC4626Candidate memory) {
+        return ERC4626Candidate({
+            targetVault: 0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169,
+            asset: BASE_USDC,
+            rpcEnv: "BASE_RPC_URL",
+            fallbackRpcUrl: BASE_RPC_FALLBACK,
+            name: "Fluid USDC Base",
+            protocol: "Fluid",
+            riskClass: IMYTStrategy.RiskClass.MEDIUM,
+            forkBlock: 51_051_016,
+            assetDecimals: 6,
+            shareDecimals: 6,
+            initialDeposit: 10_000e6,
+            absoluteCap: 10_000e6,
+            relativeCap: 0.25e18,
+            strategyCap: 10_000e6,
+            globalCap: 0.25e18,
+            estimatedYield: 489,
+            slippageBPS: 50,
+            additionalIncentives: false,
+            maxWithdrawIsAuthoritative: true,
+            zeroMaxWithdrawIsUnbounded: false
+        });
+    }
 }
