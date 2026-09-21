@@ -2,11 +2,14 @@
 pragma solidity 0.8.28;
 
 import {Script, console} from "forge-std/Script.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IMYTStrategy} from "../src/interfaces/IMYTStrategy.sol";
-import {ERC4626Strategy} from "../src/strategies/ERC4626Strategy.sol";
+import {YearnV3Strategy} from "../src/strategies/YearnV3Strategy.sol";
 
-/// @notice Reusable deploy helper for the Yearn WETH-2 ERC4626 vault strategy on Ethereum mainnet.
+/// @notice Reusable deploy helper for the Yearn WETH-2 strategy on Ethereum mainnet.
 contract DeployYvWETH2StrategyScript is Script {
+    uint256 public constant MAINNET_CHAIN_ID = 1;
+
     address public deployerAddr = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
 
     address public newOwner = 0xF56D660138815fC5d7a06cd0E1630225E788293D;
@@ -15,6 +18,11 @@ contract DeployYvWETH2StrategyScript is Script {
 
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant YV_WETH_2_VAULT = 0xAc37729B76db6438CE62042AE1270ee574CA7571;
+
+    error InvalidMainnetChain(uint256 actualChainId);
+    error ZeroDeploymentAddress();
+    error DeploymentTargetHasNoCode(address target);
+    error DeploymentAssetMismatch(address target, address expectedAsset, address actualAsset);
 
     struct YvWETH2DeployConfig {
         address myt;
@@ -36,9 +44,24 @@ contract DeployYvWETH2StrategyScript is Script {
         });
     }
 
+    function _validateMainnetDeployment(address myt, address targetVault) internal view {
+        if (block.chainid != MAINNET_CHAIN_ID) revert InvalidMainnetChain(block.chainid);
+        if (myt == address(0) || targetVault == address(0)) revert ZeroDeploymentAddress();
+        if (myt.code.length == 0) revert DeploymentTargetHasNoCode(myt);
+        if (targetVault.code.length == 0) revert DeploymentTargetHasNoCode(targetVault);
+
+        address mytAsset = IERC4626(myt).asset();
+        if (mytAsset != IERC4626(targetVault).asset()) {
+            revert DeploymentAssetMismatch(targetVault, mytAsset, IERC4626(targetVault).asset());
+        }
+    }
+
     function deployYvWETH2Strategy(address targetOwner, YvWETH2DeployConfig memory config) public returns (address strategyAddr) {
-        ERC4626Strategy strategy = new ERC4626Strategy(config.myt, config.params, config.yearnVault);
+        _validateMainnetDeployment(config.myt, config.yearnVault);
+
+        YearnV3Strategy strategy = new YearnV3Strategy(config.myt, config.params, config.yearnVault);
         strategyAddr = address(strategy);
+
         strategy.setKillSwitch(true);
         strategy.transferOwnership(targetOwner);
     }
@@ -46,10 +69,14 @@ contract DeployYvWETH2StrategyScript is Script {
     function run() public returns (address strategyAddr) {
         YvWETH2DeployConfig memory config = YvWETH2DeployConfig({myt: ethMYT, yearnVault: YV_WETH_2_VAULT, params: defaultParams()});
 
+        if (IERC4626(config.yearnVault).asset() != WETH) {
+            revert DeploymentAssetMismatch(config.yearnVault, WETH, IERC4626(config.yearnVault).asset());
+        }
+
         vm.startBroadcast(deployerAddr);
         strategyAddr = deployYvWETH2Strategy(newOwner, config);
         vm.stopBroadcast();
 
-        console.log("Yearn Mainnet WETH-2 ERC4626Strategy deployed at:", strategyAddr);
+        console.log("Yearn Mainnet WETH-2 YearnV3Strategy deployed at:", strategyAddr);
     }
 }

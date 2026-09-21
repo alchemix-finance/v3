@@ -41,10 +41,9 @@ contract FluidUSDCBaseStrategyTest is ERC4626StrategyUnitTestBase {
     }
 
     function isProtocolRevertAllowed(bytes4 selector, RevertContext context) external pure override returns (bool) {
-        bool isFuzzOrHandler = context == RevertContext.HandlerAllocate || context == RevertContext.HandlerDeallocate
-            || context == RevertContext.FuzzAllocate || context == RevertContext.FuzzDeallocate;
+        bool isAllocate = context == RevertContext.HandlerAllocate || context == RevertContext.FuzzAllocate;
 
-        return isFuzzOrHandler && selector == ALLOWED_FLUID_REVERT_SELECTOR;
+        return isAllocate && selector == ALLOWED_FLUID_REVERT_SELECTOR;
     }
 
     function isMytRevertAllowed(bytes4 selector, RevertContext context) external pure override returns (bool) {

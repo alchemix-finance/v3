@@ -9,6 +9,7 @@ import {console} from "forge-std/console.sol";
 
 import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
+import {YearnV3Strategy} from "../../strategies/YearnV3Strategy.sol";
 import {ERC4626Candidate, ERC4626StrategyInvariantTestBase, ERC4626StrategyUnitTestBase} from "./base/ERC4626StrategyTestBase.sol";
 import {ERC4626Candidates} from "./base/ERC4626Candidates.sol";
 
@@ -45,6 +46,11 @@ contract YvWETH2StrategyTest is ERC4626StrategyUnitTestBase {
 
     function _candidate() internal pure override returns (ERC4626Candidate memory) {
         return ERC4626Candidates.yearnWETH2();
+    }
+
+    /// @dev yvWETH-2 runs the Yearn V3 variant.
+    function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal virtual override returns (address) {
+        return address(new YearnV3Strategy(vault_, params, _candidate().targetVault));
     }
 
     function _liveYvWeth1PositionAssets() internal view returns (uint256) {
@@ -113,7 +119,25 @@ contract YvWETH2StrategyTest is ERC4626StrategyUnitTestBase {
         console.log("yvWETH-1 maxWithdraw(yvWETH-2)", IERC4626(YV_WETH_1_VAULT).maxWithdraw(candidate.targetVault));
     }
 
-    function _assertDeallocateAboveMaxWithdrawReverts() internal {
+    function _assertDeallocateAboveMaxWithdrawDegrades() internal {
+        IERC4626 yearnVault = IERC4626(_candidate().targetVault);
+        uint256 realAssets = IMYTStrategy(strategy).realAssets();
+        uint256 maxWithdraw = yearnVault.maxWithdraw(strategy);
+        assertLt(maxWithdraw, realAssets, "position should be beyond loss-free capacity");
+
+        // A lossy book cannot pay its full reported value (the unrealized loss is not
+        // deliverable), so exit a hair under the position — well above loss-free capacity.
+        uint256 amount = realAssets - 1000;
+        uint256 mytWethBefore = IERC20(_candidate().asset).balanceOf(vault);
+        vm.prank(allocator);
+        IVaultV2(vault).deallocate(strategy, getVaultParams(), amount);
+        uint256 received = IERC20(_candidate().asset).balanceOf(vault) - mytWethBefore;
+        assertGe(received, realAssets * (10_000 - _candidate().slippageBPS) / 10_000, "graceful exit must bound loss by slippageBPS");
+        assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), 0, 1e15, "strategy should be empty after near-full exit");
+    }
+
+    /// @dev Legs with no withdrawable liquidity stay loud.
+    function _assertDeallocateAboveMaxWithdrawStillReverts() internal {
         IERC4626 yearnVault = IERC4626(_candidate().targetVault);
         uint256 realAssets = IMYTStrategy(strategy).realAssets();
         uint256 maxWithdraw = yearnVault.maxWithdraw(strategy);
@@ -126,15 +150,6 @@ contract YvWETH2StrategyTest is ERC4626StrategyUnitTestBase {
         vm.prank(allocator);
         vm.expectRevert();
         IVaultV2(vault).deallocate(strategy, getVaultParams(), aboveMax);
-
-        if (maxWithdraw == 0) return;
-
-        uint256 deallocationAmount = IMYTStrategy(strategy).previewAdjustedWithdraw(maxWithdraw);
-        uint256 mytWethBefore = IERC20(_candidate().asset).balanceOf(vault);
-        vm.prank(allocator);
-        IVaultV2(vault).deallocate(strategy, getVaultParams(), deallocationAmount);
-        assertGt(IERC20(_candidate().asset).balanceOf(vault), mytWethBefore, "instant capacity should deallocate");
-        assertLt(IMYTStrategy(strategy).realAssets(), realAssets, "strategy value should decrease after partial exit");
     }
 
     function test_yearnWeth2_metadataAndCapacity() public view {
@@ -223,8 +238,8 @@ contract YvWETH2StrategyTest is ERC4626StrategyUnitTestBase {
     /// @notice Deposit the live yvWETH-1 production size into yvWETH-2, then impersonate Yearn:
     ///         1) yvWETH-2 `update_debt` into yvWETH-1 (funds land idle there, still 100% instant)
     ///         2) yvWETH-1 `update_debt` into the stETH Accumulator (queue head, currently illiquid)
-    ///         After (2), anything above `maxWithdraw` reverts because ERC4626Strategy uses 3-arg
-    ///         Yearn `withdraw` (`max_loss = 0`).
+    ///         After (2) the position is beyond loss-free capacity; the stETH leg has no
+    ///         withdrawable liquidity at all, so exits above loss-free capacity still revert.
     function test_yearnWeth2_liveDeposit_notFullyWithdrawableAfterDebtToYvWeth1() public {
         ERC4626Candidate memory candidate = _candidate();
         IERC4626 yearnVault = IERC4626(candidate.targetVault);
@@ -292,16 +307,38 @@ contract YvWETH2StrategyTest is ERC4626StrategyUnitTestBase {
         vm.expectRevert();
         IVaultV2(vault).deallocate(strategy, getVaultParams(), realAssetsAfterSteth);
 
-        vm.prank(allocator);
-        vm.expectRevert();
-        IVaultV2(vault).deallocate(strategy, getVaultParams(), maxWithdrawAfterSteth + 1);
-
         uint256 deallocationAmount = IMYTStrategy(strategy).previewAdjustedWithdraw(maxWithdrawAfterSteth);
         uint256 mytWethBefore = IERC20(candidate.asset).balanceOf(vault);
         vm.prank(allocator);
         IVaultV2(vault).deallocate(strategy, getVaultParams(), deallocationAmount);
         assertGt(IERC20(candidate.asset).balanceOf(vault), mytWethBefore, "instant capacity should deallocate");
         assertLt(IMYTStrategy(strategy).realAssets(), realAssetsAfterSteth, "strategy value should decrease after partial exit");
+    }
+
+    /// @notice Move the live-sized idle deposit into the Morpho compounder (which carries
+    ///         a 1-wei unrealized loss) and verify the full position still exits within
+    ///         slippageBPS.
+    function test_yearnWeth2_liveDeposit_gracefulExitThroughLossyLeg() public {
+        uint256 liveAmount = _seedLiveYvWeth2Deposit();
+        IYearnV3VaultDebt yearnWeth2 = IYearnV3VaultDebt(_candidate().targetVault);
+
+        _unshutdownMorphoCompounder();
+        _moveYvWeth2IdleTo(MORPHO_Y_WETH_COMPOUNDER);
+
+        uint256 realAssets = IMYTStrategy(strategy).realAssets();
+        uint256 maxWithdraw = IERC4626(_candidate().targetVault).maxWithdraw(strategy);
+        console.log("live yvWETH-1 position (WETH)", liveAmount);
+        console.log("loss-free maxWithdraw after Morpho hop", maxWithdraw);
+        assertLt(maxWithdraw, realAssets, "lossy leg should hide capacity from the loss-free path");
+
+        uint256 amount = realAssets - 1000;
+        uint256 mytWethBefore = IERC20(_candidate().asset).balanceOf(vault);
+        vm.prank(allocator);
+        IVaultV2(vault).deallocate(strategy, getVaultParams(), amount);
+        uint256 received = IERC20(_candidate().asset).balanceOf(vault) - mytWethBefore;
+        console.log("WETH received on near-full exit", received);
+        assertGe(received, realAssets * (10_000 - _candidate().slippageBPS) / 10_000, "full exit must stay within slippageBPS");
+        assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), 0, 1e15, "strategy should be empty after near-full exit");
     }
 
     /// @notice Apply the queued Yearn timelock `add_strategy` for Spark wstETH → yvUSD, then move the
@@ -329,7 +366,7 @@ contract YvWETH2StrategyTest is ERC4626StrategyUnitTestBase {
         uint256 realAssets = IMYTStrategy(strategy).realAssets();
         uint256 maxWithdraw = IERC4626(_candidate().targetVault).maxWithdraw(strategy);
         assertLt(maxWithdraw, realAssets, "Spark looper should not be fully instantly withdrawable");
-        _assertDeallocateAboveMaxWithdrawReverts();
+        _assertDeallocateAboveMaxWithdrawStillReverts();
     }
 
     /// @notice Re-enable the shutdown Morpho Y-WETH Compounder (already in the queue with 10k max_debt)
@@ -361,12 +398,16 @@ contract YvWETH2StrategyTest is ERC4626StrategyUnitTestBase {
         uint256 realAssets = IMYTStrategy(strategy).realAssets();
         uint256 maxWithdraw = IERC4626(_candidate().targetVault).maxWithdraw(strategy);
         assertLt(maxWithdraw, realAssets, "Morpho compounder should not be fully instantly withdrawable");
-        _assertDeallocateAboveMaxWithdrawReverts();
+        _assertDeallocateAboveMaxWithdrawDegrades();
     }
 }
 
 contract YvWETH2InvariantTest is ERC4626StrategyInvariantTestBase {
     function _candidate() internal pure override returns (ERC4626Candidate memory) {
         return ERC4626Candidates.yearnWETH2();
+    }
+
+    function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal virtual override returns (address) {
+        return address(new YearnV3Strategy(vault_, params, _candidate().targetVault));
     }
 }

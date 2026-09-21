@@ -13,6 +13,7 @@ import {AlchemistStrategyClassifier} from "../AlchemistStrategyClassifier.sol";
 import {IMYTStrategy} from "../interfaces/IMYTStrategy.sol";
 import {TokenUtils} from "../libraries/TokenUtils.sol";
 import {ERC4626Strategy} from "../strategies/ERC4626Strategy.sol";
+import {YearnV3Strategy} from "../strategies/YearnV3Strategy.sol";
 import {TokeAutoStrategy} from "../strategies/TokeAutoStrategy.sol";
 import {AaveStrategy} from "../strategies/AaveStrategy.sol";
 
@@ -1089,13 +1090,13 @@ contract MultiStrategyETHInvariantTest is Test {
             protocol: "Yearn",
             riskClass: IMYTStrategy.RiskClass.LOW,
             cap: 10_000 ether,
-            globalCap: 1e18,
+            globalCap: 0.3e18,
             estimatedYield: 700,
             additionalIncentives: false,
             slippageBPS: 50
         });
 
-        return address(new ERC4626Strategy(address(vault), params, YV_WETH_2_VAULT));
+        return address(new YearnV3Strategy(address(vault), params, YV_WETH_2_VAULT));
     }
 
     function _directLiquidityData() internal pure returns (bytes memory) {
@@ -1155,8 +1156,10 @@ contract MultiStrategyETHInvariantTest is Test {
             curator.increaseAbsoluteCap(strategies[i], ABSOLUTE_CAP);
 
             (,,,,, uint256 strategyRelativeCap,,,) = IMYTStrategy(strategies[i]).params();
-            curator.submitIncreaseRelativeCap(strategies[i], strategyRelativeCap);
-            curator.increaseRelativeCap(strategies[i], strategyRelativeCap);
+            // The liquidity adapter takes 100%; others use their param-derived cap.
+            uint256 vaultRelativeCap = strategies[i] == strategies[strategies.length - 1] ? 1e18 : strategyRelativeCap;
+            curator.submitIncreaseRelativeCap(strategies[i], vaultRelativeCap);
+            curator.increaseRelativeCap(strategies[i], vaultRelativeCap);
         }
 
         AlchemistAllocator(allocator).setMaxRate(200e16 / uint256(365 days));

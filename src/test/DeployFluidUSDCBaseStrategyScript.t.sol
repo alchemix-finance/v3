@@ -17,7 +17,8 @@ contract DeployFluidUSDCBaseStrategyScriptTest is Test {
     address internal constant BASE_NEW_OWNER = 0x24E9cbB9DdDa1247ae4b4eEEE3C569A2190ac401;
     address internal constant BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address internal constant FLUID_USDC_VAULT = 0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169;
-    uint256 internal constant BASE_FORK_BLOCK = 51_051_016;
+    address internal constant BASE_USDC_MYT = 0xb8BeFE5a6941ca4022a52042075ff269C3C67467;
+    uint256 internal constant BASE_FORK_BLOCK = 51_125_700;
 
     DeployFluidUSDCBaseStrategyScript internal deployScript;
     TestERC20 internal assetToken;
@@ -75,14 +76,12 @@ contract DeployFluidUSDCBaseStrategyScriptTest is Test {
     function test_run_fork_deploysAgainstLiveBaseFluidVault() public {
         vm.createSelectFork(vm.envOr("BASE_RPC_URL", string("https://base.gateway.tenderly.co")), BASE_FORK_BLOCK);
 
-        MockMYTVault forkMYT = new MockMYTVault(address(this), BASE_USDC);
-        vm.setEnv("BASE_USDC_MYT", vm.toString(address(forkMYT)));
         vm.deal(DEPLOYER, 10 ether);
 
         DeployFluidUSDCBaseStrategyScript forkDeployScript = new DeployFluidUSDCBaseStrategyScript();
         ERC4626Strategy strategy = ERC4626Strategy(forkDeployScript.run());
 
-        assertEq(address(strategy.MYT()), address(forkMYT), "unexpected MYT");
+        assertEq(address(strategy.MYT()), BASE_USDC_MYT, "unexpected MYT");
         assertEq(address(strategy.mytAsset()), BASE_USDC, "unexpected MYT asset");
         assertEq(address(strategy.vault()), FLUID_USDC_VAULT, "unexpected target vault");
         assertEq(IERC4626(FLUID_USDC_VAULT).asset(), BASE_USDC, "target vault asset mismatch");

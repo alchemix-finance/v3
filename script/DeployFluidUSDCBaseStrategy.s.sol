@@ -13,6 +13,7 @@ contract DeployFluidUSDCBaseStrategyScript is BaseERC4626DeploymentScript {
 
     address public constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address public constant FLUID_USDC_VAULT = 0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169;
+    address public constant BASE_USDC_MYT = 0xb8BeFE5a6941ca4022a52042075ff269C3C67467;
 
     struct FluidUSDCBaseDeployConfig {
         address myt;
@@ -46,9 +47,7 @@ contract DeployFluidUSDCBaseStrategyScript is BaseERC4626DeploymentScript {
     }
 
     function run() public returns (address strategyAddr) {
-        address targetMYT = vm.envAddress("BASE_USDC_MYT");
-        FluidUSDCBaseDeployConfig memory config =
-            FluidUSDCBaseDeployConfig({myt: targetMYT, fluidVault: FLUID_USDC_VAULT, params: defaultParams()});
+        FluidUSDCBaseDeployConfig memory config = FluidUSDCBaseDeployConfig({myt: BASE_USDC_MYT, fluidVault: FLUID_USDC_VAULT, params: defaultParams()});
 
         _validateBaseAsset(newOwner, config.myt, config.fluidVault, config.params.owner, USDC);
 

@@ -42,6 +42,7 @@ contract DeployYvWETH2StrategyScriptTest is Test {
     address internal newOwner;
 
     function setUp() public {
+        vm.chainId(1);
         deployScript = new DeployYvWETH2StrategyScript();
 
         weth = new TestERC20(1_000_000e18, 18);
@@ -132,5 +133,19 @@ contract DeployYvWETH2StrategyScriptTest is Test {
         assertEq(params.estimatedYield, 700, "unexpected estimated yield");
         assertFalse(params.additionalIncentives, "unexpected incentives flag");
         assertEq(params.slippageBPS, 50, "unexpected slippage");
+    }
+
+    function test_deployYvWETH2Strategy_revertsOffMainnet() public {
+        DeployYvWETH2StrategyScript.YvWETH2DeployConfig memory config = _config(address(myt), address(yearnVault));
+        vm.chainId(8453);
+
+        vm.expectRevert(abi.encodeWithSelector(DeployYvWETH2StrategyScript.InvalidMainnetChain.selector, 8453));
+        deployScript.deployYvWETH2Strategy(newOwner, config);
+    }
+
+    function _config(address testMYT, address vault) internal view returns (DeployYvWETH2StrategyScript.YvWETH2DeployConfig memory config) {
+        IMYTStrategy.StrategyParams memory params = deployScript.defaultParams();
+        params.owner = address(deployScript);
+        config = DeployYvWETH2StrategyScript.YvWETH2DeployConfig({myt: testMYT, yearnVault: vault, params: params});
     }
 }
