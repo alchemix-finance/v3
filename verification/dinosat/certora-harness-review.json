@@ -1,0 +1,784 @@
+{
+  "branch": "origin/certora",
+  "revision": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+  "scope": "Read-only harness and runner reuse review; no Certora or Halmos execution",
+  "runner": {
+    "source": "certora/scripts/run.sh",
+    "specs": [
+      "alchemist",
+      "transmuter",
+      "myt"
+    ],
+    "global": "Explicitly exits as not functional; no GlobalSceneHarness",
+    "local_dependencies": [
+      "solc on PATH (comment says 0.8.28, but script does not check version)",
+      "/tmp/certora-build/emv.jar",
+      "python3 /tmp/certora-build/certoraRun.py",
+      "Java heap -Xmx20g"
+    ],
+    "cloud_dependencies": [
+      "certoraRun on PATH",
+      "CERTORA_KEY environment variable"
+    ],
+    "compiler_flags": [
+      "--solc_via_ir",
+      "optimizer omitted",
+      "--packages @openzeppelin/contracts=lib/openzeppelin-contracts/contracts"
+    ],
+    "reproducibility_limits": [
+      "No pinned Certora version or prover hash",
+      "No compiler-version check or explicit EVM target",
+      "No saved result path or artifact manifest",
+      "Local prover build absent in this workspace"
+    ]
+  },
+  "wrappers": [
+    {
+      "file": "certora/harnesses/AlchemistV3Harness.sol",
+      "functions": [
+        {
+          "name": "setUnderlyingConversionFactor",
+          "line": 22
+        },
+        {
+          "name": "setAdmin",
+          "line": 27
+        },
+        {
+          "name": "calcLiquidation_grossCollateralToSeize",
+          "line": 39
+        },
+        {
+          "name": "calcLiquidation_debtToBurn",
+          "line": 50
+        },
+        {
+          "name": "calcLiquidation_fee",
+          "line": 61
+        }
+      ]
+    },
+    {
+      "file": "certora/harnesses/AlchemistV3SceneHarness.sol",
+      "functions": [
+        {
+          "name": "__initState",
+          "line": 50
+        },
+        {
+          "name": "__accountSlot",
+          "line": 96
+        },
+        {
+          "name": "__storedCollateral",
+          "line": 100
+        },
+        {
+          "name": "__storedDebt",
+          "line": 105
+        },
+        {
+          "name": "__storedEarmarked",
+          "line": 110
+        },
+        {
+          "name": "__mytSharesDeposited",
+          "line": 119
+        },
+        {
+          "name": "__pendingCoverShares",
+          "line": 123
+        },
+        {
+          "name": "__totalRedeemedDebt",
+          "line": 127
+        },
+        {
+          "name": "__totalRedeemedSharesOut",
+          "line": 131
+        },
+        {
+          "name": "__earmarkWeight",
+          "line": 135
+        },
+        {
+          "name": "__redemptionWeight",
+          "line": 139
+        },
+        {
+          "name": "__survivalAccumulator",
+          "line": 143
+        },
+        {
+          "name": "__vaultBalanceOf",
+          "line": 152
+        },
+        {
+          "name": "__vaultTotalSupply",
+          "line": 156
+        },
+        {
+          "name": "__vaultPerformanceFee",
+          "line": 160
+        },
+        {
+          "name": "__vaultConvertToAssets",
+          "line": 164
+        },
+        {
+          "name": "__vaultConvertToShares",
+          "line": 168
+        },
+        {
+          "name": "__transmuterTotalLocked",
+          "line": 172
+        },
+        {
+          "name": "__debtTokenTotalSupply",
+          "line": 176
+        },
+        {
+          "name": "__debtTokenBalanceOf",
+          "line": 180
+        },
+        {
+          "name": "__envVaultSetTotalAssets",
+          "line": 192
+        },
+        {
+          "name": "__envVaultSetPerformanceFee",
+          "line": 197
+        },
+        {
+          "name": "__envTransmuterStakeLocked",
+          "line": 201
+        },
+        {
+          "name": "__envTransmuterReduceSynthetics",
+          "line": 205
+        },
+        {
+          "name": "__envTransmuterSetQueryGraph",
+          "line": 209
+        },
+        {
+          "name": "__deposit",
+          "line": 223
+        },
+        {
+          "name": "__mint",
+          "line": 229
+        },
+        {
+          "name": "__withdraw",
+          "line": 234
+        },
+        {
+          "name": "__repay",
+          "line": 239
+        },
+        {
+          "name": "__burn",
+          "line": 245
+        },
+        {
+          "name": "__selfLiquidate",
+          "line": 250
+        },
+        {
+          "name": "wrappers",
+          "line": 255
+        },
+        {
+          "name": "calcLiquidation_grossCollateralToSeize",
+          "line": 258
+        },
+        {
+          "name": "calcLiquidation_debtToBurn",
+          "line": 269
+        },
+        {
+          "name": "calcLiquidation_fee",
+          "line": 280
+        },
+        {
+          "name": "calcLiquidation_outsourcedFee",
+          "line": 291
+        },
+        {
+          "name": "__setUnderlyingConversionFactor",
+          "line": 303
+        }
+      ]
+    },
+    {
+      "file": "certora/harnesses/MYTMocks.sol",
+      "functions": [
+        {
+          "name": "transfer",
+          "line": 22
+        },
+        {
+          "name": "transferFrom",
+          "line": 28
+        },
+        {
+          "name": "approve",
+          "line": 34
+        },
+        {
+          "name": "__mint",
+          "line": 39
+        },
+        {
+          "name": "__burn",
+          "line": 44
+        },
+        {
+          "name": "allocate",
+          "line": 77
+        },
+        {
+          "name": "deallocate",
+          "line": 91
+        },
+        {
+          "name": "realAssets",
+          "line": 108
+        },
+        {
+          "name": "__injectYield",
+          "line": 118
+        }
+      ]
+    },
+    {
+      "file": "certora/harnesses/MYTSceneHarness.sol",
+      "functions": [
+        {
+          "name": "_submitAccept",
+          "line": 83
+        },
+        {
+          "name": "__deposit",
+          "line": 94
+        },
+        {
+          "name": "__withdraw",
+          "line": 101
+        },
+        {
+          "name": "__allocate",
+          "line": 106
+        },
+        {
+          "name": "__deallocate",
+          "line": 112
+        },
+        {
+          "name": "__injectYield",
+          "line": 119
+        },
+        {
+          "name": "__setPerformanceFee",
+          "line": 131
+        },
+        {
+          "name": "__setPerformanceFeeRecipient",
+          "line": 135
+        },
+        {
+          "name": "__setManagementFee",
+          "line": 139
+        },
+        {
+          "name": "__setManagementFeeRecipient",
+          "line": 143
+        },
+        {
+          "name": "__setMaxRate",
+          "line": 147
+        },
+        {
+          "name": "__setForceDeallocatePenalty",
+          "line": 151
+        },
+        {
+          "name": "__increaseAbsoluteCap",
+          "line": 155
+        },
+        {
+          "name": "__decreaseAbsoluteCap",
+          "line": 161
+        },
+        {
+          "name": "__increaseRelativeCap",
+          "line": 167
+        },
+        {
+          "name": "__decreaseRelativeCap",
+          "line": 173
+        },
+        {
+          "name": "__adapterId",
+          "line": 183
+        },
+        {
+          "name": "__idleBalance",
+          "line": 187
+        },
+        {
+          "name": "__strategyRealAssets",
+          "line": 191
+        },
+        {
+          "name": "__strategyBalance",
+          "line": 195
+        },
+        {
+          "name": "__totalRealAssets",
+          "line": 200
+        },
+        {
+          "name": "__MAX_PERFORMANCE_FEE",
+          "line": 204
+        },
+        {
+          "name": "__MAX_MANAGEMENT_FEE",
+          "line": 208
+        },
+        {
+          "name": "__MAX_MAX_RATE",
+          "line": 212
+        },
+        {
+          "name": "__MAX_FORCE_DEALLOCATE_PENALTY",
+          "line": 216
+        }
+      ]
+    },
+    {
+      "file": "certora/harnesses/TransmuterMocks.sol",
+      "functions": [
+        {
+          "name": "__mint",
+          "line": 13
+        },
+        {
+          "name": "totalSyntheticsIssued",
+          "line": 51
+        },
+        {
+          "name": "getTotalLockedUnderlyingValue",
+          "line": 52
+        },
+        {
+          "name": "convertYieldTokensToUnderlying",
+          "line": 53
+        },
+        {
+          "name": "convertYieldTokensToDebt",
+          "line": 54
+        },
+        {
+          "name": "convertDebtTokensToYield",
+          "line": 55
+        },
+        {
+          "name": "__setTotalLockedUnderlyingValue",
+          "line": 58
+        },
+        {
+          "name": "redeem",
+          "line": 61
+        },
+        {
+          "name": "reduceSyntheticsIssued",
+          "line": 66
+        },
+        {
+          "name": "setTransmuterTokenBalance",
+          "line": 70
+        }
+      ]
+    },
+    {
+      "file": "certora/harnesses/TransmuterSceneHarness.sol",
+      "functions": [
+        {
+          "name": "__createRedemption",
+          "line": 67
+        },
+        {
+          "name": "__claimRedemption",
+          "line": 73
+        },
+        {
+          "name": "__pokeMatured",
+          "line": 78
+        },
+        {
+          "name": "__setDepositCap",
+          "line": 87
+        },
+        {
+          "name": "__setTransmutationFee",
+          "line": 91
+        },
+        {
+          "name": "__setExitFee",
+          "line": 95
+        },
+        {
+          "name": "__setTransmutationTime",
+          "line": 99
+        },
+        {
+          "name": "__setTotalLockedUnderlyingValue",
+          "line": 107
+        },
+        {
+          "name": "__totalSyntheticsIssued",
+          "line": 115
+        },
+        {
+          "name": "__syntheticBalance",
+          "line": 119
+        },
+        {
+          "name": "__BPS",
+          "line": 123
+        }
+      ]
+    },
+    {
+      "file": "certora/harnesses/TypedAnchors.sol",
+      "functions": [
+        {
+          "name": "approve",
+          "line": 53
+        },
+        {
+          "name": "transfer",
+          "line": 58
+        },
+        {
+          "name": "transferFrom",
+          "line": 66
+        },
+        {
+          "name": "totalAssets",
+          "line": 76
+        },
+        {
+          "name": "convertToAssets",
+          "line": 80
+        },
+        {
+          "name": "convertToShares",
+          "line": 85
+        },
+        {
+          "name": "takePerformanceFee",
+          "line": 98
+        },
+        {
+          "name": "__mintShares",
+          "line": 112
+        },
+        {
+          "name": "__burnShares",
+          "line": 117
+        },
+        {
+          "name": "__setTotalAssets",
+          "line": 122
+        },
+        {
+          "name": "__setPerformanceFee",
+          "line": 126
+        },
+        {
+          "name": "__setPerformanceFeeRecipient",
+          "line": 131
+        },
+        {
+          "name": "approve",
+          "line": 149
+        },
+        {
+          "name": "transfer",
+          "line": 154
+        },
+        {
+          "name": "transferFrom",
+          "line": 160
+        },
+        {
+          "name": "mint",
+          "line": 166
+        },
+        {
+          "name": "burn",
+          "line": 171
+        },
+        {
+          "name": "burnFrom",
+          "line": 177
+        },
+        {
+          "name": "totalLocked",
+          "line": 202
+        },
+        {
+          "name": "queryGraph",
+          "line": 206
+        },
+        {
+          "name": "callReduceSyntheticsIssued",
+          "line": 219
+        },
+        {
+          "name": "__setAlchemist",
+          "line": 228
+        },
+        {
+          "name": "__stakeLocked",
+          "line": 233
+        },
+        {
+          "name": "__setTotalLocked",
+          "line": 241
+        },
+        {
+          "name": "__setQueryGraphResult",
+          "line": 249
+        }
+      ]
+    }
+  ],
+  "compatibility": {
+    "storage_layout": [
+      {
+        "label": "_totalRedeemedDebt",
+        "harness_slot": 26,
+        "current_slot": 26,
+        "matches": true
+      },
+      {
+        "label": "_totalRedeemedSharesOut",
+        "harness_slot": 27,
+        "current_slot": 27,
+        "matches": true
+      },
+      {
+        "label": "_earmarkWeight",
+        "harness_slot": 28,
+        "current_slot": 28,
+        "matches": true
+      },
+      {
+        "label": "_redemptionWeight",
+        "harness_slot": 29,
+        "current_slot": 29,
+        "matches": true
+      },
+      {
+        "label": "_survivalAccumulator",
+        "harness_slot": 30,
+        "current_slot": 30,
+        "matches": true
+      },
+      {
+        "label": "_mytSharesDeposited",
+        "harness_slot": 31,
+        "current_slot": 31,
+        "matches": true
+      },
+      {
+        "label": "_pendingCoverShares",
+        "harness_slot": 32,
+        "current_slot": 32,
+        "matches": true
+      },
+      {
+        "label": "_accounts",
+        "harness_slot": 33,
+        "current_slot": 33,
+        "matches": true
+      },
+      {
+        "label": "_earmarkEpochStartRedemptionWeight",
+        "harness_slot": 34,
+        "current_slot": 34,
+        "matches": true
+      }
+    ],
+    "account_offsets": [
+      {
+        "label": "collateralBalance",
+        "harness_offset": 0,
+        "current_offset": 0,
+        "matches": true
+      },
+      {
+        "label": "debt",
+        "harness_offset": 1,
+        "current_offset": 1,
+        "matches": true
+      },
+      {
+        "label": "earmarked",
+        "harness_offset": 2,
+        "current_offset": 2,
+        "matches": true
+      }
+    ],
+    "unchanged_paths_by_git_diff": [
+      "src/AlchemistV3Position.sol",
+      "src/Transmuter.sol",
+      "src/interfaces/ITransmuter.sol",
+      "lib/vault-v2"
+    ],
+    "changed_path": "src/AlchemistV3.sol (root owns semantic diff crosswalk)"
+  },
+  "issues": [
+    {
+      "id": "CERT-H1",
+      "source": "certora/harnesses/MYTSceneHarness.sol:51",
+      "kind": "Existing harness calldata defect",
+      "finding": "setIsAllocator(address,bool) is encoded with address(this) only. The bool is missing in both certora-branch and current interface.",
+      "impact": "The encoded accept call cannot satisfy the real ABI decoder. This harness needs repair before concrete setup/reuse.",
+      "evidence": "Read script plus git show origin/certora:lib/vault-v2/src/interfaces/IVaultV2.sol:69. No runtime execution claimed."
+    },
+    {
+      "id": "CERT-H2",
+      "source": "certora/harnesses/AlchemistV3SceneHarness.sol:245-246",
+      "kind": "Existing harness wrapper defect",
+      "finding": "__burn(tokenId,amount) calls this.burn(tokenId,amount), but burn takes (amount,recipientId).",
+      "impact": "Amount and target position ID are reversed. Conservation paths can exercise the wrong operation or revert.",
+      "evidence": "Both branch and current src/AlchemistV3.sol:512 have burn(uint256 amount,uint256 recipientId)."
+    },
+    {
+      "id": "CERT-H3",
+      "source": "certora/harnesses/MYTSceneHarness.sol:38-75",
+      "kind": "EVM fixture portability risk",
+      "finding": "Constructor calls this.setCurator, this.setIsSentinel, this.submit, and other external self methods before runtime code exists.",
+      "impact": "Move role/configuration setup to a post-deployment function for Foundry/Halmos. Test concrete setup reachability before trusting success-path properties.",
+      "evidence": "Source-level EVM inference; no deployment run performed."
+    },
+    {
+      "id": "CERT-H4",
+      "source": "certora/harnesses/TypedAnchors.sol:42-47,98-128",
+      "kind": "Model differs from production vault",
+      "finding": "VaultAnchor expresses performanceFee in BPS and caps at 500; real VaultV2 fees are WAD. Anchor share conversions omit virtual assets/shares and use checked 256-bit products.",
+      "impact": "Reuse for explicitly abstract accounting only; do not treat its fee or ERC4626 behavior as production-vault verification."
+    }
+  ],
+  "models": [
+    {
+      "name": "AlchemistV3SceneHarness",
+      "sources": [
+        "certora/harnesses/AlchemistV3SceneHarness.sol:34-88,192-251",
+        "certora/harnesses/TypedAnchors.sol:17-252"
+      ],
+      "real_logic": [
+        "AlchemistV3 inheritance",
+        "AlchemistV3Position NFT"
+      ],
+      "assumptions": [
+        "Initializer bypassed using direct state writes and hardcoded fixed configuration",
+        "Conversion factor fixed to 1 initially; exposed unrestricted setter can set arbitrary factor",
+        "No tokenAdapter or fee-vault configuration",
+        "All deposit/mint/withdraw/repay/self-liquidate wrappers use the harness as caller and owner",
+        "Vault token transfers ignore allowance; debt token mint/burn and transferFrom omit production authorization",
+        "Collateral anchor can mint shares without assets and set assets independently",
+        "Transmuter totalLocked<=synthetics is enforced inside helper rather than established from real transmuter behavior",
+        "queryGraph result is arbitrary and ignores query interval",
+        "Performance fee path exists on anchor but is not exposed as an environment action"
+      ],
+      "reuse": "Reuse pure liquidation passthroughs and raw readers after the verified slot check. Port wrappers with burn-order repair and explicit abstraction labels."
+    },
+    {
+      "name": "MYTSceneHarness",
+      "sources": [
+        "certora/harnesses/MYTSceneHarness.sol:38-175",
+        "certora/harnesses/MYTMocks.sol:8-127"
+      ],
+      "real_logic": [
+        "VaultV2 inheritance"
+      ],
+      "assumptions": [
+        "Exactly two strategies; any nonzero which selects strategy1",
+        "Harness holds owner/curator/sentinel/allocator roles",
+        "All timelocks zero; cannot prove delay resistance",
+        "Mock asset transferFrom ignores allowance",
+        "Mock adapters return exactly one strategy ID and report value consistent with minted/burned underlying",
+        "Adapters have max uint128 absolute cap and WAD relative cap initially",
+        "Seeded 1e18 initial deposit means unseeded first-depositor behavior excluded"
+      ],
+      "reuse": "Reuse mock strategy accounting model and wrapper concepts. Repair calldata and move constructor self-calls to post-deployment setup. Real allocator/classifier/curator contracts remain uncovered."
+    },
+    {
+      "name": "TransmuterSceneHarness",
+      "sources": [
+        "certora/harnesses/TransmuterSceneHarness.sol:26-107",
+        "certora/harnesses/TransmuterMocks.sol:37-70"
+      ],
+      "real_logic": [
+        "Transmuter inheritance",
+        "StakingGraph implementation",
+        "OZ ERC20 mocks"
+      ],
+      "assumptions": [
+        "All conversion functions fixed 1:1",
+        "Synthetic and locked underlying initially 1e30",
+        "Mock redemption creates arbitrary MYT on demand; no real Alchemist liquidity/cover constraint",
+        "Synthetic issued reduction saturates to zero",
+        "setTransmuterTokenBalance is a no-op",
+        "Harness owns redemption positions; no cross-user authorization model",
+        "Only totalLockedUnderlying can change externally through dedicated wrapper"
+      ],
+      "reuse": "Reuse existing Transmuter obligations on current unchanged source, but run them again and preserve model assumptions. Add real Alchemist/Transmuter integration and ownership tests for missing behavior."
+    },
+    {
+      "name": "AlchemistV3Harness",
+      "sources": [
+        "certora/harnesses/AlchemistV3Harness.sol:21-71"
+      ],
+      "real_logic": [
+        "Pure calculateLiquidation passthroughs"
+      ],
+      "assumptions": [
+        "Direct setters for admin and conversion factor",
+        "Not selected by current runner (runner uses SceneHarness)"
+      ],
+      "reuse": "Pure wrapper concepts can be reused; ensure no invariant treats unrestricted state setters as protocol actions."
+    }
+  ],
+  "completed_run_evidence": {
+    "tracked_artifacts_found": false,
+    "tracked_files": "7 harness/mock files, 4 spec files, 1 runner. No result JSON, reports, job links, or raw logs.",
+    "local_artifacts_found": false,
+    "local_paths_checked": [
+      ".certora_internal",
+      ".certora_sources",
+      "last_certora_run",
+      "build_cache",
+      "/tmp/certora-build"
+    ],
+    "gitignore": "origin/certora ignores prover output directories. This explains absence but does not prove whether earlier runs happened.",
+    "commit_messages": [
+      "dd88642 alchemist basic certora proofs",
+      "520fccb towards e2e certora...",
+      "46c54a8 module-specific certora specs"
+    ],
+    "conclusion": "Existing proof work is reusable specification/harness material. No inspected evidence supports completed or passing Certora runs."
+  },
+  "recommended_crosswalk": [
+    "Mark overlapping existing properties REUSE/PORT with original spec name and source lines. Do not silently duplicate or claim prior PASS.",
+    "Separate NEW obligations for all governance wrappers, AlToken inherited token/flash/permit behavior, fee vaults, real strategy integration, NFT permissions, callback safety and current changed accounting.",
+    "Keep existing scene-model obligations separate from real-contract integration obligations. All reused rules require execution on the current source.",
+    "Record constructor/readiness positive controls and non-vacuity checks before executing translated symbolic properties."
+  ]
+}

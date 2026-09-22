@@ -1,0 +1,33 @@
+{
+  "phase": "Phase 3 snapshot: tests generated and compiled; fixture triage pending",
+  "phase2_confirmed": true,
+  "current_source_commit": "4891f80565911f88eed9e9410e5109439d988e5b",
+  "certora_source_commit": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+  "property_groups": 377,
+  "scope_files": 43,
+  "next_action": "After publishing the snapshot, classify the remaining fixture failure before the formal execution phase.",
+  "phase2_confirmation": "User: ok, run phase 3",
+  "work_status": "snapshot",
+  "goal_tool_last_observed_status": "blocked",
+  "goal_status_note": "User approved Phase 3; work resumed in the turn. The goal tool still reports the earlier blocked status and provides no resume operation.",
+  "halmos_runs": 0,
+  "full_fuzz_campaigns": 0,
+  "forge_fixture_smoke": "Initial run: 1287 success, 8 failure. See evidence JSON and later focused rechecks. No formal proof results.",
+  "halmos_symbolic_tests_executed": 0,
+  "full_fuzz_campaigns_executed": 0,
+  "compiled_symbolic_test_instances": 820,
+  "compiled_fuzz_test_instances": 554,
+  "property_groups_with_tests": 377,
+  "final_forced_build": "PASS",
+  "final_fixture_smoke": {
+    "passed": 1352,
+    "failed": 1,
+    "fuzz_runs_per_test": 1,
+    "seed": "0xd105a7",
+    "failure": "DinosatTransmuterStateSymbolicTest.test_fuzz_claimCases",
+    "status": "UNTRIAGED",
+    "excluded_contracts": "Candidate|Counterexample",
+    "excluded_tests": "acceptedSequencePreservesRatioOrdering"
+  },
+  "user_direction": "Push current work to origin/formal-verification-ai-run."
+}

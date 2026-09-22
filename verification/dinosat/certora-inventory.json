@@ -1,0 +1,173 @@
+[
+  {
+    "file": "certora/specs/alchemist.spec",
+    "obligations": [
+      {
+        "kind": "invariant",
+        "name": "mytSharesDepositedLeBalance"
+      },
+      {
+        "kind": "invariant",
+        "name": "storedCollateralLeGlobalShares"
+      },
+      {
+        "kind": "invariant",
+        "name": "pendingCoverBoundedByTransmuterBalance"
+      },
+      {
+        "kind": "invariant",
+        "name": "syntheticsLeDebtTokenSupply"
+      },
+      {
+        "kind": "invariant",
+        "name": "syntheticsGeqLocked"
+      },
+      {
+        "kind": "invariant",
+        "name": "storedDebtLeTotalDebt"
+      },
+      {
+        "kind": "invariant",
+        "name": "cumulativeEarmarkedLeTotalDebt"
+      },
+      {
+        "kind": "invariant",
+        "name": "storedEarmarkedLeStoredDebt"
+      },
+      {
+        "kind": "invariant",
+        "name": "earmarkWeightPositive"
+      },
+      {
+        "kind": "invariant",
+        "name": "redemptionWeightPositive"
+      },
+      {
+        "kind": "invariant",
+        "name": "protocolFeeLeBps"
+      },
+      {
+        "kind": "invariant",
+        "name": "liquidatorFeeLeBps"
+      },
+      {
+        "kind": "invariant",
+        "name": "repaymentFeeLeBps"
+      },
+      {
+        "kind": "rule",
+        "name": "cvSoundMint"
+      },
+      {
+        "kind": "rule",
+        "name": "cvSoundWithdraw"
+      },
+      {
+        "kind": "rule",
+        "name": "debtToBurn_le_debt"
+      },
+      {
+        "kind": "rule",
+        "name": "grossCollateralToSeize_le_collateral"
+      },
+      {
+        "kind": "rule",
+        "name": "surplus_branch_decomposition"
+      },
+      {
+        "kind": "rule",
+        "name": "roundTrip_underlying_exact"
+      },
+      {
+        "kind": "rule",
+        "name": "roundTrip_debt_nonExpanding"
+      }
+    ]
+  },
+  {
+    "file": "certora/specs/global.spec",
+    "obligations": []
+  },
+  {
+    "file": "certora/specs/myt.spec",
+    "obligations": [
+      {
+        "kind": "invariant",
+        "name": "performanceFeeBounded"
+      },
+      {
+        "kind": "invariant",
+        "name": "managementFeeBounded"
+      },
+      {
+        "kind": "invariant",
+        "name": "performanceFeeRecipientSet"
+      },
+      {
+        "kind": "invariant",
+        "name": "managementFeeRecipientSet"
+      },
+      {
+        "kind": "invariant",
+        "name": "maxRateBounded"
+      },
+      {
+        "kind": "invariant",
+        "name": "forceDeallocPenaltyBounded0"
+      },
+      {
+        "kind": "invariant",
+        "name": "forceDeallocPenaltyBounded1"
+      },
+      {
+        "kind": "invariant",
+        "name": "relativeCapBounded0"
+      },
+      {
+        "kind": "invariant",
+        "name": "relativeCapBounded1"
+      },
+      {
+        "kind": "rule",
+        "name": "sharePricePositiveWhenSupplyPositive"
+      },
+      {
+        "kind": "rule",
+        "name": "convertRoundTripNonExpanding"
+      },
+      {
+        "kind": "rule",
+        "name": "totalAssetsBoundedByReal"
+      }
+    ]
+  },
+  {
+    "file": "certora/specs/transmuter.spec",
+    "obligations": [
+      {
+        "kind": "invariant",
+        "name": "transmutationFeeLeBps"
+      },
+      {
+        "kind": "invariant",
+        "name": "exitFeeLeBps"
+      },
+      {
+        "kind": "invariant",
+        "name": "timeToTransmutePositive"
+      },
+      {
+        "kind": "invariant",
+        "name": "totalLockedLeSyntheticsIssued"
+      },
+      {
+        "kind": "invariant",
+        "name": "activeLockedLeTotalLocked"
+      },
+      {
+        "kind": "invariant",
+        "name": "syntheticBalanceCoversLocked"
+      }
+    ]
+  }
+]

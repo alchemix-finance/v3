@@ -1,0 +1,3172 @@
+{
+  "note": "Functions link to property-group test references. This is not runtime branch or statement coverage. Inherited functions and overloads can have multiple inventory rows.",
+  "functions": [
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "initialize",
+      "signature": "function initialize(AlchemistInitializationParams calldata params) external initializer",
+      "properties": [
+        "AV3-INIT"
+      ],
+      "groups_with_tests": [
+        "AV3-INIT"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setAlchemistPositionNFT",
+      "signature": "function setAlchemistPositionNFT(address nft) external onlyAdmin",
+      "properties": [
+        "AV3-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AV3-ADMIN"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setAlchemistFeeVault",
+      "signature": "function setAlchemistFeeVault(address value) external onlyAdmin",
+      "properties": [
+        "AV3-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AV3-ADMIN"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setPendingAdmin",
+      "signature": "function setPendingAdmin(address value) external onlyAdmin",
+      "properties": [
+        "AV3-TRANSFER"
+      ],
+      "groups_with_tests": [
+        "AV3-TRANSFER"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "acceptAdmin",
+      "signature": "function acceptAdmin() external",
+      "properties": [
+        "AV3-TRANSFER"
+      ],
+      "groups_with_tests": [
+        "AV3-TRANSFER"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setDepositCap",
+      "signature": "function setDepositCap(uint256 value) external onlyAdmin",
+      "properties": [
+        "AV3-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AV3-ADMIN"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setProtocolFeeReceiver",
+      "signature": "function setProtocolFeeReceiver(address value) external onlyAdmin",
+      "properties": [
+        "AV3-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AV3-ADMIN"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setProtocolFee",
+      "signature": "function setProtocolFee(uint256 fee) external onlyAdmin",
+      "properties": [
+        "AV3-FEES"
+      ],
+      "groups_with_tests": [
+        "AV3-FEES"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setLiquidatorFee",
+      "signature": "function setLiquidatorFee(uint256 fee) external onlyAdmin",
+      "properties": [
+        "AV3-FEES"
+      ],
+      "groups_with_tests": [
+        "AV3-FEES"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setRepaymentFee",
+      "signature": "function setRepaymentFee(uint256 fee) external onlyAdmin",
+      "properties": [
+        "AV3-FEES"
+      ],
+      "groups_with_tests": [
+        "AV3-FEES"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setTokenAdapter",
+      "signature": "function setTokenAdapter(address value) external onlyAdmin",
+      "properties": [
+        "AV3-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AV3-ADMIN"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setGuardian",
+      "signature": "function setGuardian(address guardian, bool isActive) external onlyAdmin",
+      "properties": [
+        "AV3-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AV3-ADMIN"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setMinimumCollateralization",
+      "signature": "function setMinimumCollateralization(uint256 value) external onlyAdmin",
+      "properties": [
+        "AV3-RATIOS"
+      ],
+      "groups_with_tests": [
+        "AV3-RATIOS"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setGlobalMinimumCollateralization",
+      "signature": "function setGlobalMinimumCollateralization(uint256 value) external onlyAdmin",
+      "properties": [
+        "AV3-RATIOS"
+      ],
+      "groups_with_tests": [
+        "AV3-RATIOS"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setCollateralizationLowerBound",
+      "signature": "function setCollateralizationLowerBound(uint256 value) external onlyAdmin",
+      "properties": [
+        "AV3-RATIOS"
+      ],
+      "groups_with_tests": [
+        "AV3-RATIOS"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setLiquidationTargetCollateralization",
+      "signature": "function setLiquidationTargetCollateralization(uint256 value) external onlyAdmin",
+      "properties": [
+        "AV3-RATIOS"
+      ],
+      "groups_with_tests": [
+        "AV3-RATIOS"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "pauseDeposits",
+      "signature": "function pauseDeposits(bool isPaused) external onlyAdminOrGuardian",
+      "properties": [
+        "AV3-PAUSE"
+      ],
+      "groups_with_tests": [
+        "AV3-PAUSE"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "pauseLoans",
+      "signature": "function pauseLoans(bool isPaused) external onlyAdminOrGuardian",
+      "properties": [
+        "AV3-PAUSE"
+      ],
+      "groups_with_tests": [
+        "AV3-PAUSE"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "getCDP",
+      "signature": "function getCDP(uint256 tokenId) external view returns (uint256, uint256, uint256)",
+      "properties": [
+        "AV3-PREVIEW"
+      ],
+      "groups_with_tests": [
+        "AV3-PREVIEW"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "getTotalDeposited",
+      "signature": "function getTotalDeposited() external view returns (uint256)",
+      "properties": [
+        "AV3-DEPOSITED"
+      ],
+      "groups_with_tests": [
+        "AV3-DEPOSITED"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "getMaxBorrowable",
+      "signature": "function getMaxBorrowable(uint256 tokenId) external view returns (uint256)",
+      "properties": [
+        "AV3-CAPACITY"
+      ],
+      "groups_with_tests": [
+        "AV3-CAPACITY"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "getMaxWithdrawable",
+      "signature": "function getMaxWithdrawable(uint256 tokenId) external view returns (uint256)",
+      "properties": [
+        "AV3-CAPACITY"
+      ],
+      "groups_with_tests": [
+        "AV3-CAPACITY"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "mintAllowance",
+      "signature": "function mintAllowance(uint256 ownerTokenId, address spender) external view returns (uint256)",
+      "properties": [
+        "AV3-ALLOWANCE"
+      ],
+      "groups_with_tests": [
+        "AV3-ALLOWANCE"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "getTotalUnderlyingValue",
+      "signature": "function getTotalUnderlyingValue() external view returns (uint256)",
+      "properties": [
+        "AV3-VALUE"
+      ],
+      "groups_with_tests": [
+        "AV3-VALUE"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "getTotalLockedUnderlyingValue",
+      "signature": "function getTotalLockedUnderlyingValue() external view returns (uint256)",
+      "properties": [
+        "AV3-VALUE"
+      ],
+      "groups_with_tests": [
+        "AV3-VALUE"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "totalValue",
+      "signature": "function totalValue(uint256 tokenId) public view returns (uint256)",
+      "properties": [
+        "AV3-PREVIEW"
+      ],
+      "groups_with_tests": [
+        "AV3-PREVIEW"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "getUnrealizedCumulativeEarmarked",
+      "signature": "function getUnrealizedCumulativeEarmarked() external view returns (uint256)",
+      "properties": [
+        "AV3-PREVIEW"
+      ],
+      "groups_with_tests": [
+        "AV3-PREVIEW"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "deposit",
+      "signature": "function deposit(uint256 amount, address recipient, uint256 tokenId) external returns (uint256, uint256)",
+      "properties": [
+        "AV3-DEPOSIT"
+      ],
+      "groups_with_tests": [
+        "AV3-DEPOSIT"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "withdraw",
+      "signature": "function withdraw(uint256 amount, address recipient, uint256 tokenId) external returns (uint256)",
+      "properties": [
+        "AV3-WITHDRAW"
+      ],
+      "groups_with_tests": [
+        "AV3-WITHDRAW"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "mint",
+      "signature": "function mint(uint256 tokenId, uint256 amount, address recipient) external",
+      "properties": [
+        "AV3-MINT"
+      ],
+      "groups_with_tests": [
+        "AV3-MINT"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "mintFrom",
+      "signature": "function mintFrom(uint256 tokenId, uint256 amount, address recipient) external",
+      "properties": [
+        "AV3-MINT"
+      ],
+      "groups_with_tests": [
+        "AV3-MINT"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "burn",
+      "signature": "function burn(uint256 amount, uint256 recipientId) external returns (uint256)",
+      "properties": [
+        "AV3-BURN"
+      ],
+      "groups_with_tests": [
+        "AV3-BURN"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "repay",
+      "signature": "function repay(uint256 amount, uint256 recipientTokenId) external returns (uint256)",
+      "properties": [
+        "AV3-REPAY"
+      ],
+      "groups_with_tests": [
+        "AV3-REPAY"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "liquidate",
+      "signature": "function liquidate(uint256 accountId) external override returns (uint256 yieldAmount, uint256 feeInYield, uint256 feeInUnderlying)",
+      "properties": [
+        "AV3-LIQUIDATE"
+      ],
+      "groups_with_tests": [
+        "AV3-LIQUIDATE"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "batchLiquidate",
+      "signature": "function batchLiquidate(uint256[] calldata accountIds) external returns (uint256 totalAmountLiquidated, uint256 totalFeesInYield, uint256 totalFeesInUnderlying)",
+      "properties": [
+        "AV3-BATCH"
+      ],
+      "groups_with_tests": [
+        "AV3-BATCH"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "redeem",
+      "signature": "function redeem(uint256 amount) external onlyTransmuter returns (uint256 sharesSent)",
+      "properties": [
+        "AV3-REDEEM"
+      ],
+      "groups_with_tests": [
+        "AV3-REDEEM"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "selfLiquidate",
+      "signature": "function selfLiquidate(uint256 accountId, address recipient) external returns (uint256 amountLiquidated)",
+      "properties": [
+        "AV3-SELF"
+      ],
+      "groups_with_tests": [
+        "AV3-SELF"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "calculateLiquidation",
+      "signature": "function calculateLiquidation( uint256 collateral, uint256 debt, uint256 targetCollateralization, uint256 alchemistCurrentCollateralization, uint256 alchemistMinimumCollateralization, uint256 feeBps ) public pure returns (uint256 grossCollateralToSeize, uint256 debtToBurn, uint256 fee, uint256 outsourcedFee)",
+      "properties": [
+        "AV3-LIQMATH"
+      ],
+      "groups_with_tests": [
+        "AV3-LIQMATH"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "reduceSyntheticsIssued",
+      "signature": "function reduceSyntheticsIssued(uint256 amount) external onlyTransmuter",
+      "properties": [
+        "AV3-SUPPLY"
+      ],
+      "groups_with_tests": [
+        "AV3-SUPPLY"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "setTransmuterTokenBalance",
+      "signature": "function setTransmuterTokenBalance(uint256 amount) external onlyTransmuter",
+      "properties": [
+        "AV3-COVER"
+      ],
+      "groups_with_tests": [
+        "AV3-COVER"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "poke",
+      "signature": "function poke(uint256 tokenId) external",
+      "properties": [
+        "AV3-PREVIEW"
+      ],
+      "groups_with_tests": [
+        "AV3-PREVIEW"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "approveMint",
+      "signature": "function approveMint(uint256 tokenId, address spender, uint256 amount) external",
+      "properties": [
+        "AV3-ALLOWANCE"
+      ],
+      "groups_with_tests": [
+        "AV3-ALLOWANCE"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "resetMintAllowances",
+      "signature": "function resetMintAllowances(uint256 tokenId) external",
+      "properties": [
+        "AV3-ALLOWANCE"
+      ],
+      "groups_with_tests": [
+        "AV3-ALLOWANCE"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "convertYieldTokensToDebt",
+      "signature": "function convertYieldTokensToDebt(uint256 amount) public view returns (uint256)",
+      "properties": [
+        "AV3-CONVERT"
+      ],
+      "groups_with_tests": [
+        "AV3-CONVERT"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "convertDebtTokensToYield",
+      "signature": "function convertDebtTokensToYield(uint256 amount) public view returns (uint256)",
+      "properties": [
+        "AV3-CONVERT"
+      ],
+      "groups_with_tests": [
+        "AV3-CONVERT"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "convertYieldTokensToUnderlying",
+      "signature": "function convertYieldTokensToUnderlying(uint256 amount) public view returns (uint256)",
+      "properties": [
+        "AV3-CONVERT"
+      ],
+      "groups_with_tests": [
+        "AV3-CONVERT"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "convertUnderlyingTokensToYield",
+      "signature": "function convertUnderlyingTokensToYield(uint256 amount) public view returns (uint256)",
+      "properties": [
+        "AV3-CONVERT"
+      ],
+      "groups_with_tests": [
+        "AV3-CONVERT"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "normalizeUnderlyingTokensToDebt",
+      "signature": "function normalizeUnderlyingTokensToDebt(uint256 amount) public view returns (uint256)",
+      "properties": [
+        "AV3-NORMALIZE"
+      ],
+      "groups_with_tests": [
+        "AV3-NORMALIZE"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3.sol",
+      "name": "normalizeDebtTokensToUnderlying",
+      "signature": "function normalizeDebtTokensToUnderlying(uint256 amount) public view returns (uint256)",
+      "properties": [
+        "AV3-NORMALIZE"
+      ],
+      "groups_with_tests": [
+        "AV3-NORMALIZE"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "depositUnderlying",
+      "signature": "function depositUnderlying( uint256 tokenId, uint256 amount, uint256 borrowAmount, uint256 minSharesOut, uint256 deadline ) external nonReentrant returns (uint256)",
+      "properties": [
+        "ROUTER-DEPOSIT"
+      ],
+      "groups_with_tests": [
+        "ROUTER-DEPOSIT"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "depositETH",
+      "signature": "function depositETH( uint256 tokenId, uint256 borrowAmount, uint256 minSharesOut, uint256 deadline ) external payable nonReentrant returns (uint256)",
+      "properties": [
+        "ROUTER-DEPOSIT"
+      ],
+      "groups_with_tests": [
+        "ROUTER-DEPOSIT"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "depositMYT",
+      "signature": "function depositMYT( uint256 tokenId, uint256 shares, uint256 borrowAmount, uint256 deadline ) external nonReentrant returns (uint256)",
+      "properties": [
+        "ROUTER-DEPOSIT"
+      ],
+      "groups_with_tests": [
+        "ROUTER-DEPOSIT"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "depositETHToVaultOnly",
+      "signature": "function depositETHToVaultOnly( uint256 minSharesOut, uint256 deadline ) external payable nonReentrant returns (uint256 shares)",
+      "properties": [
+        "ROUTER-DEPOSIT"
+      ],
+      "groups_with_tests": [
+        "ROUTER-DEPOSIT"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "repayUnderlying",
+      "signature": "function repayUnderlying( uint256 recipientTokenId, uint256 amount, uint256 minSharesOut, uint256 deadline ) external nonReentrant",
+      "properties": [
+        "ROUTER-REPAY"
+      ],
+      "groups_with_tests": [
+        "ROUTER-REPAY"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "repayETH",
+      "signature": "function repayETH( uint256 recipientTokenId, uint256 minSharesOut, uint256 deadline ) external payable nonReentrant",
+      "properties": [
+        "ROUTER-REPAY"
+      ],
+      "groups_with_tests": [
+        "ROUTER-REPAY"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "withdrawUnderlying",
+      "signature": "function withdrawUnderlying( uint256 tokenId, uint256 shares, uint256 minAmountOut, uint256 deadline ) external nonReentrant",
+      "properties": [
+        "ROUTER-WITHDRAW"
+      ],
+      "groups_with_tests": [
+        "ROUTER-WITHDRAW"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "withdrawETH",
+      "signature": "function withdrawETH( uint256 tokenId, uint256 shares, uint256 minAmountOut, uint256 deadline ) external nonReentrant",
+      "properties": [
+        "ROUTER-WITHDRAW"
+      ],
+      "groups_with_tests": [
+        "ROUTER-WITHDRAW"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "selfLiquidateToUnderlying",
+      "signature": "function selfLiquidateToUnderlying( uint256 tokenId, uint256 minAmountOut, uint256 deadline ) external nonReentrant",
+      "properties": [
+        "ROUTER-CLOSE"
+      ],
+      "groups_with_tests": [
+        "ROUTER-CLOSE"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "selfLiquidateToETH",
+      "signature": "function selfLiquidateToETH( uint256 tokenId, uint256 minAmountOut, uint256 deadline ) external nonReentrant",
+      "properties": [
+        "ROUTER-CLOSE"
+      ],
+      "groups_with_tests": [
+        "ROUTER-CLOSE"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "claimRedemption",
+      "signature": "function claimRedemption( uint256 positionId, uint256 minAmountOut, uint256 deadline, bool unwrapETH ) external nonReentrant",
+      "properties": [
+        "ROUTER-CLAIM"
+      ],
+      "groups_with_tests": [
+        "ROUTER-CLAIM"
+      ]
+    },
+    {
+      "source": "src/router/AlchemistRouter.sol",
+      "name": "receive",
+      "signature": "receive() external payable",
+      "properties": [
+        "ROUTER-INIT"
+      ],
+      "groups_with_tests": [
+        "ROUTER-INIT"
+      ]
+    },
+    {
+      "source": "src/AlTokenV3.sol:13-23",
+      "name": "initialize",
+      "signature": "function initialize( string memory name, string memory symbol ) external initializer",
+      "properties": [
+        "ALT-INITIALIZE"
+      ],
+      "groups_with_tests": [
+        "ALT-INITIALIZE"
+      ]
+    },
+    {
+      "source": "src/AlTokenV3.sol:25-35",
+      "name": "burn",
+      "signature": "function burn(uint256 amount) external returns (bool)",
+      "properties": [
+        "AlTokenV3-AC-07",
+        "ALT-BURN"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-07",
+        "ALT-BURN"
+      ]
+    },
+    {
+      "source": "src/AlTokenV3.sol:41-56",
+      "name": "burnFrom",
+      "signature": "function burnFrom(address account, uint256 amount) external returns (bool)",
+      "properties": [
+        "AlTokenV3-AC-01",
+        "ALT-BURN"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-01",
+        "ALT-BURN"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:112-118",
+      "name": "setFlashFee",
+      "signature": "function setFlashFee(uint256 newFee) external onlyAdmin",
+      "properties": [
+        "AlTokenV3-AC-02",
+        "ALT-FLASHFEE"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-02",
+        "ALT-FLASHFEE"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:127-140",
+      "name": "mint",
+      "signature": "function mint(address recipient, uint256 amount) external onlyWhitelisted",
+      "properties": [
+        "AlTokenV3-AC-03",
+        "ALT-MINT"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-03",
+        "ALT-MINT"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:148-150",
+      "name": "setWhitelist",
+      "signature": "function setWhitelist(address minter, bool state) external onlyAdmin",
+      "properties": [
+        "AlTokenV3-AC-04",
+        "ALT-MINT"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-04",
+        "ALT-MINT"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:157-159",
+      "name": "setSentinel",
+      "signature": "function setSentinel(address sentinel) external onlyAdmin",
+      "properties": [
+        "AlTokenV3-AC-05",
+        "ALT-ROLES"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-05",
+        "ALT-ROLES"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:167-170",
+      "name": "pauseMinter",
+      "signature": "function pauseMinter(address minter, bool state) external onlySentinel",
+      "properties": [
+        "AlTokenV3-AC-06",
+        "ALT-MINT"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-06",
+        "ALT-MINT"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:175-184",
+      "name": "burnSelf",
+      "signature": "function burnSelf(uint256 amount) external",
+      "properties": [
+        "ALT-BURN"
+      ],
+      "groups_with_tests": [
+        "ALT-BURN"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:190-204",
+      "name": "burn",
+      "signature": "function burn(address account, uint256 amount) external",
+      "properties": [
+        "AlTokenV3-AC-07",
+        "ALT-BURN"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-07",
+        "ALT-BURN"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:209-212",
+      "name": "setMaxFlashLoan",
+      "signature": "function setMaxFlashLoan(uint256 _maxFlashLoanAmount) external onlyAdmin",
+      "properties": [
+        "AlTokenV3-AC-08",
+        "ALT-FLASHFEE"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-08",
+        "ALT-FLASHFEE"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:219-224",
+      "name": "maxFlashLoan",
+      "signature": "function maxFlashLoan(address token) public view override returns (uint256)",
+      "properties": [
+        "ALT-FLASHFEE"
+      ],
+      "groups_with_tests": [
+        "ALT-FLASHFEE"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:232-237",
+      "name": "flashFee",
+      "signature": "function flashFee(address token, uint256 amount) public view override returns (uint256)",
+      "properties": [
+        "ALT-FLASHFEE"
+      ],
+      "groups_with_tests": [
+        "ALT-FLASHFEE"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:247-272",
+      "name": "flashLoan",
+      "signature": "function flashLoan( IERC3156FlashBorrower receiver, address token, uint256 amount, bytes calldata data ) external override nonReentrant returns (bool)",
+      "properties": [
+        "ALT-FLASHLOAN"
+      ],
+      "groups_with_tests": [
+        "ALT-FLASHLOAN"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:283-287",
+      "name": "setLimits",
+      "signature": "function setLimits(address _bridge, uint256 _mintingLimit, uint256 _burningLimit) external onlyAdmin",
+      "properties": [
+        "AlTokenV3-AC-09",
+        "ALT-LIMITS"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-09",
+        "ALT-LIMITS"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:296-298",
+      "name": "mintingMaxLimitOf",
+      "signature": "function mintingMaxLimitOf(address _bridge) public view returns (uint256 _limit)",
+      "properties": [
+        "ALT-LIMITS"
+      ],
+      "groups_with_tests": [
+        "ALT-LIMITS"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:307-309",
+      "name": "burningMaxLimitOf",
+      "signature": "function burningMaxLimitOf(address _bridge) public view returns (uint256 _limit)",
+      "properties": [
+        "ALT-LIMITS"
+      ],
+      "groups_with_tests": [
+        "ALT-LIMITS"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:318-325",
+      "name": "mintingCurrentLimitOf",
+      "signature": "function mintingCurrentLimitOf(address _bridge) public view returns (uint256 _limit)",
+      "properties": [
+        "ALT-LIMITS"
+      ],
+      "groups_with_tests": [
+        "ALT-LIMITS"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/src/AlchemicTokenV2Base.sol:334-341",
+      "name": "burningCurrentLimitOf",
+      "signature": "function burningCurrentLimitOf(address _bridge) public view returns (uint256 _limit)",
+      "properties": [
+        "ALT-LIMITS"
+      ],
+      "groups_with_tests": [
+        "ALT-LIMITS"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:67-69",
+      "name": "name",
+      "signature": "function name() public view virtual override returns (string memory)",
+      "properties": [
+        "ALT-INITIALIZE"
+      ],
+      "groups_with_tests": [
+        "ALT-INITIALIZE"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:75-77",
+      "name": "symbol",
+      "signature": "function symbol() public view virtual override returns (string memory)",
+      "properties": [
+        "ALT-INITIALIZE"
+      ],
+      "groups_with_tests": [
+        "ALT-INITIALIZE"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:92-94",
+      "name": "decimals",
+      "signature": "function decimals() public view virtual override returns (uint8)",
+      "properties": [
+        "ALT-INITIALIZE"
+      ],
+      "groups_with_tests": [
+        "ALT-INITIALIZE"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:99-101",
+      "name": "totalSupply",
+      "signature": "function totalSupply() public view virtual override returns (uint256)",
+      "properties": [
+        "ALT-MINT",
+        "ALT-BURN",
+        "ALT-ERC20"
+      ],
+      "groups_with_tests": [
+        "ALT-MINT",
+        "ALT-BURN",
+        "ALT-ERC20"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:106-108",
+      "name": "balanceOf",
+      "signature": "function balanceOf(address account) public view virtual override returns (uint256)",
+      "properties": [
+        "ALT-MINT",
+        "ALT-BURN",
+        "ALT-ERC20"
+      ],
+      "groups_with_tests": [
+        "ALT-MINT",
+        "ALT-BURN",
+        "ALT-ERC20"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:118-122",
+      "name": "transfer",
+      "signature": "function transfer(address to, uint256 amount) public virtual override returns (bool)",
+      "properties": [
+        "ALT-ERC20"
+      ],
+      "groups_with_tests": [
+        "ALT-ERC20"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:127-129",
+      "name": "allowance",
+      "signature": "function allowance(address owner, address spender) public view virtual override returns (uint256)",
+      "properties": [
+        "ALT-BURN",
+        "ALT-ERC20"
+      ],
+      "groups_with_tests": [
+        "ALT-BURN",
+        "ALT-ERC20"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:141-145",
+      "name": "approve",
+      "signature": "function approve(address spender, uint256 amount) public virtual override returns (bool)",
+      "properties": [
+        "ALT-ERC20"
+      ],
+      "groups_with_tests": [
+        "ALT-ERC20"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:163-172",
+      "name": "transferFrom",
+      "signature": "function transferFrom( address from, address to, uint256 amount ) public virtual override returns (bool)",
+      "properties": [
+        "ALT-ERC20"
+      ],
+      "groups_with_tests": [
+        "ALT-ERC20"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:186-190",
+      "name": "increaseAllowance",
+      "signature": "function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool)",
+      "properties": [
+        "ALT-ERC20"
+      ],
+      "groups_with_tests": [
+        "ALT-ERC20"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/ERC20Upgradeable.sol:206-215",
+      "name": "decreaseAllowance",
+      "signature": "function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool)",
+      "properties": [
+        "ALT-ERC20"
+      ],
+      "groups_with_tests": [
+        "ALT-ERC20"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol:56-75",
+      "name": "permit",
+      "signature": "function permit( address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s ) public virtual override",
+      "properties": [
+        "ALT-PERMIT"
+      ],
+      "groups_with_tests": [
+        "ALT-PERMIT"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol:80-82",
+      "name": "nonces",
+      "signature": "function nonces(address owner) public view virtual override returns (uint256)",
+      "properties": [
+        "ALT-PERMIT"
+      ],
+      "groups_with_tests": [
+        "ALT-PERMIT"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/token/ERC20/extensions/draft-ERC20PermitUpgradeable.sol:88-90",
+      "name": "DOMAIN_SEPARATOR",
+      "signature": "function DOMAIN_SEPARATOR() external view override returns (bytes32)",
+      "properties": [
+        "ALT-PERMIT"
+      ],
+      "groups_with_tests": [
+        "ALT-PERMIT"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol:48-50",
+      "name": "owner",
+      "signature": "function owner() public view virtual returns (address)",
+      "properties": [
+        "ALT-INITIALIZE",
+        "ALT-OWNER"
+      ],
+      "groups_with_tests": [
+        "ALT-INITIALIZE",
+        "ALT-OWNER"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol:66-68",
+      "name": "renounceOwnership",
+      "signature": "function renounceOwnership() public virtual onlyOwner",
+      "properties": [
+        "AlTokenV3-AC-10",
+        "ALT-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-10",
+        "ALT-OWNER"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol:74-77",
+      "name": "transferOwnership",
+      "signature": "function transferOwnership(address newOwner) public virtual onlyOwner",
+      "properties": [
+        "AlTokenV3-AC-11",
+        "ALT-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-11",
+        "ALT-OWNER"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/access/AccessControlUpgradeable.sol:83-85",
+      "name": "supportsInterface",
+      "signature": "function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool)",
+      "properties": [
+        "ALT-ROLES"
+      ],
+      "groups_with_tests": [
+        "ALT-ROLES"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/access/AccessControlUpgradeable.sol:90-92",
+      "name": "hasRole",
+      "signature": "function hasRole(bytes32 role, address account) public view virtual override returns (bool)",
+      "properties": [
+        "ALT-INITIALIZE",
+        "ALT-ROLES"
+      ],
+      "groups_with_tests": [
+        "ALT-INITIALIZE",
+        "ALT-ROLES"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/access/AccessControlUpgradeable.sol:134-136",
+      "name": "getRoleAdmin",
+      "signature": "function getRoleAdmin(bytes32 role) public view virtual override returns (bytes32)",
+      "properties": [
+        "ALT-INITIALIZE",
+        "ALT-ROLES"
+      ],
+      "groups_with_tests": [
+        "ALT-INITIALIZE",
+        "ALT-ROLES"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/access/AccessControlUpgradeable.sol:150-152",
+      "name": "grantRole",
+      "signature": "function grantRole(bytes32 role, address account) public virtual override onlyRole(getRoleAdmin(role))",
+      "properties": [
+        "AlTokenV3-AC-12",
+        "ALT-ROLES"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-12",
+        "ALT-ROLES"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/access/AccessControlUpgradeable.sol:165-167",
+      "name": "revokeRole",
+      "signature": "function revokeRole(bytes32 role, address account) public virtual override onlyRole(getRoleAdmin(role))",
+      "properties": [
+        "AlTokenV3-AC-13",
+        "ALT-ROLES"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-13",
+        "ALT-ROLES"
+      ]
+    },
+    {
+      "source": "lib/v2-foundry/lib/openzeppelin-contracts-upgradeable/contracts/access/AccessControlUpgradeable.sol:185-189",
+      "name": "renounceRole",
+      "signature": "function renounceRole(bytes32 role, address account) public virtual override",
+      "properties": [
+        "AlTokenV3-AC-14",
+        "ALT-ROLES"
+      ],
+      "groups_with_tests": [
+        "AlTokenV3-AC-14",
+        "ALT-ROLES"
+      ]
+    },
+    {
+      "source": "src/AlchemistAllocator.sol:32-40",
+      "name": "allocate",
+      "signature": "function allocate(address adapter, uint256 amount) external",
+      "properties": [
+        "AlchemistAllocator-AC-01",
+        "ALLOC-CAPS",
+        "ALLOC-ARITH",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-01",
+        "ALLOC-CAPS",
+        "ALLOC-ARITH",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ]
+    },
+    {
+      "source": "src/AlchemistAllocator.sol:48-55",
+      "name": "deallocate",
+      "signature": "function deallocate(address adapter, uint256 amount) external",
+      "properties": [
+        "AlchemistAllocator-AC-02",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-02",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ]
+    },
+    {
+      "source": "src/AlchemistAllocator.sol:63-75",
+      "name": "allocateWithSwap",
+      "signature": "function allocateWithSwap(address adapter, uint256 amount, bytes memory txData) external",
+      "properties": [
+        "AlchemistAllocator-AC-03",
+        "ALLOC-CAPS",
+        "ALLOC-ARITH",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-03",
+        "ALLOC-CAPS",
+        "ALLOC-ARITH",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ]
+    },
+    {
+      "source": "src/AlchemistAllocator.sol:84-95",
+      "name": "deallocateWithSwap",
+      "signature": "function deallocateWithSwap(address adapter, uint256 amount, bytes memory txData) external",
+      "properties": [
+        "AlchemistAllocator-AC-04",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-04",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ]
+    },
+    {
+      "source": "src/AlchemistAllocator.sol:104-115",
+      "name": "deallocateWithUnwrapAndSwap",
+      "signature": "function deallocateWithUnwrapAndSwap(address adapter, uint256 amount, bytes memory txData, uint256 minIntermediateOut) external",
+      "properties": [
+        "AlchemistAllocator-AC-05",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-05",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ]
+    },
+    {
+      "source": "src/AlchemistAllocator.sol:118-121",
+      "name": "setLiquidityAdapter",
+      "signature": "function setLiquidityAdapter(address adapter, bytes memory data) external",
+      "properties": [
+        "AlchemistAllocator-AC-06",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-06",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ]
+    },
+    {
+      "source": "src/AlchemistAllocator.sol:177-179",
+      "name": "setMaxRate",
+      "signature": "function setMaxRate(uint256 rate) external onlyAdmin",
+      "properties": [
+        "AlchemistAllocator-AC-07",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-07",
+        "ALLOC-FORWARD",
+        "ALLOC-MORPHO"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol:40-42",
+      "name": "transferAdminOwnerShip",
+      "signature": "function transferAdminOwnerShip(address _newAdmin) external onlyAdmin",
+      "properties": [
+        "AlchemistAllocator-AC-08",
+        "AlchemistAllocator-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-08",
+        "AlchemistAllocator-ADMIN"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol:44-49",
+      "name": "acceptAdminOwnership",
+      "signature": "function acceptAdminOwnership() external",
+      "properties": [
+        "AlchemistAllocator-AC-09",
+        "AlchemistAllocator-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-09",
+        "AlchemistAllocator-ADMIN"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol:51-55",
+      "name": "setOperator",
+      "signature": "function setOperator(address _operator, bool value) external onlyAdmin",
+      "properties": [
+        "AlchemistAllocator-AC-10",
+        "AlchemistAllocator-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-10",
+        "AlchemistAllocator-ADMIN"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol:57-60",
+      "name": "setPermissionedCall",
+      "signature": "function setPermissionedCall(bytes4 sig, bool value) external onlyAdmin",
+      "properties": [
+        "AlchemistAllocator-AC-11",
+        "AlchemistAllocator-PROXY"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-11",
+        "AlchemistAllocator-PROXY"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol:62-72",
+      "name": "proxy",
+      "signature": "function proxy(address vault, bytes memory data) external payable onlyOperator",
+      "properties": [
+        "AlchemistAllocator-AC-12",
+        "AlchemistAllocator-PROXY"
+      ],
+      "groups_with_tests": [
+        "AlchemistAllocator-AC-12",
+        "AlchemistAllocator-PROXY"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:26-30",
+      "name": "submitSetStrategy",
+      "signature": "function submitSetStrategy(address adapter, address myt) external onlyOperator",
+      "properties": [
+        "AlchemistCurator-AC-01",
+        "CURATOR-ROUTING",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-01",
+        "CURATOR-ROUTING",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:32-36",
+      "name": "setStrategy",
+      "signature": "function setStrategy(address adapter, address myt) external onlyOperator",
+      "properties": [
+        "AlchemistCurator-AC-02",
+        "CURATOR-ROUTING",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-02",
+        "CURATOR-ROUTING",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:37-41",
+      "name": "submitRemoveStrategy",
+      "signature": "function submitRemoveStrategy(address adapter, address myt) external onlyOperator",
+      "properties": [
+        "AlchemistCurator-AC-03",
+        "CURATOR-ROUTING",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-03",
+        "CURATOR-ROUTING",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:43-47",
+      "name": "removeStrategy",
+      "signature": "function removeStrategy(address adapter, address myt) external onlyOperator",
+      "properties": [
+        "AlchemistCurator-AC-04",
+        "CURATOR-ROUTING",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-04",
+        "CURATOR-ROUTING",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:77-80",
+      "name": "decreaseAbsoluteCap",
+      "signature": "function decreaseAbsoluteCap(address adapter, uint256 amount) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-05",
+        "CURATOR-CAPS"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-05",
+        "CURATOR-CAPS"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:82-85",
+      "name": "decreaseRelativeCap",
+      "signature": "function decreaseRelativeCap(address adapter, uint256 amount) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-06",
+        "CURATOR-CAPS"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-06",
+        "CURATOR-CAPS"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:100-103",
+      "name": "increaseAbsoluteCap",
+      "signature": "function increaseAbsoluteCap(address adapter, uint256 amount) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-07",
+        "CURATOR-CAPS",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-07",
+        "CURATOR-CAPS",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:105-108",
+      "name": "increaseRelativeCap",
+      "signature": "function increaseRelativeCap(address adapter, uint256 amount) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-08",
+        "CURATOR-CAPS",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-08",
+        "CURATOR-CAPS",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:110-113",
+      "name": "submitIncreaseAbsoluteCap",
+      "signature": "function submitIncreaseAbsoluteCap(address adapter, uint256 amount) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-09",
+        "CURATOR-CAPS",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-09",
+        "CURATOR-CAPS",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:115-118",
+      "name": "submitIncreaseRelativeCap",
+      "signature": "function submitIncreaseRelativeCap(address adapter, uint256 amount) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-10",
+        "CURATOR-CAPS",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-10",
+        "CURATOR-CAPS",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:144-148",
+      "name": "submitSetAllocator",
+      "signature": "function submitSetAllocator(address myt, address allocator, bool v) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-11",
+        "CURATOR-SUBMIT",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-11",
+        "CURATOR-SUBMIT",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:150-154",
+      "name": "submitSetForceDeallocatePenalty",
+      "signature": "function submitSetForceDeallocatePenalty(address adapter, address myt, uint256 penalty) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-12",
+        "CURATOR-SUBMIT",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-12",
+        "CURATOR-SUBMIT",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:156-160",
+      "name": "submitSetPerformanceFeeRecipient",
+      "signature": "function submitSetPerformanceFeeRecipient(address myt, address recipient) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-13",
+        "CURATOR-SUBMIT",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-13",
+        "CURATOR-SUBMIT",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/AlchemistCurator.sol:162-166",
+      "name": "submitSetPerformanceFee",
+      "signature": "function submitSetPerformanceFee(address myt, uint256 fee) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-14",
+        "CURATOR-SUBMIT",
+        "CURATOR-TIMELOCK"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-14",
+        "CURATOR-SUBMIT",
+        "CURATOR-TIMELOCK"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol:40-42",
+      "name": "transferAdminOwnerShip",
+      "signature": "function transferAdminOwnerShip(address _newAdmin) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-15",
+        "AlchemistCurator-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-15",
+        "AlchemistCurator-ADMIN"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol:44-49",
+      "name": "acceptAdminOwnership",
+      "signature": "function acceptAdminOwnership() external",
+      "properties": [
+        "AlchemistCurator-AC-16",
+        "AlchemistCurator-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-16",
+        "AlchemistCurator-ADMIN"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol:51-55",
+      "name": "setOperator",
+      "signature": "function setOperator(address _operator, bool value) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-17",
+        "AlchemistCurator-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-17",
+        "AlchemistCurator-ADMIN"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol:57-60",
+      "name": "setPermissionedCall",
+      "signature": "function setPermissionedCall(bytes4 sig, bool value) external onlyAdmin",
+      "properties": [
+        "AlchemistCurator-AC-18",
+        "AlchemistCurator-PROXY"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-18",
+        "AlchemistCurator-PROXY"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol:62-72",
+      "name": "proxy",
+      "signature": "function proxy(address vault, bytes memory data) external payable onlyOperator",
+      "properties": [
+        "AlchemistCurator-AC-19",
+        "AlchemistCurator-PROXY"
+      ],
+      "groups_with_tests": [
+        "AlchemistCurator-AC-19",
+        "AlchemistCurator-PROXY"
+      ]
+    },
+    {
+      "source": "src/AlchemistGate.sol:9-11",
+      "name": "setAuthorization",
+      "signature": "function setAuthorization(address _vault, address _to, bool value) external onlyOwner",
+      "properties": [
+        "AlchemistGate-AC-01",
+        "GATE-AUTH"
+      ],
+      "groups_with_tests": [
+        "AlchemistGate-AC-01",
+        "GATE-AUTH"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/access/Ownable.sol:56-58",
+      "name": "owner",
+      "signature": "function owner() public view virtual returns (address)",
+      "properties": [
+        "GATE-OWNER"
+      ],
+      "groups_with_tests": [
+        "GATE-OWNER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/access/Ownable.sol:76-78",
+      "name": "renounceOwnership",
+      "signature": "function renounceOwnership() public virtual onlyOwner",
+      "properties": [
+        "AlchemistGate-AC-02",
+        "GATE-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlchemistGate-AC-02",
+        "GATE-OWNER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/access/Ownable.sol:84-89",
+      "name": "transferOwnership",
+      "signature": "function transferOwnership(address newOwner) public virtual onlyOwner",
+      "properties": [
+        "AlchemistGate-AC-03",
+        "GATE-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlchemistGate-AC-03",
+        "GATE-OWNER"
+      ]
+    },
+    {
+      "source": "src/AlchemistStrategyClassifier.sol:47-50",
+      "name": "transferOwnership",
+      "signature": "function transferOwnership(address _newAdmin) external",
+      "properties": [
+        "AlchemistStrategyClassifier-AC-01",
+        "CLASS-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlchemistStrategyClassifier-AC-01",
+        "CLASS-OWNER"
+      ]
+    },
+    {
+      "source": "src/AlchemistStrategyClassifier.sol:52-57",
+      "name": "acceptOwnership",
+      "signature": "function acceptOwnership() external",
+      "properties": [
+        "AlchemistStrategyClassifier-AC-02",
+        "CLASS-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlchemistStrategyClassifier-AC-02",
+        "CLASS-OWNER"
+      ]
+    },
+    {
+      "source": "src/AlchemistStrategyClassifier.sol:61-65",
+      "name": "setRiskClass",
+      "signature": "function setRiskClass(uint8 classId, uint256 globalCap, uint256 localCap) external",
+      "properties": [
+        "AlchemistStrategyClassifier-AC-03",
+        "CLASS-CAPS"
+      ],
+      "groups_with_tests": [
+        "AlchemistStrategyClassifier-AC-03",
+        "CLASS-CAPS"
+      ]
+    },
+    {
+      "source": "src/AlchemistStrategyClassifier.sol:67-70",
+      "name": "assignStrategyRiskLevel",
+      "signature": "function assignStrategyRiskLevel(uint256 strategyId, uint8 riskLevel) external",
+      "properties": [
+        "AlchemistStrategyClassifier-AC-04",
+        "CLASS-CAPS"
+      ],
+      "groups_with_tests": [
+        "AlchemistStrategyClassifier-AC-04",
+        "CLASS-CAPS"
+      ]
+    },
+    {
+      "source": "src/AlchemistStrategyClassifier.sol:75-78",
+      "name": "getIndividualCap",
+      "signature": "function getIndividualCap(uint256 strategyId) external view override returns (uint256)",
+      "properties": [
+        "CLASS-CAPS"
+      ],
+      "groups_with_tests": [
+        "CLASS-CAPS"
+      ]
+    },
+    {
+      "source": "src/AlchemistStrategyClassifier.sol:81-83",
+      "name": "getGlobalCap",
+      "signature": "function getGlobalCap(uint8 riskLevel) external view override returns (uint256)",
+      "properties": [
+        "CLASS-CAPS"
+      ],
+      "groups_with_tests": [
+        "CLASS-CAPS"
+      ]
+    },
+    {
+      "source": "src/AlchemistStrategyClassifier.sol:86-88",
+      "name": "getStrategyRiskLevel",
+      "signature": "function getStrategyRiskLevel(uint256 strategyId) external view override returns (uint8)",
+      "properties": [
+        "CLASS-CAPS"
+      ],
+      "groups_with_tests": [
+        "CLASS-CAPS"
+      ]
+    },
+    {
+      "source": "src/AlchemistETHVault.sol:32-34",
+      "name": "totalDeposits",
+      "signature": "function totalDeposits() public view override returns (uint256)",
+      "properties": [
+        "AlchemistETHVault-WITHDRAW",
+        "ETH-DEPOSIT"
+      ],
+      "groups_with_tests": [
+        "AlchemistETHVault-WITHDRAW",
+        "ETH-DEPOSIT"
+      ]
+    },
+    {
+      "source": "src/AlchemistETHVault.sol:39-42",
+      "name": "deposit",
+      "signature": "function deposit() external payable nonReentrant",
+      "properties": [
+        "ETH-DEPOSIT",
+        "ETH-REENTRANCY"
+      ],
+      "groups_with_tests": [
+        "ETH-DEPOSIT",
+        "ETH-REENTRANCY"
+      ]
+    },
+    {
+      "source": "src/AlchemistETHVault.sol:53-64",
+      "name": "depositWETH",
+      "signature": "function depositWETH(uint256 amount) external nonReentrant",
+      "properties": [
+        "ETH-WETH",
+        "ETH-REENTRANCY"
+      ],
+      "groups_with_tests": [
+        "ETH-WETH",
+        "ETH-REENTRANCY"
+      ]
+    },
+    {
+      "source": "src/AlchemistETHVault.sol:80-92",
+      "name": "withdraw",
+      "signature": "function withdraw(address recipient, uint256 amount) external override onlyAuthorized nonReentrant",
+      "properties": [
+        "AlchemistETHVault-AC-01",
+        "AlchemistETHVault-WITHDRAW",
+        "ETH-REENTRANCY"
+      ],
+      "groups_with_tests": [
+        "AlchemistETHVault-AC-01",
+        "AlchemistETHVault-WITHDRAW",
+        "ETH-REENTRANCY"
+      ]
+    },
+    {
+      "source": "src/adapters/AbstractFeeVault.sol:57-61",
+      "name": "setAuthorization",
+      "signature": "function setAuthorization(address account, bool status) external onlyOwner",
+      "properties": [
+        "AlchemistETHVault-AC-02",
+        "AlchemistETHVault-AUTH"
+      ],
+      "groups_with_tests": [
+        "AlchemistETHVault-AC-02",
+        "AlchemistETHVault-AUTH"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/access/Ownable.sol:56-58",
+      "name": "owner",
+      "signature": "function owner() public view virtual returns (address)",
+      "properties": [
+        "AlchemistETHVault-AUTH",
+        "AlchemistETHVault-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlchemistETHVault-AUTH",
+        "AlchemistETHVault-OWNER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/access/Ownable.sol:76-78",
+      "name": "renounceOwnership",
+      "signature": "function renounceOwnership() public virtual onlyOwner",
+      "properties": [
+        "AlchemistETHVault-AC-03",
+        "AlchemistETHVault-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlchemistETHVault-AC-03",
+        "AlchemistETHVault-OWNER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/access/Ownable.sol:84-89",
+      "name": "transferOwnership",
+      "signature": "function transferOwnership(address newOwner) public virtual onlyOwner",
+      "properties": [
+        "AlchemistETHVault-AC-04",
+        "AlchemistETHVault-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlchemistETHVault-AC-04",
+        "AlchemistETHVault-OWNER"
+      ]
+    },
+    {
+      "source": "src/AlchemistTokenVault.sol:28-32",
+      "name": "deposit",
+      "signature": "function deposit(uint256 amount) external",
+      "properties": [
+        "TOKEN-DEPOSIT",
+        "TOKEN-CALLBACK"
+      ],
+      "groups_with_tests": [
+        "TOKEN-DEPOSIT",
+        "TOKEN-CALLBACK"
+      ]
+    },
+    {
+      "source": "src/AlchemistTokenVault.sol:39-44",
+      "name": "withdraw",
+      "signature": "function withdraw(address recipient, uint256 amount) external override onlyAuthorized",
+      "properties": [
+        "AlchemistTokenVault-AC-01",
+        "AlchemistTokenVault-WITHDRAW",
+        "TOKEN-CALLBACK"
+      ],
+      "groups_with_tests": [
+        "AlchemistTokenVault-AC-01",
+        "AlchemistTokenVault-WITHDRAW",
+        "TOKEN-CALLBACK"
+      ]
+    },
+    {
+      "source": "src/AlchemistTokenVault.sol:50-52",
+      "name": "totalDeposits",
+      "signature": "function totalDeposits() public view override returns (uint256)",
+      "properties": [
+        "AlchemistTokenVault-WITHDRAW",
+        "TOKEN-DEPOSIT"
+      ],
+      "groups_with_tests": [
+        "AlchemistTokenVault-WITHDRAW",
+        "TOKEN-DEPOSIT"
+      ]
+    },
+    {
+      "source": "src/adapters/AbstractFeeVault.sol:57-61",
+      "name": "setAuthorization",
+      "signature": "function setAuthorization(address account, bool status) external onlyOwner",
+      "properties": [
+        "AlchemistTokenVault-AC-02",
+        "AlchemistTokenVault-AUTH"
+      ],
+      "groups_with_tests": [
+        "AlchemistTokenVault-AC-02",
+        "AlchemistTokenVault-AUTH"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/access/Ownable.sol:56-58",
+      "name": "owner",
+      "signature": "function owner() public view virtual returns (address)",
+      "properties": [
+        "AlchemistTokenVault-AUTH",
+        "AlchemistTokenVault-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlchemistTokenVault-AUTH",
+        "AlchemistTokenVault-OWNER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/access/Ownable.sol:76-78",
+      "name": "renounceOwnership",
+      "signature": "function renounceOwnership() public virtual onlyOwner",
+      "properties": [
+        "AlchemistTokenVault-AC-03",
+        "AlchemistTokenVault-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlchemistTokenVault-AC-03",
+        "AlchemistTokenVault-OWNER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/access/Ownable.sol:84-89",
+      "name": "transferOwnership",
+      "signature": "function transferOwnership(address newOwner) public virtual onlyOwner",
+      "properties": [
+        "AlchemistTokenVault-AC-04",
+        "AlchemistTokenVault-OWNER"
+      ],
+      "groups_with_tests": [
+        "AlchemistTokenVault-AC-04",
+        "AlchemistTokenVault-OWNER"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3Position.sol:78-80",
+      "name": "setMetadataRenderer",
+      "signature": "function setMetadataRenderer(address renderer) external onlyAdmin",
+      "properties": [
+        "AlchemistV3Position-AC-01",
+        "POS-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AlchemistV3Position-AC-01",
+        "POS-ADMIN"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3Position.sol:84-86",
+      "name": "setAdmin",
+      "signature": "function setAdmin(address newAdmin) external onlyAdmin",
+      "properties": [
+        "AlchemistV3Position-AC-02",
+        "POS-ADMIN"
+      ],
+      "groups_with_tests": [
+        "AlchemistV3Position-AC-02",
+        "POS-ADMIN"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3Position.sol:94-102",
+      "name": "mint",
+      "signature": "function mint(address to) external onlyAlchemist returns (uint256)",
+      "properties": [
+        "AlchemistV3Position-AC-03",
+        "POS-MINT"
+      ],
+      "groups_with_tests": [
+        "AlchemistV3Position-AC-03",
+        "POS-MINT"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3Position.sol:104-106",
+      "name": "burn",
+      "signature": "function burn(uint256 tokenId) public onlyAlchemist",
+      "properties": [
+        "AlchemistV3Position-AC-04",
+        "POS-BURN"
+      ],
+      "groups_with_tests": [
+        "AlchemistV3Position-AC-04",
+        "POS-BURN"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3Position.sol:113-120",
+      "name": "tokenURI",
+      "signature": "function tokenURI(uint256 tokenId) public view override returns (string memory)",
+      "properties": [
+        "POS-METADATA"
+      ],
+      "groups_with_tests": [
+        "POS-METADATA"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3Position.sol:125-127",
+      "name": "supportsInterface",
+      "signature": "function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721Enumerable) returns (bool)",
+      "properties": [
+        "POS-METADATA"
+      ],
+      "groups_with_tests": [
+        "POS-METADATA"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:53-58",
+      "name": "balanceOf",
+      "signature": "function balanceOf(address owner) public view virtual returns (uint256)",
+      "properties": [
+        "POS-BURN",
+        "POS-TRANSFER"
+      ],
+      "groups_with_tests": [
+        "POS-BURN",
+        "POS-TRANSFER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:61-63",
+      "name": "ownerOf",
+      "signature": "function ownerOf(uint256 tokenId) public view virtual returns (address)",
+      "properties": [
+        "POS-BURN",
+        "POS-TRANSFER"
+      ],
+      "groups_with_tests": [
+        "POS-BURN",
+        "POS-TRANSFER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:66-68",
+      "name": "name",
+      "signature": "function name() public view virtual returns (string memory)",
+      "properties": [
+        "POS-METADATA"
+      ],
+      "groups_with_tests": [
+        "POS-METADATA"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:71-73",
+      "name": "symbol",
+      "signature": "function symbol() public view virtual returns (string memory)",
+      "properties": [
+        "POS-METADATA"
+      ],
+      "groups_with_tests": [
+        "POS-METADATA"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:93-95",
+      "name": "approve",
+      "signature": "function approve(address to, uint256 tokenId) public virtual",
+      "properties": [
+        "AlchemistV3Position-AC-05",
+        "POS-APPROVAL"
+      ],
+      "groups_with_tests": [
+        "AlchemistV3Position-AC-05",
+        "POS-APPROVAL"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:98-102",
+      "name": "getApproved",
+      "signature": "function getApproved(uint256 tokenId) public view virtual returns (address)",
+      "properties": [
+        "POS-APPROVAL"
+      ],
+      "groups_with_tests": [
+        "POS-APPROVAL"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:105-107",
+      "name": "setApprovalForAll",
+      "signature": "function setApprovalForAll(address operator, bool approved) public virtual",
+      "properties": [
+        "POS-APPROVAL"
+      ],
+      "groups_with_tests": [
+        "POS-APPROVAL"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:110-112",
+      "name": "isApprovedForAll",
+      "signature": "function isApprovedForAll(address owner, address operator) public view virtual returns (bool)",
+      "properties": [
+        "POS-APPROVAL"
+      ],
+      "groups_with_tests": [
+        "POS-APPROVAL"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:115-125",
+      "name": "transferFrom",
+      "signature": "function transferFrom(address from, address to, uint256 tokenId) public virtual",
+      "properties": [
+        "AlchemistV3Position-AC-06",
+        "POS-TRANSFER"
+      ],
+      "groups_with_tests": [
+        "AlchemistV3Position-AC-06",
+        "POS-TRANSFER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:128-130",
+      "name": "safeTransferFrom",
+      "signature": "function safeTransferFrom(address from, address to, uint256 tokenId) public",
+      "properties": [
+        "AlchemistV3Position-AC-07",
+        "AlchemistV3Position-AC-08",
+        "POS-TRANSFER"
+      ],
+      "groups_with_tests": [
+        "AlchemistV3Position-AC-07",
+        "AlchemistV3Position-AC-08",
+        "POS-TRANSFER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol:133-136",
+      "name": "safeTransferFrom",
+      "signature": "function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public virtual",
+      "properties": [
+        "AlchemistV3Position-AC-07",
+        "AlchemistV3Position-AC-08",
+        "POS-TRANSFER"
+      ],
+      "groups_with_tests": [
+        "AlchemistV3Position-AC-07",
+        "AlchemistV3Position-AC-08",
+        "POS-TRANSFER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/extensions/ERC721Enumerable.sol:42-47",
+      "name": "tokenOfOwnerByIndex",
+      "signature": "function tokenOfOwnerByIndex(address owner, uint256 index) public view virtual returns (uint256)",
+      "properties": [
+        "POS-BURN",
+        "POS-TRANSFER"
+      ],
+      "groups_with_tests": [
+        "POS-BURN",
+        "POS-TRANSFER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/extensions/ERC721Enumerable.sol:50-52",
+      "name": "totalSupply",
+      "signature": "function totalSupply() public view virtual returns (uint256)",
+      "properties": [
+        "POS-BURN",
+        "POS-TRANSFER"
+      ],
+      "groups_with_tests": [
+        "POS-BURN",
+        "POS-TRANSFER"
+      ]
+    },
+    {
+      "source": "lib/openzeppelin-contracts/contracts/token/ERC721/extensions/ERC721Enumerable.sol:55-60",
+      "name": "tokenByIndex",
+      "signature": "function tokenByIndex(uint256 index) public view virtual returns (uint256)",
+      "properties": [
+        "POS-BURN",
+        "POS-TRANSFER"
+      ],
+      "groups_with_tests": [
+        "POS-BURN",
+        "POS-TRANSFER"
+      ]
+    },
+    {
+      "source": "src/AlchemistV3PositionRenderer.sol:11-13",
+      "name": "tokenURI",
+      "signature": "function tokenURI(uint256 tokenId) external pure override returns (string memory)",
+      "properties": [
+        "RENDER-URI"
+      ],
+      "groups_with_tests": [
+        "RENDER-URI"
+      ]
+    },
+    {
+      "source": "src/AlchemistETHVault.sol:47",
+      "name": "receive",
+      "signature": "receive() external payable",
+      "properties": [
+        "ETH-DEPOSIT"
+      ],
+      "groups_with_tests": [
+        "ETH-DEPOSIT"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "allocate",
+      "signature": "function allocate(bytes memory data, uint256 assets, bytes4 selector, address sender) external onlyVault returns (bytes32[] memory strategyIds, int256 change)",
+      "properties": [
+        "STR-BASE-ALLOCATE"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-ALLOCATE"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "deallocate",
+      "signature": "function deallocate(bytes memory data, uint256 assets, bytes4 selector, address sender) external onlyVault returns (bytes32[] memory strategyIds, int256 change)",
+      "properties": [
+        "STR-BASE-DEALLOCATE"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-DEALLOCATE"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "previewAdjustedWithdraw",
+      "signature": "function previewAdjustedWithdraw(uint256 amount) external view returns (uint256)",
+      "properties": [
+        "STR-BASE-PREVIEW"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-PREVIEW"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "claimWithdrawalQueue",
+      "signature": "function claimWithdrawalQueue(uint256 positionId) public virtual onlyOwner returns (uint256 ret)",
+      "properties": [
+        "STR-BASE-QUEUE"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-QUEUE"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "claimRewards",
+      "signature": "function claimRewards(address token, bytes memory quote, uint256 minAmountOut) public onlyOwner virtual returns (uint256)",
+      "properties": [
+        "STR-BASE-REWARDS"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-REWARDS"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "withdrawToVault",
+      "signature": "function withdrawToVault() public virtual onlyOwner returns (uint256)",
+      "properties": [
+        "STR-BASE-WITHDRAW"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-WITHDRAW"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "rescueTokens",
+      "signature": "function rescueTokens(address token, address to, uint256 amount) external onlyOwner",
+      "properties": [
+        "STR-BASE-RESCUE"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-RESCUE"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "setRiskClass",
+      "signature": "function setRiskClass(RiskClass newClass) public onlyOwner",
+      "properties": [
+        "STR-BASE-SETRISKCLASS"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-SETRISKCLASS"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "setAdditionalIncentives",
+      "signature": "function setAdditionalIncentives(bool newValue) public onlyOwner",
+      "properties": [
+        "STR-BASE-SETADDITIONALINCENTIVES"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-SETADDITIONALINCENTIVES"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "setKillSwitch",
+      "signature": "function setKillSwitch(bool val) public onlyOwner",
+      "properties": [
+        "STR-BASE-SETKILLSWITCH"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-SETKILLSWITCH"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "setAllowanceHolder",
+      "signature": "function setAllowanceHolder(address _new) public onlyOwner",
+      "properties": [
+        "STR-BASE-SETALLOWANCEHOLDER"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-SETALLOWANCEHOLDER"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "setSlippageBPS",
+      "signature": "function setSlippageBPS(uint256 newSlippageBPS) public onlyOwner",
+      "properties": [
+        "STR-BASE-SETSLIPPAGEBPS"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-SETSLIPPAGEBPS"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "getEstimatedYield",
+      "signature": "function getEstimatedYield() public view returns (uint256)",
+      "properties": [
+        "STR-BASE-GETESTIMATEDYIELD"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-GETESTIMATEDYIELD"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "getCap",
+      "signature": "function getCap() external view returns (uint256)",
+      "properties": [
+        "STR-BASE-GETCAP"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-GETCAP"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "getGlobalCap",
+      "signature": "function getGlobalCap() external view returns (uint256)",
+      "properties": [
+        "STR-BASE-GETGLOBALCAP"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-GETGLOBALCAP"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "ids",
+      "signature": "function ids() public view returns (bytes32[] memory)",
+      "properties": [
+        "STR-BASE-IDS"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-IDS"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "allocation",
+      "signature": "function allocation() public view returns (uint256)",
+      "properties": [
+        "STR-BASE-ALLOCATION"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-ALLOCATION"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "getIdData",
+      "signature": "function getIdData() external view returns (bytes memory)",
+      "properties": [
+        "STR-BASE-GETIDDATA"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-GETIDDATA"
+      ]
+    },
+    {
+      "source": "src/MYTStrategy.sol",
+      "name": "realAssets",
+      "signature": "function realAssets() external view virtual returns (uint256)",
+      "properties": [
+        "STR-BASE-REALASSETS"
+      ],
+      "groups_with_tests": [
+        "STR-BASE-REALASSETS"
+      ]
+    },
+    {
+      "source": "src/strategies/AaveStrategy.sol",
+      "name": "adminDexSwap",
+      "signature": "function adminDexSwap( address to, address from, uint256 amount, uint256 minAmountOut, bytes calldata callData ) external onlyOwner returns (uint256)",
+      "properties": [
+        "STR-AAVE-SWAP"
+      ],
+      "groups_with_tests": [
+        "STR-AAVE-SWAP"
+      ]
+    },
+    {
+      "source": "src/strategies/ERC4626Strategy.sol",
+      "name": "setCanForceDeallocate",
+      "signature": "function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner",
+      "properties": [
+        "STR-4626-FORCE"
+      ],
+      "groups_with_tests": [
+        "STR-4626-FORCE"
+      ]
+    },
+    {
+      "source": "src/strategies/EtherfiEETHStrategy.sol",
+      "name": "setCanForceDeallocate",
+      "signature": "function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner",
+      "properties": [
+        "STR-ETHER-FORCE"
+      ],
+      "groups_with_tests": [
+        "STR-ETHER-FORCE"
+      ]
+    },
+    {
+      "source": "src/strategies/EtherfiEETHStrategy.sol",
+      "name": "setGrossRedeemAmountBuffer",
+      "signature": "function setGrossRedeemAmountBuffer(uint256 grossRedeemAmountBuffer_) external onlyOwner",
+      "properties": [
+        "STR-ETHER-BUFFER"
+      ],
+      "groups_with_tests": [
+        "STR-ETHER-BUFFER"
+      ]
+    },
+    {
+      "source": "src/strategies/EtherfiEETHStrategy.sol",
+      "name": "receive",
+      "signature": "receive() external payable",
+      "properties": [
+        "STR-ETHER-RECEIVE"
+      ],
+      "groups_with_tests": [
+        "STR-ETHER-RECEIVE"
+      ]
+    },
+    {
+      "source": "src/strategies/MoonwellStrategy.sol",
+      "name": "receive",
+      "signature": "receive() external payable",
+      "properties": [
+        "STR-MOON-RECEIVE"
+      ],
+      "groups_with_tests": [
+        "STR-MOON-RECEIVE"
+      ]
+    },
+    {
+      "source": "src/strategies/OraclePricedSwapStrategy.sol",
+      "name": "setPricedTokenOracle",
+      "signature": "function setPricedTokenOracle(address _pricedTokenOracle) external onlyOwner",
+      "properties": [
+        "STR-ORACLE-SETPRICEDTOKENORACLE"
+      ],
+      "groups_with_tests": [
+        "STR-ORACLE-SETPRICEDTOKENORACLE"
+      ]
+    },
+    {
+      "source": "src/strategies/OraclePricedSwapStrategy.sol",
+      "name": "setMaxOracleStaleness",
+      "signature": "function setMaxOracleStaleness(uint256 maxOracleStaleness) external onlyOwner",
+      "properties": [
+        "STR-ORACLE-SETMAXORACLESTALENESS"
+      ],
+      "groups_with_tests": [
+        "STR-ORACLE-SETMAXORACLESTALENESS"
+      ]
+    },
+    {
+      "source": "src/strategies/SFraxETHStrategy.sol",
+      "name": "setMinFrxEthOutBps",
+      "signature": "function setMinFrxEthOutBps(uint256 newMinFrxEthOutBps) external onlyOwner",
+      "properties": [
+        "STR-FRAX-FLOOR-SET"
+      ],
+      "groups_with_tests": [
+        "STR-FRAX-FLOOR-SET"
+      ]
+    },
+    {
+      "source": "src/strategies/SFraxETHStrategy.sol",
+      "name": "receive",
+      "signature": "receive() external payable",
+      "properties": [
+        "STR-FRAX-RECEIVE"
+      ],
+      "groups_with_tests": [
+        "STR-FRAX-RECEIVE"
+      ]
+    },
+    {
+      "source": "src/strategies/StakeDAOWETHStrategy.sol",
+      "name": "setWithdrawBufferBps",
+      "signature": "function setWithdrawBufferBps(uint256 newWithdrawBufferBps) external onlyOwner",
+      "properties": [
+        "STR-DAO-SETWITHDRAWBUFFERBPS"
+      ],
+      "groups_with_tests": [
+        "STR-DAO-SETWITHDRAWBUFFERBPS"
+      ]
+    },
+    {
+      "source": "src/strategies/StakeDAOWETHStrategy.sol",
+      "name": "setMinWethPerCurveLp",
+      "signature": "function setMinWethPerCurveLp(uint256 newMinWethPerCurveLp) external onlyOwner",
+      "properties": [
+        "STR-DAO-SETMINWETHPERCURVELP"
+      ],
+      "groups_with_tests": [
+        "STR-DAO-SETMINWETHPERCURVELP"
+      ]
+    },
+    {
+      "source": "src/strategies/StakeDAOWETHStrategy.sol",
+      "name": "setMinCurveLpPerWeth",
+      "signature": "function setMinCurveLpPerWeth(uint256 newMinCurveLpPerWeth) external onlyOwner",
+      "properties": [
+        "STR-DAO-SETMINCURVELPPERWETH"
+      ],
+      "groups_with_tests": [
+        "STR-DAO-SETMINCURVELPPERWETH"
+      ]
+    },
+    {
+      "source": "src/strategies/StakeDAOWETHStrategy.sol",
+      "name": "setCanForceDeallocate",
+      "signature": "function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner",
+      "properties": [
+        "STR-DAO-SETCANFORCEDEALLOCATE"
+      ],
+      "groups_with_tests": [
+        "STR-DAO-SETCANFORCEDEALLOCATE"
+      ]
+    },
+    {
+      "source": "src/strategies/StakeDAOWETHStrategy.sol",
+      "name": "setEnsoRouter",
+      "signature": "function setEnsoRouter(address newEnsoRouter) external onlyOwner",
+      "properties": [
+        "STR-DAO-SETENSOROUTER"
+      ],
+      "groups_with_tests": [
+        "STR-DAO-SETENSOROUTER"
+      ]
+    },
+    {
+      "source": "src/strategies/TokeAutoStrategy.sol",
+      "name": "setExecToleranceBps",
+      "signature": "function setExecToleranceBps(uint256 newExecToleranceBps) external onlyOwner",
+      "properties": [
+        "STR-TOKE-TOLERANCE"
+      ],
+      "groups_with_tests": [
+        "STR-TOKE-TOLERANCE"
+      ]
+    },
+    {
+      "source": "src/strategies/TokeAutoStrategy.sol",
+      "name": "setCanForceDeallocate",
+      "signature": "function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner",
+      "properties": [
+        "STR-TOKE-FORCE"
+      ],
+      "groups_with_tests": [
+        "STR-TOKE-FORCE"
+      ]
+    },
+    {
+      "source": "src/strategies/WstETHEthereumStrategy.sol",
+      "name": "receive",
+      "signature": "receive() external payable",
+      "properties": [
+        "STR-WST-MAIN-RECEIVE"
+      ],
+      "groups_with_tests": [
+        "STR-WST-MAIN-RECEIVE"
+      ]
+    },
+    {
+      "source": "src/adapters/AbstractFeeVault.sol",
+      "name": "setAuthorization",
+      "signature": "function setAuthorization(address account, bool status) external onlyOwner",
+      "properties": [
+        "STR-FEE-AUTH"
+      ],
+      "groups_with_tests": [
+        "STR-FEE-AUTH"
+      ]
+    },
+    {
+      "source": "src/adapters/EulerUSDCAdapter.sol",
+      "name": "price",
+      "signature": "function price() external view returns (uint256)",
+      "properties": [
+        "STR-EULER-PRICE"
+      ],
+      "groups_with_tests": [
+        "STR-EULER-PRICE"
+      ]
+    },
+    {
+      "source": "src/FrxEthEthDualOracleAggregatorAdapter.sol",
+      "name": "decimals",
+      "signature": "function decimals() external pure returns (uint8)",
+      "properties": [
+        "STR-FRX-DECIMALS"
+      ],
+      "groups_with_tests": [
+        "STR-FRX-DECIMALS"
+      ]
+    },
+    {
+      "source": "src/FrxEthEthDualOracleAggregatorAdapter.sol",
+      "name": "latestRoundData",
+      "signature": "function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
+      "properties": [
+        "STR-FRX-DATA"
+      ],
+      "groups_with_tests": [
+        "STR-FRX-DATA"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "setPendingAdmin",
+      "signature": "function setPendingAdmin(address value) external onlyAdmin",
+      "properties": [
+        "TR-ADMIN",
+        "TR-HANDOFF"
+      ],
+      "groups_with_tests": [
+        "TR-ADMIN",
+        "TR-HANDOFF"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "acceptAdmin",
+      "signature": "function acceptAdmin() external",
+      "properties": [
+        "TR-HANDOFF"
+      ],
+      "groups_with_tests": [
+        "TR-HANDOFF"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "setAlchemist",
+      "signature": "function setAlchemist(address value) external onlyAdmin",
+      "properties": [
+        "TR-ADMIN"
+      ],
+      "groups_with_tests": [
+        "TR-ADMIN"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "setDepositCap",
+      "signature": "function setDepositCap(uint256 cap) external onlyAdmin",
+      "properties": [
+        "TR-ADMIN",
+        "TR-CAP"
+      ],
+      "groups_with_tests": [
+        "TR-ADMIN",
+        "TR-CAP"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "setTransmutationFee",
+      "signature": "function setTransmutationFee(uint256 fee) external onlyAdmin",
+      "properties": [
+        "TR-ADMIN",
+        "TR-FEES",
+        "TR-PERSISTENT-INVARIANTS"
+      ],
+      "groups_with_tests": [
+        "TR-ADMIN",
+        "TR-FEES",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "setExitFee",
+      "signature": "function setExitFee(uint256 fee) external onlyAdmin",
+      "properties": [
+        "TR-ADMIN",
+        "TR-FEES",
+        "TR-PERSISTENT-INVARIANTS"
+      ],
+      "groups_with_tests": [
+        "TR-ADMIN",
+        "TR-FEES",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "setTransmutationTime",
+      "signature": "function setTransmutationTime(uint256 time) external onlyAdmin",
+      "properties": [
+        "TR-ADMIN",
+        "TR-TIME",
+        "TR-PERSISTENT-INVARIANTS"
+      ],
+      "groups_with_tests": [
+        "TR-ADMIN",
+        "TR-TIME",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "setProtocolFeeReceiver",
+      "signature": "function setProtocolFeeReceiver(address value) external onlyAdmin",
+      "properties": [
+        "TR-ADMIN",
+        "TR-RECEIVER"
+      ],
+      "groups_with_tests": [
+        "TR-ADMIN",
+        "TR-RECEIVER"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "tokenURI",
+      "signature": "function tokenURI(uint256 id) public view override returns (string memory)",
+      "properties": [
+        "TR-METADATA"
+      ],
+      "groups_with_tests": [
+        "TR-METADATA"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "getPosition",
+      "signature": "function getPosition(uint256 id) external view returns (StakingPosition memory)",
+      "properties": [
+        "TR-GET"
+      ],
+      "groups_with_tests": [
+        "TR-GET"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "createRedemption",
+      "signature": "function createRedemption(uint256 syntheticDepositAmount, address recipient) external",
+      "properties": [
+        "TR-CREATE-GATES",
+        "TR-CREATE-ACCOUNTING",
+        "TR-CREATE-FUZZ",
+        "TR-REENTRY",
+        "TR-PERSISTENT-INVARIANTS"
+      ],
+      "groups_with_tests": [
+        "TR-CREATE-GATES",
+        "TR-CREATE-ACCOUNTING",
+        "TR-CREATE-FUZZ",
+        "TR-REENTRY",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "claimRedemption",
+      "signature": "function claimRedemption(uint256 id) external returns (uint256 claimYield, uint256 feeYield, uint256 syntheticReturned, uint256 syntheticFee)",
+      "properties": [
+        "TR-CLAIM-GATES",
+        "TR-CLAIM-TIME",
+        "TR-CLAIM-BAD-DEBT",
+        "TR-CLAIM-SPLIT",
+        "TR-CLAIM-SETTLEMENT",
+        "TR-CLAIM-CAP",
+        "TR-REENTRY",
+        "TR-PERSISTENT-INVARIANTS"
+      ],
+      "groups_with_tests": [
+        "TR-CLAIM-GATES",
+        "TR-CLAIM-TIME",
+        "TR-CLAIM-BAD-DEBT",
+        "TR-CLAIM-SPLIT",
+        "TR-CLAIM-SETTLEMENT",
+        "TR-CLAIM-CAP",
+        "TR-REENTRY",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "queryGraph",
+      "signature": "function queryGraph(uint256 startBlock, uint256 endBlock) external view returns (uint256)",
+      "properties": [
+        "TR-GRAPH"
+      ],
+      "groups_with_tests": [
+        "TR-GRAPH"
+      ]
+    },
+    {
+      "source": "src/Transmuter.sol",
+      "name": "pokeMatured",
+      "signature": "function pokeMatured(uint256 id) external",
+      "properties": [
+        "TR-CLAIM-CAP",
+        "TR-REENTRY",
+        "TR-PERSISTENT-INVARIANTS"
+      ],
+      "groups_with_tests": [
+        "TR-CLAIM-CAP",
+        "TR-REENTRY",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "source": "src/PerpetualGauge.sol",
+      "name": "vote",
+      "signature": "function vote(uint256 ytId, uint256[] calldata strategyIds, uint256[] calldata weights) external nonReentrant",
+      "properties": [
+        "PG-VOTE-STATE",
+        "PG-POWER-CHANGE",
+        "PG-FUZZ"
+      ],
+      "groups_with_tests": [
+        "PG-VOTE-STATE",
+        "PG-POWER-CHANGE",
+        "PG-FUZZ"
+      ]
+    },
+    {
+      "source": "src/PerpetualGauge.sol",
+      "name": "clearVote",
+      "signature": "function clearVote(uint256 ytId) external nonReentrant",
+      "properties": [
+        "PG-POWER-CHANGE",
+        "PG-CLEAR",
+        "PG-FUZZ"
+      ],
+      "groups_with_tests": [
+        "PG-POWER-CHANGE",
+        "PG-CLEAR",
+        "PG-FUZZ"
+      ]
+    },
+    {
+      "source": "src/PerpetualGauge.sol",
+      "name": "registerNewStrategy",
+      "signature": "function registerNewStrategy(uint256 ytId, uint256 strategyId) external nonReentrant",
+      "properties": [
+        "PG-REGISTER"
+      ],
+      "groups_with_tests": [
+        "PG-REGISTER"
+      ]
+    },
+    {
+      "source": "src/PerpetualGauge.sol",
+      "name": "getCurrentAllocations",
+      "signature": "function getCurrentAllocations(uint256 ytId) public view returns (uint256[] memory strategyIds, uint256[] memory normalizedWeights)",
+      "properties": [
+        "PG-ALLOCATIONS",
+        "PG-FUZZ"
+      ],
+      "groups_with_tests": [
+        "PG-ALLOCATIONS",
+        "PG-FUZZ"
+      ]
+    },
+    {
+      "source": "src/PerpetualGauge.sol",
+      "name": "executeAllocation",
+      "signature": "function executeAllocation(uint256 ytId, uint256 totalIdleAssets) external nonReentrant",
+      "properties": [
+        "PG-EXECUTION",
+        "PG-FUZZ"
+      ],
+      "groups_with_tests": [
+        "PG-EXECUTION",
+        "PG-FUZZ"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol",
+      "name": "transferAdminOwnerShip",
+      "signature": "function transferAdminOwnerShip(address _newAdmin) external onlyAdmin",
+      "properties": [
+        "PP-ADMIN",
+        "PP-HANDOFF"
+      ],
+      "groups_with_tests": [
+        "PP-ADMIN",
+        "PP-HANDOFF"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol",
+      "name": "acceptAdminOwnership",
+      "signature": "function acceptAdminOwnership() external",
+      "properties": [
+        "PP-HANDOFF"
+      ],
+      "groups_with_tests": [
+        "PP-HANDOFF"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol",
+      "name": "setOperator",
+      "signature": "function setOperator(address _operator, bool value) external onlyAdmin",
+      "properties": [
+        "PP-ADMIN",
+        "PP-OPERATOR"
+      ],
+      "groups_with_tests": [
+        "PP-ADMIN",
+        "PP-OPERATOR"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol",
+      "name": "setPermissionedCall",
+      "signature": "function setPermissionedCall(bytes4 sig, bool value) external onlyAdmin",
+      "properties": [
+        "PP-ADMIN"
+      ],
+      "groups_with_tests": [
+        "PP-ADMIN"
+      ]
+    },
+    {
+      "source": "src/utils/PermissionedProxy.sol",
+      "name": "proxy",
+      "signature": "function proxy(address vault, bytes memory data) external payable onlyOperator",
+      "properties": [
+        "PP-PROXY"
+      ],
+      "groups_with_tests": [
+        "PP-PROXY"
+      ]
+    },
+    {
+      "source": "src/utils/Whitelist.sol",
+      "name": "getAddresses",
+      "signature": "function getAddresses() external view returns (address[] memory)",
+      "properties": [
+        "WL-SET"
+      ],
+      "groups_with_tests": [
+        "WL-SET"
+      ]
+    },
+    {
+      "source": "src/utils/Whitelist.sol",
+      "name": "add",
+      "signature": "function add(address caller) external override",
+      "properties": [
+        "WL-ADMIN",
+        "WL-DISABLE",
+        "WL-SET"
+      ],
+      "groups_with_tests": [
+        "WL-ADMIN",
+        "WL-DISABLE",
+        "WL-SET"
+      ]
+    },
+    {
+      "source": "src/utils/Whitelist.sol",
+      "name": "remove",
+      "signature": "function remove(address caller) external override",
+      "properties": [
+        "WL-ADMIN",
+        "WL-DISABLE",
+        "WL-SET"
+      ],
+      "groups_with_tests": [
+        "WL-ADMIN",
+        "WL-DISABLE",
+        "WL-SET"
+      ]
+    },
+    {
+      "source": "src/utils/Whitelist.sol",
+      "name": "disable",
+      "signature": "function disable() external override",
+      "properties": [
+        "WL-ADMIN",
+        "WL-DISABLE"
+      ],
+      "groups_with_tests": [
+        "WL-ADMIN",
+        "WL-DISABLE"
+      ]
+    },
+    {
+      "source": "src/utils/Whitelist.sol",
+      "name": "isWhitelisted",
+      "signature": "function isWhitelisted(address account) external view override returns (bool)",
+      "properties": [
+        "WL-DISABLE",
+        "WL-SET"
+      ],
+      "groups_with_tests": [
+        "WL-DISABLE",
+        "WL-SET"
+      ]
+    },
+    {
+      "source": "src/utils/ZeroXSwapVerifier.sol",
+      "name": "verifySwapCalldata",
+      "signature": "function verifySwapCalldata(bytes calldata calldata_, address owner, address targetToken, uint256 maxSlippageBps) external view returns (bool verified)",
+      "properties": [
+        "ZX-ENTRY",
+        "ZX-FUZZ"
+      ],
+      "groups_with_tests": [
+        "ZX-ENTRY",
+        "ZX-FUZZ"
+      ]
+    },
+    {
+      "source": "src/external/AlEth.sol",
+      "name": "mint",
+      "signature": "function mint(address _recipient, uint256 _amount) external onlyWhitelisted",
+      "properties": [
+        "ALETH-MINT"
+      ],
+      "groups_with_tests": [
+        "ALETH-MINT"
+      ]
+    },
+    {
+      "source": "src/external/AlEth.sol",
+      "name": "setWhitelist",
+      "signature": "function setWhitelist(address _toWhitelist, bool _state) external",
+      "properties": [
+        "ALETH-CONTROLS"
+      ],
+      "groups_with_tests": [
+        "ALETH-CONTROLS"
+      ]
+    },
+    {
+      "source": "src/external/AlEth.sol",
+      "name": "pauseAlchemist",
+      "signature": "function pauseAlchemist(address _toPause, bool _state) external",
+      "properties": [
+        "ALETH-CONTROLS"
+      ],
+      "groups_with_tests": [
+        "ALETH-CONTROLS"
+      ]
+    },
+    {
+      "source": "src/external/AlEth.sol",
+      "name": "setCeiling",
+      "signature": "function setCeiling(address _toSetCeiling, uint256 _ceiling) external",
+      "properties": [
+        "ALETH-CONTROLS"
+      ],
+      "groups_with_tests": [
+        "ALETH-CONTROLS"
+      ]
+    },
+    {
+      "source": "src/external/AlEth.sol",
+      "name": "burn",
+      "signature": "function burn(uint256 amount) public virtual",
+      "properties": [
+        "ALETH-BURN"
+      ],
+      "groups_with_tests": [
+        "ALETH-BURN"
+      ]
+    },
+    {
+      "source": "src/external/AlEth.sol",
+      "name": "burnFrom",
+      "signature": "function burnFrom(address account, uint256 amount) public virtual",
+      "properties": [
+        "ALETH-BURNFROM"
+      ],
+      "groups_with_tests": [
+        "ALETH-BURNFROM"
+      ]
+    },
+    {
+      "source": "src/external/AlEth.sol",
+      "name": "lowerHasMinted",
+      "signature": "function lowerHasMinted(uint256 amount) public onlyWhitelisted",
+      "properties": [
+        "ALETH-LOWER"
+      ],
+      "groups_with_tests": [
+        "ALETH-LOWER"
+      ]
+    }
+  ],
+  "unassociated": []
+}

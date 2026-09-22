@@ -1,0 +1,157 @@
+{
+  "method": "Exact source creation and incremental mutation replay from this agent transcript in an isolated temporary directory. No formatted code was used as reconstruction input.",
+  "source_transcript": "/Users/deepthought/.codex/sessions/2026/09/22/rollout-2026-09-22T11-26-56-01a0c726-fcb8-7972-ab8a-ff3192684f1f.jsonl",
+  "operations": [
+    {
+      "transcript_line": 291,
+      "kind": "create",
+      "path": "test/dinosat/libraries/MathAndCastSymbolic.t.sol"
+    },
+    {
+      "transcript_line": 298,
+      "kind": "create",
+      "path": "test/dinosat/libraries/DinosatAssertions.sol"
+    },
+    {
+      "transcript_line": 298,
+      "kind": "create",
+      "path": "test/dinosat/libraries/AccessAndSetsSymbolic.t.sol"
+    },
+    {
+      "transcript_line": 305,
+      "kind": "create",
+      "path": "test/dinosat/libraries/TokenWrappersSymbolic.t.sol"
+    },
+    {
+      "transcript_line": 305,
+      "kind": "create",
+      "path": "test/dinosat/libraries/StakingGraphSymbolic.t.sol"
+    },
+    {
+      "transcript_line": 319,
+      "kind": "create",
+      "path": "test/dinosat/libraries/PerpetualGaugeSymbolic.t.sol"
+    },
+    {
+      "transcript_line": 326,
+      "kind": "create",
+      "path": "test/dinosat/transmuter/TransmuterSymbolic.t.sol"
+    },
+    {
+      "transcript_line": 333,
+      "kind": "create",
+      "path": "test/dinosat/transmuter/TransmuterReentrySymbolic.t.sol"
+    },
+    {
+      "transcript_line": 333,
+      "kind": "create",
+      "path": "test/dinosat/libraries/ZeroXSwapVerifierSymbolic.t.sol"
+    },
+    {
+      "transcript_line": 341,
+      "kind": "create",
+      "path": "test/dinosat/libraries/NFTMetadataSymbolic.t.sol"
+    },
+    {
+      "transcript_line": 356,
+      "kind": "source_only_python",
+      "sha256": "1735950bea8f1e1eb9bff90e9f444a8994fdaef7cf21945f3f467bf8490336a0"
+    },
+    {
+      "transcript_line": 363,
+      "kind": "source_only_python",
+      "sha256": "e7618a8ed4800714031ffbff061d9944188c9515dadec09ec4a16846ee55de27"
+    },
+    {
+      "transcript_line": 371,
+      "kind": "source_only_python",
+      "sha256": "3aa665e68cce92e035a61ac7a949fa0c5aa15cbab0858560c944ad417884fd02"
+    },
+    {
+      "transcript_line": 482,
+      "kind": "source_only_python",
+      "sha256": "5af2e1ad945c4d324d3d419f15061c8cd162624c792499709e6a9c4c16be8412"
+    },
+    {
+      "transcript_line": 488,
+      "kind": "source_only_python",
+      "sha256": "3169c63e73c0d823447dfe96a423d807ac31dd951dc1d7c4de0e7eb0bc753e72"
+    },
+    {
+      "transcript_line": 496,
+      "kind": "append",
+      "path": "test/dinosat/transmuter/TransmuterReentrySymbolic.t.sol"
+    },
+    {
+      "transcript_line": 524,
+      "kind": "source_only_python",
+      "sha256": "8843d8db4f1a52518bbb19b7728173c362a8350203d4d0eff9c25abaadd7b4cc"
+    }
+  ],
+  "files": [
+    {
+      "file": "test/dinosat/libraries/AccessAndSetsSymbolic.t.sol",
+      "sha256_restored": "ae0909d1be1241c408ab6e6c6e96b01cadca360065bdcefb7faa1a2b1350acb3",
+      "sha256_formatted": "5657504c51c7bce50ea87799f79e027136136a1e2ad2652b8772f4e712faf9ef",
+      "bytes_restored": 14747
+    },
+    {
+      "file": "test/dinosat/libraries/DinosatAssertions.sol",
+      "sha256_restored": "c31945aecb92d6ed6074a757f44d4ca2487d60a74ebebd4bedef2a1a43b41c6b",
+      "sha256_formatted": "bb45e497d7720aac08b5d43d84685cb85e5ac1b7146467ba5ed8d328479148e0",
+      "bytes_restored": 833
+    },
+    {
+      "file": "test/dinosat/libraries/MathAndCastSymbolic.t.sol",
+      "sha256_restored": "e5102f3f7bade472cf8a9a39ad59ee60709e3e11d1fa821446328ccd24dafc37",
+      "sha256_formatted": "19254c9f3b532cd1192a1a3a7ff31f2692eadc51613598519e260f9b2ac67201",
+      "bytes_restored": 12257
+    },
+    {
+      "file": "test/dinosat/libraries/NFTMetadataSymbolic.t.sol",
+      "sha256_restored": "550c1a1bd9077cc81302d6194676587d81137dcd1e30bdb6da42c1bc399bb691",
+      "sha256_formatted": "a4bb65a4f6c39c3c155f9a07bd2958bf6d90f10c4ee382994798c5c7a424a3e6",
+      "bytes_restored": 4342
+    },
+    {
+      "file": "test/dinosat/libraries/PerpetualGaugeSymbolic.t.sol",
+      "sha256_restored": "9e45084efd937c1c325cb76a9fa94ff5eb014d22c8025d6281ac7f68a6dc18ad",
+      "sha256_formatted": "5b92774174fe80c5e52662f9fe79eec4b9b1ee2fddd7e6b771fd2d6a81ffc042",
+      "bytes_restored": 9753
+    },
+    {
+      "file": "test/dinosat/libraries/StakingGraphSymbolic.t.sol",
+      "sha256_restored": "b211fdcc53dc9d66a5f69d5aed4324a6adaf528f8330401832141bd8fa33f304",
+      "sha256_formatted": "805d2b813334a6ec5cbc77ae750bc9c73cb7dde76948ddf61f103bd273d69002",
+      "bytes_restored": 5469
+    },
+    {
+      "file": "test/dinosat/libraries/TokenWrappersSymbolic.t.sol",
+      "sha256_restored": "5e13edf5e0a9d156abb79165737f4bf07fb6c1d86538fc0190791f24e83b9580",
+      "sha256_formatted": "9c379fcbd4dd5d00721e9c33044130e17d858c48589845f81ec0e083bfbf0555",
+      "bytes_restored": 7153
+    },
+    {
+      "file": "test/dinosat/libraries/ZeroXSwapVerifierSymbolic.t.sol",
+      "sha256_restored": "118bff6639940f88d5f0fd0f1b1339cbbe7417b2fa238b3b26d943d8d0924e7e",
+      "sha256_formatted": "ac593a8295e896e74b6106c1d088b4aac1ddcb894e3b2b3360eb82414be9cbfb",
+      "bytes_restored": 10788
+    },
+    {
+      "file": "test/dinosat/transmuter/TransmuterReentrySymbolic.t.sol",
+      "sha256_restored": "91d732c0027334d77550929b410aaa168ca9d3e25f1df24665efbd4ed47597b3",
+      "sha256_formatted": "f00b625d6a11513acb82e1679cdba04162055d291e6030b82d00e0c422ff4537",
+      "bytes_restored": 6196
+    },
+    {
+      "file": "test/dinosat/transmuter/TransmuterSymbolic.t.sol",
+      "sha256_restored": "83cd05dce058a47fb5cf8139458e4cac476de2a2ad972fef7627b0e8da26008d",
+      "sha256_formatted": "7ec930df159ab940e130083ec2971766e0f06e43a80cecaeaf9aa75559af0c99",
+      "bytes_restored": 21939
+    }
+  ],
+  "tests_matched": 111,
+  "all_pre_format_test_lines_match": true,
+  "formatter_run": false,
+  "build_run": false
+}

@@ -1,0 +1,7 @@
+{
+  "mode": "STE-flavored",
+  "metric": "violations_per_100_words",
+  "DINOSAT_PLAN.md": 1.5,
+  "CERTORA_REUSE.md": 2.12,
+  "PROOF_OBLIGATIONS.md": 0.41
+}

@@ -1,0 +1,4 @@
+Warning: Found unknown `exclude` config for profile `default` defined in foundry.toml.
+Warning: Found unknown `exclude` config for profile `lite` defined in foundry.toml.
+Warning: Found unknown `fuzz_runs` config for profile `lite` defined in foundry.toml.
+Warning: Found unknown `exclude` config for profile `test` defined in foundry.toml.

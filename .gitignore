@@ -2,6 +2,8 @@
 /target
 /out
 /cache
+/out-halmos
+/cache-halmos
 /coverage
 lcov.info
 .DS_Store

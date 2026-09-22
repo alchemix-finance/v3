@@ -1,0 +1,13 @@
+{
+  "test/dinosat/core/AlchemistArithmeticLemmas.t.sol": "0c47742f56c60e2a59c0097edd554b46d670a7ca3c1b657c5b46e6f204f48524",
+  "test/dinosat/core/AlchemistEarmarkSymbolic.t.sol": "0c4d216a2298f7d2c6451036efc4c2214bfd7a60d85a24dff16deefada7c2c91",
+  "test/dinosat/core/AlchemistAdminSymbolic.t.sol": "c46408048bbcfe4db9922212e32363114ce3a6a54371c16c7ddbab355679f238",
+  "test/dinosat/core/AlchemistWeightLemmas.t.sol": "5dcc22e5cc6afe8860dd04eae246aed3add8d20939df801e2f5df77240061ec6",
+  "test/dinosat/core/AlchemistDepositBorrowSymbolic.t.sol": "d159d0c1096a19589c12c8473da0b9bb2ed917164d6fa4b4c97dc46f411eb596",
+  "test/dinosat/core/AlchemistLiquidationSymbolic.t.sol": "28cc2f2ddef5a2be569b079ff8a880560e69fae34788bba344fb68fc9bd49292",
+  "test/dinosat/core/AlchemistRouterSymbolic.t.sol": "0f3f30683f4df69133c11f2893ebf809c2f8f57c7171c84cde2994952a530c2b",
+  "test/dinosat/core/AlchemistNormalizationSymbolic.t.sol": "3d870100bdd50f3fca28d5176a3124ff096f2dba315c6d61672c6f3eef51d36c",
+  "test/dinosat/core/AlchemistRouterCallbacksSymbolic.t.sol": "08b8bb00dc9fe125d9867e7ba5353a08a96dcb2a9045f42e89776788452fcb2c",
+  "test/dinosat/integration/V3IntegrationSymbolic.t.sol": "8937ce015b39e196eaf5837db7048f6353aa1c9b0bd6671d2662001374770ad0",
+  "test/dinosat/common/CoreFixture.sol": "781bfbf350f65d87722ce0daa14fae590ded1b4776d0639b76735bad253be7bd"
+}

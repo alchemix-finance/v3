@@ -1,0 +1,52 @@
+[
+  {
+    "path": "test/dinosat/governance/GovernanceAlTokenAccess.t.sol",
+    "sha256": "429ee081389216a4d02aa338856ab4a540887a4cbe0b11b893e19ba40ad43647",
+    "lines": 150
+  },
+  {
+    "path": "test/dinosat/governance/GovernanceAlTokenFlash.t.sol",
+    "sha256": "6d1b90d7685e7913b4c9c3db682706485a2040d9b0010cf6b1fbff97bae96afb",
+    "lines": 83
+  },
+  {
+    "path": "test/dinosat/governance/GovernanceAlTokenPermit.t.sol",
+    "sha256": "9c819f315ea74fd3fc47b45d2c5b7f44361fcbcbca2901e8b899904e278eb4c3",
+    "lines": 46
+  },
+  {
+    "path": "test/dinosat/governance/GovernanceAlTokenState.t.sol",
+    "sha256": "5e2dcd91d9eb052b60505d19ab7e2f32bdee5cd9cd77c4dec77142f964fcf605",
+    "lines": 214
+  },
+  {
+    "path": "test/dinosat/governance/GovernanceCaps.t.sol",
+    "sha256": "20499371724864551c6861ef29e4f1b3e2ad5c399b425f531cff2bc2b9a38230",
+    "lines": 340
+  },
+  {
+    "path": "test/dinosat/governance/GovernanceFixtures.sol",
+    "sha256": "09575cb487cd2b2ba669dbf16615457f11a4cc6a0871f35546e65e5a8708e174",
+    "lines": 84
+  },
+  {
+    "path": "test/dinosat/governance/GovernancePermissions.t.sol",
+    "sha256": "28f3a6b69f08e84ec3f67e0177bfadf59db51acbc52acf6705f4195af8a95480",
+    "lines": 527
+  },
+  {
+    "path": "test/dinosat/governance/GovernancePosition.t.sol",
+    "sha256": "7ee17a2b82477ee2a666f55c7faf47276a0828bd007a94b8f901d073ea9817b4",
+    "lines": 258
+  },
+  {
+    "path": "test/dinosat/governance/GovernanceRoles.t.sol",
+    "sha256": "8319017b825d785c38e621a0c6d702a46f516aefdc28f6a2dce929d4e6001e62",
+    "lines": 97
+  },
+  {
+    "path": "test/dinosat/governance/GovernanceVaults.t.sol",
+    "sha256": "e213f2d1048d1aea25e6539adc344cf88facbc790fefd3bd32869860db08e618",
+    "lines": 362
+  }
+]

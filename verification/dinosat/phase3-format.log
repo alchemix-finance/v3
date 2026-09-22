@@ -1,0 +1,54 @@
+Warning: Found unknown `exclude` config for profile `default` defined in foundry.toml.
+Warning: Found unknown `exclude` config for profile `lite` defined in foundry.toml.
+Warning: Found unknown `fuzz_runs` config for profile `lite` defined in foundry.toml.
+Warning: Found unknown `exclude` config for profile `test` defined in foundry.toml.
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/core/AlchemistArithmeticLemmas.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/StrategyCandidateFailures.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/core/AlchemistWeightLemmas.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/common/CoreFixture.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/core/AlchemistRouterSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/core/AlchemistEarmarkSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/libraries/StakingGraphSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/core/AlchemistDepositBorrowSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/EtherfiStrategySymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/integration/V3IntegrationSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/OraclePricingLemmas.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/ERC4626StrategySymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/libraries/ZeroXSwapVerifierSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/AdaptersSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/core/AlchemistLiquidationSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/core/AlchemistAdminSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/core/AlchemistNormalizationSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/SiUSDStrategySymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/TokeStrategySymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/governance/GovernanceVaults.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/libraries/AccessAndSetsSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/core/AlchemistRouterCallbacksSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/libraries/DinosatAssertions.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/StrategyHarnesses.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/governance/GovernanceAlTokenPermit.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/StakeDAOStrategySymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/AaveStrategySymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/libraries/PerpetualGaugeSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/YearnStrategySymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/libraries/NFTMetadataSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/StrategyArithmeticLemmas.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/StrategyAccessSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/governance/GovernanceRoles.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/WstStrategiesSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/StrategyFixtures.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/libraries/TokenWrappersSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/StrategyMocks.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/MYTBaseSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/libraries/MathAndCastSymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/governance/GovernanceFixtures.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/governance/GovernanceAlTokenFlash.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/MoonwellStrategySymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/strategies/FraxStrategySymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/governance/GovernanceAlTokenAccess.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/governance/GovernanceAlTokenState.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/transmuter/TransmuterReentrySymbolic.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/governance/GovernancePermissions.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/governance/GovernancePosition.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/governance/GovernanceCaps.t.sol
+Formatted /Users/deepthought/Desktop/dev/v3/test/dinosat/transmuter/TransmuterSymbolic.t.sol

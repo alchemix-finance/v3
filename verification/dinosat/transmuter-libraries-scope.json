@@ -1,0 +1,4330 @@
+{
+  "owner": "dinosat_transmuter_libraries_scope",
+  "phase": "2 - source analysis only",
+  "root": "/Users/deepthought/Desktop/dev/v3",
+  "branch": "formal-verification-ai-run",
+  "files": [
+    {
+      "path": "src/Transmuter.sol",
+      "lines": 362,
+      "pragma": "^0.8.28",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": ""
+    },
+    {
+      "path": "src/PerpetualGauge.sol",
+      "lines": 176,
+      "pragma": "^0.8.28",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": "No production source caller found. Registration TODO leaves strategyList empty. Retain full scope, distinguish reachable and storage-seeded states."
+    },
+    {
+      "path": "src/libraries/FixedPointMath.sol",
+      "lines": 287,
+      "pragma": "^0.8.23",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": ""
+    },
+    {
+      "path": "src/libraries/NFTMetadataGenerator.sol",
+      "lines": 153,
+      "pragma": "0.8.28",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": ""
+    },
+    {
+      "path": "src/libraries/SafeCast.sol",
+      "lines": 46,
+      "pragma": ">=0.5.0",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": ""
+    },
+    {
+      "path": "src/libraries/SafeERC20.sol",
+      "lines": 84,
+      "pragma": ">=0.8.4",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": ""
+    },
+    {
+      "path": "src/libraries/Sets.sol",
+      "lines": 68,
+      "pragma": "^0.8.23",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": ""
+    },
+    {
+      "path": "src/libraries/StakingGraph.sol",
+      "lines": 208,
+      "pragma": "0.8.28",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": ""
+    },
+    {
+      "path": "src/libraries/TokenUtils.sol",
+      "lines": 143,
+      "pragma": "^0.8.23",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": ""
+    },
+    {
+      "path": "src/utils/PermissionedProxy.sol",
+      "lines": 73,
+      "pragma": "0.8.28",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": ""
+    },
+    {
+      "path": "src/utils/Whitelist.sol",
+      "lines": 64,
+      "pragma": "^0.8.13",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": ""
+    },
+    {
+      "path": "src/utils/ZeroXSwapVerifier.sol",
+      "lines": 301,
+      "pragma": "^0.8.28",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": "No production source importer found outside tests. Parsers contain TODO placeholders. Included in verification source scope."
+    },
+    {
+      "path": "src/external/AlEth.sol",
+      "lines": 123,
+      "pragma": "^0.8.28",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": "Explicit invariant-test token at line13. Included because default scope includes src/external. Do not use it as evidence that production mint permissions are safe."
+    },
+    {
+      "path": "src/base/ErrorMessages.sol",
+      "lines": 23,
+      "pragma": ">=0.8.4",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": "Error declarations only, no executable functions."
+    },
+    {
+      "path": "src/base/Errors.sol",
+      "lines": 26,
+      "pragma": "^0.8.23",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": "Error declarations only, no executable functions."
+    },
+    {
+      "path": "src/base/TransmuterErrors.sol",
+      "lines": 22,
+      "pragma": "0.8.28",
+      "scope": "default in-scope source",
+      "read_complete": true,
+      "notes": "Error declarations only, no executable functions."
+    }
+  ],
+  "functions": [
+    {
+      "id": "Transmuter.constructor@82",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "constructor",
+      "line": 82,
+      "end_line": 95,
+      "signature": "constructor(ITransmuter.TransmuterInitializationParams memory params) ERC721(\"Alchemix V3 Transmuter\", \"TRNSMTR\")",
+      "visibility": "constructor",
+      "modifiers": [],
+      "properties": [
+        "TR-CONSTRUCTOR"
+      ]
+    },
+    {
+      "id": "Transmuter.setPendingAdmin@98",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "setPendingAdmin",
+      "line": 98,
+      "end_line": 102,
+      "signature": "function setPendingAdmin(address value) external onlyAdmin",
+      "visibility": "external",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "TR-ADMIN",
+        "TR-HANDOFF"
+      ]
+    },
+    {
+      "id": "Transmuter.acceptAdmin@105",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "acceptAdmin",
+      "line": 105,
+      "end_line": 117,
+      "signature": "function acceptAdmin() external",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "TR-HANDOFF"
+      ]
+    },
+    {
+      "id": "Transmuter.setAlchemist@120",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "setAlchemist",
+      "line": 120,
+      "end_line": 124,
+      "signature": "function setAlchemist(address value) external onlyAdmin",
+      "visibility": "external",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "TR-ADMIN"
+      ]
+    },
+    {
+      "id": "Transmuter.setDepositCap@127",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "setDepositCap",
+      "line": 127,
+      "end_line": 132,
+      "signature": "function setDepositCap(uint256 cap) external onlyAdmin",
+      "visibility": "external",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "TR-ADMIN",
+        "TR-CAP"
+      ]
+    },
+    {
+      "id": "Transmuter.setTransmutationFee@135",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "setTransmutationFee",
+      "line": 135,
+      "end_line": 140,
+      "signature": "function setTransmutationFee(uint256 fee) external onlyAdmin",
+      "visibility": "external",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "TR-ADMIN",
+        "TR-FEES",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "id": "Transmuter.setExitFee@143",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "setExitFee",
+      "line": 143,
+      "end_line": 148,
+      "signature": "function setExitFee(uint256 fee) external onlyAdmin",
+      "visibility": "external",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "TR-ADMIN",
+        "TR-FEES",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "id": "Transmuter.setTransmutationTime@151",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "setTransmutationTime",
+      "line": 151,
+      "end_line": 157,
+      "signature": "function setTransmutationTime(uint256 time) external onlyAdmin",
+      "visibility": "external",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "TR-ADMIN",
+        "TR-TIME",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "id": "Transmuter.setProtocolFeeReceiver@160",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "setProtocolFeeReceiver",
+      "line": 160,
+      "end_line": 164,
+      "signature": "function setProtocolFeeReceiver(address value) external onlyAdmin",
+      "visibility": "external",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "TR-ADMIN",
+        "TR-RECEIVER"
+      ]
+    },
+    {
+      "id": "Transmuter.tokenURI@166",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "tokenURI",
+      "line": 166,
+      "end_line": 168,
+      "signature": "function tokenURI(uint256 id) public view override returns (string memory)",
+      "visibility": "public",
+      "modifiers": [
+        "override"
+      ],
+      "properties": [
+        "TR-METADATA"
+      ]
+    },
+    {
+      "id": "Transmuter.getPosition@171",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "getPosition",
+      "line": 171,
+      "end_line": 173,
+      "signature": "function getPosition(uint256 id) external view returns (StakingPosition memory)",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "TR-GET"
+      ]
+    },
+    {
+      "id": "Transmuter.createRedemption@176",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "createRedemption",
+      "line": 176,
+      "end_line": 206,
+      "signature": "function createRedemption(uint256 syntheticDepositAmount, address recipient) external",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "TR-CREATE-GATES",
+        "TR-CREATE-ACCOUNTING",
+        "TR-CREATE-FUZZ",
+        "TR-REENTRY",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "id": "Transmuter.claimRedemption@209",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "claimRedemption",
+      "line": 209,
+      "end_line": 309,
+      "signature": "function claimRedemption(uint256 id) external returns (uint256 claimYield, uint256 feeYield, uint256 syntheticReturned, uint256 syntheticFee)",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "TR-CLAIM-GATES",
+        "TR-CLAIM-TIME",
+        "TR-CLAIM-BAD-DEBT",
+        "TR-CLAIM-SPLIT",
+        "TR-CLAIM-SETTLEMENT",
+        "TR-CLAIM-CAP",
+        "TR-REENTRY",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "id": "Transmuter.queryGraph@312",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "queryGraph",
+      "line": 312,
+      "end_line": 319,
+      "signature": "function queryGraph(uint256 startBlock, uint256 endBlock) external view returns (uint256)",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "TR-GRAPH"
+      ]
+    },
+    {
+      "id": "Transmuter.pokeMatured@322",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "pokeMatured",
+      "line": 322,
+      "end_line": 338,
+      "signature": "function pokeMatured(uint256 id) external",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "TR-CLAIM-CAP",
+        "TR-REENTRY",
+        "TR-PERSISTENT-INVARIANTS"
+      ]
+    },
+    {
+      "id": "Transmuter._updateStakingGraph@341",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "_updateStakingGraph",
+      "line": 341,
+      "end_line": 343,
+      "signature": "function _updateStakingGraph(int256 amount, uint256 blocks) private",
+      "visibility": "private",
+      "modifiers": [],
+      "properties": [
+        "TR-CREATE-ACCOUNTING",
+        "TR-GRAPH"
+      ]
+    },
+    {
+      "id": "Transmuter._checkArgument@348",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "_checkArgument",
+      "line": 348,
+      "end_line": 352,
+      "signature": "function _checkArgument(bool expression) internal pure",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "TR-ADMIN"
+      ]
+    },
+    {
+      "id": "Transmuter._checkState@357",
+      "file": "src/Transmuter.sol",
+      "contract": "Transmuter",
+      "name": "_checkState",
+      "line": 357,
+      "end_line": 361,
+      "signature": "function _checkState(bool expression) internal pure",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "TR-HANDOFF"
+      ]
+    },
+    {
+      "id": "PerpetualGauge.constructor@39",
+      "file": "src/PerpetualGauge.sol",
+      "contract": "PerpetualGauge",
+      "name": "constructor",
+      "line": 39,
+      "end_line": 44,
+      "signature": "constructor(address _stratClassifier, address _allocatorProxy, address _votingToken)",
+      "visibility": "constructor",
+      "modifiers": [],
+      "properties": [
+        "PG-CONSTRUCTOR"
+      ]
+    },
+    {
+      "id": "PerpetualGauge.vote@46",
+      "file": "src/PerpetualGauge.sol",
+      "contract": "PerpetualGauge",
+      "name": "vote",
+      "line": 46,
+      "end_line": 92,
+      "signature": "function vote(uint256 ytId, uint256[] calldata strategyIds, uint256[] calldata weights) external nonReentrant",
+      "visibility": "external",
+      "modifiers": [
+        "nonReentrant"
+      ],
+      "properties": [
+        "PG-VOTE-STATE",
+        "PG-POWER-CHANGE",
+        "PG-FUZZ"
+      ]
+    },
+    {
+      "id": "PerpetualGauge.clearVote@94",
+      "file": "src/PerpetualGauge.sol",
+      "contract": "PerpetualGauge",
+      "name": "clearVote",
+      "line": 94,
+      "end_line": 108,
+      "signature": "function clearVote(uint256 ytId) external nonReentrant",
+      "visibility": "external",
+      "modifiers": [
+        "nonReentrant"
+      ],
+      "properties": [
+        "PG-POWER-CHANGE",
+        "PG-CLEAR",
+        "PG-FUZZ"
+      ]
+    },
+    {
+      "id": "PerpetualGauge.registerNewStrategy@110",
+      "file": "src/PerpetualGauge.sol",
+      "contract": "PerpetualGauge",
+      "name": "registerNewStrategy",
+      "line": 110,
+      "end_line": 113,
+      "signature": "function registerNewStrategy(uint256 ytId, uint256 strategyId) external nonReentrant",
+      "visibility": "external",
+      "modifiers": [
+        "nonReentrant"
+      ],
+      "properties": [
+        "PG-REGISTER"
+      ]
+    },
+    {
+      "id": "PerpetualGauge.getCurrentAllocations@115",
+      "file": "src/PerpetualGauge.sol",
+      "contract": "PerpetualGauge",
+      "name": "getCurrentAllocations",
+      "line": 115,
+      "end_line": 136,
+      "signature": "function getCurrentAllocations(uint256 ytId) public view returns (uint256[] memory strategyIds, uint256[] memory normalizedWeights)",
+      "visibility": "public",
+      "modifiers": [],
+      "properties": [
+        "PG-ALLOCATIONS",
+        "PG-FUZZ"
+      ]
+    },
+    {
+      "id": "PerpetualGauge.executeAllocation@138",
+      "file": "src/PerpetualGauge.sol",
+      "contract": "PerpetualGauge",
+      "name": "executeAllocation",
+      "line": 138,
+      "end_line": 172,
+      "signature": "function executeAllocation(uint256 ytId, uint256 totalIdleAssets) external nonReentrant",
+      "visibility": "external",
+      "modifiers": [
+        "nonReentrant"
+      ],
+      "properties": [
+        "PG-EXECUTION",
+        "PG-FUZZ"
+      ]
+    },
+    {
+      "id": "FixedPointMath.encode@30",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "encode",
+      "line": 30,
+      "end_line": 32,
+      "signature": "function encode(uint256 value) internal pure returns (Number memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-ENCODE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.encodeRaw@41",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "encodeRaw",
+      "line": 41,
+      "end_line": 43,
+      "signature": "function encodeRaw(uint256 value) internal pure returns (uint256)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-ENCODE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.max@51",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "max",
+      "line": 51,
+      "end_line": 53,
+      "signature": "function max() internal pure returns (Number memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-COMPARE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.rational@62",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "rational",
+      "line": 62,
+      "end_line": 65,
+      "signature": "function rational(uint256 n, uint256 d) internal pure returns (Number memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-ENCODE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.add@74",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "add",
+      "line": 74,
+      "end_line": 76,
+      "signature": "function add(Number memory self, Number memory value) internal pure returns (Number memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-ADDSUB"
+      ]
+    },
+    {
+      "id": "FixedPointMath.add@85",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "add",
+      "line": 85,
+      "end_line": 87,
+      "signature": "function add(Number memory self, uint256 value) internal pure returns (Number memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-ADDSUB"
+      ]
+    },
+    {
+      "id": "FixedPointMath.sub@96",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "sub",
+      "line": 96,
+      "end_line": 98,
+      "signature": "function sub(Number memory self, Number memory value) internal pure returns (Number memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-ADDSUB"
+      ]
+    },
+    {
+      "id": "FixedPointMath.sub@107",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "sub",
+      "line": 107,
+      "end_line": 109,
+      "signature": "function sub(Number memory self, uint256 value) internal pure returns (Number memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-ADDSUB"
+      ]
+    },
+    {
+      "id": "FixedPointMath.mul@118",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "mul",
+      "line": 118,
+      "end_line": 120,
+      "signature": "function mul(Number memory self, Number memory number) internal pure returns (Number memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-MULDIV-SIMPLE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.mul@129",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "mul",
+      "line": 129,
+      "end_line": 131,
+      "signature": "function mul(Number memory self, uint256 value) internal pure returns (Number memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-MULDIV-SIMPLE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.div@140",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "div",
+      "line": 140,
+      "end_line": 142,
+      "signature": "function div(Number memory self, uint256 value) internal pure returns (Number memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-MULDIV-SIMPLE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.mulDiv@145",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "mulDiv",
+      "line": 145,
+      "end_line": 198,
+      "signature": "function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-MULDIV-BOUNDED",
+        "FM-MULDIV-WIDE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.mulDivUp@201",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "mulDivUp",
+      "line": 201,
+      "end_line": 209,
+      "signature": "function mulDivUp(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-MULDIV-BOUNDED",
+        "FM-MULDIV-WIDE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.cmp@220",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "cmp",
+      "line": 220,
+      "end_line": 230,
+      "signature": "function cmp(Number memory self, Number memory value) internal pure returns (int256)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-COMPARE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.equals@240",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "equals",
+      "line": 240,
+      "end_line": 242,
+      "signature": "function equals(Number memory self, Number memory value) internal pure returns (bool)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-COMPARE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.truncate@249",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "truncate",
+      "line": 249,
+      "end_line": 251,
+      "signature": "function truncate(Number memory self) internal pure returns (uint256)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-MULDIV-SIMPLE"
+      ]
+    },
+    {
+      "id": "FixedPointMath.mulQ128@254",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "mulQ128",
+      "line": 254,
+      "end_line": 272,
+      "signature": "function mulQ128(uint256 aQ, uint256 bQ) internal pure returns (uint256 z)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-QMUL"
+      ]
+    },
+    {
+      "id": "FixedPointMath.divQ128@274",
+      "file": "src/libraries/FixedPointMath.sol",
+      "contract": "FixedPointMath",
+      "name": "divQ128",
+      "line": 274,
+      "end_line": 286,
+      "signature": "function divQ128(uint256 numerQ128, uint256 denomQ128) internal pure returns (uint256)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "FM-QDIV"
+      ]
+    },
+    {
+      "id": "NFTMetadataGenerator.generateSVG@22",
+      "file": "src/libraries/NFTMetadataGenerator.sol",
+      "contract": "NFTMetadataGenerator",
+      "name": "generateSVG",
+      "line": 22,
+      "end_line": 39,
+      "signature": "function generateSVG(uint256 tokenId, string memory title) internal pure returns (string memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "NFT-SVG"
+      ]
+    },
+    {
+      "id": "NFTMetadataGenerator._generateTokenIdText@41",
+      "file": "src/libraries/NFTMetadataGenerator.sol",
+      "contract": "NFTMetadataGenerator",
+      "name": "_generateTokenIdText",
+      "line": 41,
+      "end_line": 76,
+      "signature": "function _generateTokenIdText(uint256 tokenId) private pure returns (string memory)",
+      "visibility": "private",
+      "modifiers": [],
+      "properties": [
+        "NFT-SVG"
+      ]
+    },
+    {
+      "id": "NFTMetadataGenerator._generateLogo@78",
+      "file": "src/libraries/NFTMetadataGenerator.sol",
+      "contract": "NFTMetadataGenerator",
+      "name": "_generateLogo",
+      "line": 78,
+      "end_line": 87,
+      "signature": "function _generateLogo() private pure returns (string memory)",
+      "visibility": "private",
+      "modifiers": [],
+      "properties": [
+        "NFT-SVG"
+      ]
+    },
+    {
+      "id": "NFTMetadataGenerator._generateLogoWordmark@89",
+      "file": "src/libraries/NFTMetadataGenerator.sol",
+      "contract": "NFTMetadataGenerator",
+      "name": "_generateLogoWordmark",
+      "line": 89,
+      "end_line": 104,
+      "signature": "function _generateLogoWordmark() private pure returns (string memory)",
+      "visibility": "private",
+      "modifiers": [],
+      "properties": [
+        "NFT-SVG"
+      ]
+    },
+    {
+      "id": "NFTMetadataGenerator._generateLogoMark@106",
+      "file": "src/libraries/NFTMetadataGenerator.sol",
+      "contract": "NFTMetadataGenerator",
+      "name": "_generateLogoMark",
+      "line": 106,
+      "end_line": 119,
+      "signature": "function _generateLogoMark() private pure returns (string memory)",
+      "visibility": "private",
+      "modifiers": [],
+      "properties": [
+        "NFT-SVG"
+      ]
+    },
+    {
+      "id": "NFTMetadataGenerator.generateJSONString@127",
+      "file": "src/libraries/NFTMetadataGenerator.sol",
+      "contract": "NFTMetadataGenerator",
+      "name": "generateJSONString",
+      "line": 127,
+      "end_line": 140,
+      "signature": "function generateJSONString(uint256 tokenId, string memory svg) internal pure returns (string memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "NFT-JSON"
+      ]
+    },
+    {
+      "id": "NFTMetadataGenerator.generateTokenURI@148",
+      "file": "src/libraries/NFTMetadataGenerator.sol",
+      "contract": "NFTMetadataGenerator",
+      "name": "generateTokenURI",
+      "line": 148,
+      "end_line": 152,
+      "signature": "function generateTokenURI(uint256 tokenId, string memory title) internal pure returns (string memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "NFT-JSON"
+      ]
+    },
+    {
+      "id": "SafeCast.toInt256@12",
+      "file": "src/libraries/SafeCast.sol",
+      "contract": "SafeCast",
+      "name": "toInt256",
+      "line": 12,
+      "end_line": 17,
+      "signature": "function toInt256(uint256 y) internal pure returns (int256 z)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SC-toInt256"
+      ]
+    },
+    {
+      "id": "SafeCast.toUint256@22",
+      "file": "src/libraries/SafeCast.sol",
+      "contract": "SafeCast",
+      "name": "toUint256",
+      "line": 22,
+      "end_line": 27,
+      "signature": "function toUint256(int256 y) internal pure returns (uint256 z)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SC-toUint256"
+      ]
+    },
+    {
+      "id": "SafeCast.uint256ToUint128@32",
+      "file": "src/libraries/SafeCast.sol",
+      "contract": "SafeCast",
+      "name": "uint256ToUint128",
+      "line": 32,
+      "end_line": 37,
+      "signature": "function uint256ToUint128(uint256 y) internal pure returns (uint128 z)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SC-uint256ToUint128"
+      ]
+    },
+    {
+      "id": "SafeCast.uint128ToUint256@42",
+      "file": "src/libraries/SafeCast.sol",
+      "contract": "SafeCast",
+      "name": "uint128ToUint256",
+      "line": 42,
+      "end_line": 45,
+      "signature": "function uint128ToUint256(uint128 y) internal pure returns (uint256 z)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SC-uint128ToUint256"
+      ]
+    },
+    {
+      "id": "SafeERC20.expectDecimals@26",
+      "file": "src/libraries/SafeERC20.sol",
+      "contract": "SafeERC20",
+      "name": "expectDecimals",
+      "line": 26,
+      "end_line": 34,
+      "signature": "function expectDecimals(address token) internal view returns (uint8)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SafeERC20-READ"
+      ]
+    },
+    {
+      "id": "SafeERC20.safeTransfer@44",
+      "file": "src/libraries/SafeERC20.sol",
+      "contract": "SafeERC20",
+      "name": "safeTransfer",
+      "line": 44,
+      "end_line": 50,
+      "signature": "function safeTransfer(address token, address recipient, uint256 amount) internal",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SafeERC20-WRITE",
+        "SafeERC20-CODE"
+      ]
+    },
+    {
+      "id": "SafeERC20.safeApprove@60",
+      "file": "src/libraries/SafeERC20.sol",
+      "contract": "SafeERC20",
+      "name": "safeApprove",
+      "line": 60,
+      "end_line": 66,
+      "signature": "function safeApprove(address token, address spender, uint256 value) internal",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SafeERC20-WRITE",
+        "SafeERC20-CODE"
+      ]
+    },
+    {
+      "id": "SafeERC20.safeTransferFrom@77",
+      "file": "src/libraries/SafeERC20.sol",
+      "contract": "SafeERC20",
+      "name": "safeTransferFrom",
+      "line": 77,
+      "end_line": 83,
+      "signature": "function safeTransferFrom(address token, address owner, address recipient, uint256 amount) internal",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SafeERC20-WRITE",
+        "SafeERC20-CODE"
+      ]
+    },
+    {
+      "id": "Sets.add@20",
+      "file": "src/libraries/Sets.sol",
+      "contract": "Sets",
+      "name": "add",
+      "line": 20,
+      "end_line": 27,
+      "signature": "function add(AddressSet storage self, address value) internal returns (bool)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SETS-ADD"
+      ]
+    },
+    {
+      "id": "Sets.remove@35",
+      "file": "src/libraries/Sets.sol",
+      "contract": "Sets",
+      "name": "remove",
+      "line": 35,
+      "end_line": 57,
+      "signature": "function remove(AddressSet storage self, address value) internal returns (bool)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SETS-REMOVE"
+      ]
+    },
+    {
+      "id": "Sets.contains@65",
+      "file": "src/libraries/Sets.sol",
+      "contract": "Sets",
+      "name": "contains",
+      "line": 65,
+      "end_line": 67,
+      "signature": "function contains(AddressSet storage self, address value) internal view returns (bool)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SETS-ADD",
+        "SETS-REMOVE"
+      ]
+    },
+    {
+      "id": "StakingGraph.addStake@53",
+      "file": "src/libraries/StakingGraph.sol",
+      "contract": "StakingGraph",
+      "name": "addStake",
+      "line": 53,
+      "end_line": 101,
+      "signature": "function addStake(Graph storage g, int256 amount, uint256 start, uint256 duration) internal",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SG-ADD-QUERY",
+        "SG-BOUNDS",
+        "SG-HISTORY"
+      ]
+    },
+    {
+      "id": "StakingGraph.queryStake@111",
+      "file": "src/libraries/StakingGraph.sol",
+      "contract": "StakingGraph",
+      "name": "queryStake",
+      "line": 111,
+      "end_line": 136,
+      "signature": "function queryStake(Graph storage g, uint256 start, uint256 end) internal view returns (int256)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "SG-ADD-QUERY",
+        "SG-BOUNDS",
+        "SG-HISTORY"
+      ]
+    },
+    {
+      "id": "StakingGraph.update@144",
+      "file": "src/libraries/StakingGraph.sol",
+      "contract": "StakingGraph",
+      "name": "update",
+      "line": 144,
+      "end_line": 174,
+      "signature": "function update(mapping(uint256 => uint256) storage graph, uint256 index, uint256 treeSize, int256 delta, int256 deltaProd) private",
+      "visibility": "private",
+      "modifiers": [],
+      "properties": [
+        "SG-ADD-QUERY",
+        "SG-PACK",
+        "SG-HISTORY"
+      ]
+    },
+    {
+      "id": "StakingGraph.query@182",
+      "file": "src/libraries/StakingGraph.sol",
+      "contract": "StakingGraph",
+      "name": "query",
+      "line": 182,
+      "end_line": 207,
+      "signature": "function query(mapping(uint256 => uint256) storage graph, uint256 index) private view returns (int256 sum, int256 sumProd)",
+      "visibility": "private",
+      "modifiers": [],
+      "properties": [
+        "SG-ADD-QUERY",
+        "SG-PACK",
+        "SG-HISTORY"
+      ]
+    },
+    {
+      "id": "TokenUtils.expectDecimals@26",
+      "file": "src/libraries/TokenUtils.sol",
+      "contract": "TokenUtils",
+      "name": "expectDecimals",
+      "line": 26,
+      "end_line": 34,
+      "signature": "function expectDecimals(address token) internal view returns (uint8)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "TokenUtils-READ"
+      ]
+    },
+    {
+      "id": "TokenUtils.safeBalanceOf@44",
+      "file": "src/libraries/TokenUtils.sol",
+      "contract": "TokenUtils",
+      "name": "safeBalanceOf",
+      "line": 44,
+      "end_line": 52,
+      "signature": "function safeBalanceOf(address token, address account) internal view returns (uint256)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "TokenUtils-READ"
+      ]
+    },
+    {
+      "id": "TokenUtils.safeTransfer@61",
+      "file": "src/libraries/TokenUtils.sol",
+      "contract": "TokenUtils",
+      "name": "safeTransfer",
+      "line": 61,
+      "end_line": 67,
+      "signature": "function safeTransfer(address token, address recipient, uint256 amount) internal",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "TokenUtils-WRITE",
+        "TokenUtils-CODE"
+      ]
+    },
+    {
+      "id": "TokenUtils.safeApprove@76",
+      "file": "src/libraries/TokenUtils.sol",
+      "contract": "TokenUtils",
+      "name": "safeApprove",
+      "line": 76,
+      "end_line": 82,
+      "signature": "function safeApprove(address token, address spender, uint256 value) internal",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "TokenUtils-WRITE",
+        "TokenUtils-CODE"
+      ]
+    },
+    {
+      "id": "TokenUtils.safeTransferFrom@92",
+      "file": "src/libraries/TokenUtils.sol",
+      "contract": "TokenUtils",
+      "name": "safeTransferFrom",
+      "line": 92,
+      "end_line": 98,
+      "signature": "function safeTransferFrom(address token, address owner, address recipient, uint256 amount) internal",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "TokenUtils-WRITE",
+        "TokenUtils-CODE"
+      ]
+    },
+    {
+      "id": "TokenUtils.safeMint@107",
+      "file": "src/libraries/TokenUtils.sol",
+      "contract": "TokenUtils",
+      "name": "safeMint",
+      "line": 107,
+      "end_line": 113,
+      "signature": "function safeMint(address token, address recipient, uint256 amount) internal",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "TokenUtils-WRITE",
+        "TokenUtils-CODE"
+      ]
+    },
+    {
+      "id": "TokenUtils.safeBurn@121",
+      "file": "src/libraries/TokenUtils.sol",
+      "contract": "TokenUtils",
+      "name": "safeBurn",
+      "line": 121,
+      "end_line": 127,
+      "signature": "function safeBurn(address token, uint256 amount) internal",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "TokenUtils-WRITE",
+        "TokenUtils-CODE"
+      ]
+    },
+    {
+      "id": "TokenUtils.safeBurnFrom@136",
+      "file": "src/libraries/TokenUtils.sol",
+      "contract": "TokenUtils",
+      "name": "safeBurnFrom",
+      "line": 136,
+      "end_line": 142,
+      "signature": "function safeBurnFrom(address token, address owner, uint256 amount) internal",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "TokenUtils-WRITE",
+        "TokenUtils-CODE"
+      ]
+    },
+    {
+      "id": "PermissionedProxy.constructor@11",
+      "file": "src/utils/PermissionedProxy.sol",
+      "contract": "PermissionedProxy",
+      "name": "constructor",
+      "line": 11,
+      "end_line": 16,
+      "signature": "constructor(address _admin, address _operator)",
+      "visibility": "constructor",
+      "modifiers": [],
+      "properties": [
+        "PP-CONSTRUCTOR"
+      ]
+    },
+    {
+      "id": "PermissionedProxy._onlyAdmin@23",
+      "file": "src/utils/PermissionedProxy.sol",
+      "contract": "PermissionedProxy",
+      "name": "_onlyAdmin",
+      "line": 23,
+      "end_line": 25,
+      "signature": "function _onlyAdmin() internal view",
+      "visibility": "internal",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "PP-ADMIN"
+      ]
+    },
+    {
+      "id": "PermissionedProxy._onlyOperator@32",
+      "file": "src/utils/PermissionedProxy.sol",
+      "contract": "PermissionedProxy",
+      "name": "_onlyOperator",
+      "line": 32,
+      "end_line": 34,
+      "signature": "function _onlyOperator() internal view",
+      "visibility": "internal",
+      "modifiers": [
+        "onlyOperator"
+      ],
+      "properties": [
+        "PP-OPERATOR"
+      ]
+    },
+    {
+      "id": "PermissionedProxy.transferAdminOwnerShip@40",
+      "file": "src/utils/PermissionedProxy.sol",
+      "contract": "PermissionedProxy",
+      "name": "transferAdminOwnerShip",
+      "line": 40,
+      "end_line": 42,
+      "signature": "function transferAdminOwnerShip(address _newAdmin) external onlyAdmin",
+      "visibility": "external",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "PP-ADMIN",
+        "PP-HANDOFF"
+      ]
+    },
+    {
+      "id": "PermissionedProxy.acceptAdminOwnership@44",
+      "file": "src/utils/PermissionedProxy.sol",
+      "contract": "PermissionedProxy",
+      "name": "acceptAdminOwnership",
+      "line": 44,
+      "end_line": 49,
+      "signature": "function acceptAdminOwnership() external",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "PP-HANDOFF"
+      ]
+    },
+    {
+      "id": "PermissionedProxy.setOperator@51",
+      "file": "src/utils/PermissionedProxy.sol",
+      "contract": "PermissionedProxy",
+      "name": "setOperator",
+      "line": 51,
+      "end_line": 55,
+      "signature": "function setOperator(address _operator, bool value) external onlyAdmin",
+      "visibility": "external",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "PP-ADMIN",
+        "PP-OPERATOR"
+      ]
+    },
+    {
+      "id": "PermissionedProxy.setPermissionedCall@57",
+      "file": "src/utils/PermissionedProxy.sol",
+      "contract": "PermissionedProxy",
+      "name": "setPermissionedCall",
+      "line": 57,
+      "end_line": 60,
+      "signature": "function setPermissionedCall(bytes4 sig, bool value) external onlyAdmin",
+      "visibility": "external",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "PP-ADMIN"
+      ]
+    },
+    {
+      "id": "PermissionedProxy.proxy@62",
+      "file": "src/utils/PermissionedProxy.sol",
+      "contract": "PermissionedProxy",
+      "name": "proxy",
+      "line": 62,
+      "end_line": 72,
+      "signature": "function proxy(address vault, bytes memory data) external payable onlyOperator",
+      "visibility": "external",
+      "modifiers": [
+        "onlyOperator"
+      ],
+      "properties": [
+        "PP-PROXY"
+      ]
+    },
+    {
+      "id": "Whitelist.constructor@18",
+      "file": "src/utils/Whitelist.sol",
+      "contract": "Whitelist",
+      "name": "constructor",
+      "line": 18,
+      "end_line": 18,
+      "signature": "constructor() Ownable(msg.sender)",
+      "visibility": "constructor",
+      "modifiers": [],
+      "properties": [
+        "WL-CONSTRUCTOR"
+      ]
+    },
+    {
+      "id": "Whitelist.getAddresses@21",
+      "file": "src/utils/Whitelist.sol",
+      "contract": "Whitelist",
+      "name": "getAddresses",
+      "line": 21,
+      "end_line": 23,
+      "signature": "function getAddresses() external view returns (address[] memory)",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "WL-SET"
+      ]
+    },
+    {
+      "id": "Whitelist.add@26",
+      "file": "src/utils/Whitelist.sol",
+      "contract": "Whitelist",
+      "name": "add",
+      "line": 26,
+      "end_line": 33,
+      "signature": "function add(address caller) external override",
+      "visibility": "external",
+      "modifiers": [
+        "override"
+      ],
+      "properties": [
+        "WL-ADMIN",
+        "WL-DISABLE",
+        "WL-SET"
+      ]
+    },
+    {
+      "id": "Whitelist.remove@36",
+      "file": "src/utils/Whitelist.sol",
+      "contract": "Whitelist",
+      "name": "remove",
+      "line": 36,
+      "end_line": 43,
+      "signature": "function remove(address caller) external override",
+      "visibility": "external",
+      "modifiers": [
+        "override"
+      ],
+      "properties": [
+        "WL-ADMIN",
+        "WL-DISABLE",
+        "WL-SET"
+      ]
+    },
+    {
+      "id": "Whitelist.disable@46",
+      "file": "src/utils/Whitelist.sol",
+      "contract": "Whitelist",
+      "name": "disable",
+      "line": 46,
+      "end_line": 51,
+      "signature": "function disable() external override",
+      "visibility": "external",
+      "modifiers": [
+        "override"
+      ],
+      "properties": [
+        "WL-ADMIN",
+        "WL-DISABLE"
+      ]
+    },
+    {
+      "id": "Whitelist.isWhitelisted@54",
+      "file": "src/utils/Whitelist.sol",
+      "contract": "Whitelist",
+      "name": "isWhitelisted",
+      "line": 54,
+      "end_line": 56,
+      "signature": "function isWhitelisted(address account) external view override returns (bool)",
+      "visibility": "external",
+      "modifiers": [
+        "override"
+      ],
+      "properties": [
+        "WL-DISABLE",
+        "WL-SET"
+      ]
+    },
+    {
+      "id": "Whitelist._onlyAdmin@59",
+      "file": "src/utils/Whitelist.sol",
+      "contract": "Whitelist",
+      "name": "_onlyAdmin",
+      "line": 59,
+      "end_line": 63,
+      "signature": "function _onlyAdmin() internal view",
+      "visibility": "internal",
+      "modifiers": [
+        "onlyAdmin"
+      ],
+      "properties": [
+        "WL-ADMIN"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._slice@51",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_slice",
+      "line": 51,
+      "end_line": 57,
+      "signature": "function _slice(bytes memory data, uint256 start, uint256 length) internal pure returns (bytes memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-SLICE",
+        "ZX-FUZZ"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._slice@65",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_slice",
+      "line": 65,
+      "end_line": 67,
+      "signature": "function _slice(bytes memory data, uint256 start) internal pure returns (bytes memory)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-SLICE",
+        "ZX-FUZZ"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier.decodeAndVerifyActions@76",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "decodeAndVerifyActions",
+      "line": 76,
+      "end_line": 88,
+      "signature": "function decodeAndVerifyActions(bytes calldata calldata_, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-ENTRY"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier.verifySwapCalldata@99",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "verifySwapCalldata",
+      "line": 99,
+      "end_line": 115,
+      "signature": "function verifySwapCalldata(bytes calldata calldata_, address owner, address targetToken, uint256 maxSlippageBps) external view returns (bool verified)",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "ZX-ENTRY",
+        "ZX-FUZZ"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._verifyExecuteCalldata@125",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_verifyExecuteCalldata",
+      "line": 125,
+      "end_line": 130,
+      "signature": "function _verifyExecuteCalldata(bytes calldata data, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-ACTIONS"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._verifyExecuteMetaTxnCalldata@138",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_verifyExecuteMetaTxnCalldata",
+      "line": 138,
+      "end_line": 143,
+      "signature": "function _verifyExecuteMetaTxnCalldata(bytes calldata data, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-ACTIONS"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._verifyActions@151",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_verifyActions",
+      "line": 151,
+      "end_line": 155,
+      "signature": "function _verifyActions(bytes[] memory actions, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-ACTIONS",
+        "ZX-FUZZ"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._verifyAction@163",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_verifyAction",
+      "line": 163,
+      "end_line": 189,
+      "signature": "function _verifyAction(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-ACTIONS",
+        "ZX-FUZZ"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._verifyBasicSellToPool@195",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_verifyBasicSellToPool",
+      "line": 195,
+      "end_line": 203,
+      "signature": "function _verifyBasicSellToPool(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-BPS"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._verifyUniswapV3VIP@209",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_verifyUniswapV3VIP",
+      "line": 209,
+      "end_line": 219,
+      "signature": "function _verifyUniswapV3VIP(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-BPS"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._verifyRFQVIP@225",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_verifyRFQVIP",
+      "line": 225,
+      "end_line": 232,
+      "signature": "function _verifyRFQVIP(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-NO-AMOUNT-GUARD"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._verifyTransferFrom@238",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_verifyTransferFrom",
+      "line": 238,
+      "end_line": 246,
+      "signature": "function _verifyTransferFrom(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-NO-AMOUNT-GUARD"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._verifySellToLiquidityProvider@251",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_verifySellToLiquidityProvider",
+      "line": 251,
+      "end_line": 259,
+      "signature": "function _verifySellToLiquidityProvider(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-NO-AMOUNT-GUARD"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._verifyVelodromeV2VIP@264",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_verifyVelodromeV2VIP",
+      "line": 264,
+      "end_line": 273,
+      "signature": "function _verifyVelodromeV2VIP(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-BPS"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._extractTokenFromUniswapFills@281",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_extractTokenFromUniswapFills",
+      "line": 281,
+      "end_line": 287,
+      "signature": "function _extractTokenFromUniswapFills(bytes memory fills) internal pure returns (address)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-PARSERS"
+      ]
+    },
+    {
+      "id": "ZeroXSwapVerifier._extractTokenAndAmountFromRFQ@293",
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "contract": "ZeroXSwapVerifier",
+      "name": "_extractTokenAndAmountFromRFQ",
+      "line": 293,
+      "end_line": 299,
+      "signature": "function _extractTokenAndAmountFromRFQ(bytes memory fillData) internal pure returns (address token, uint256 amount)",
+      "visibility": "internal",
+      "modifiers": [],
+      "properties": [
+        "ZX-PARSERS"
+      ]
+    },
+    {
+      "id": "AlEth.constructor@41",
+      "file": "src/external/AlEth.sol",
+      "contract": "AlEth",
+      "name": "constructor",
+      "line": 41,
+      "end_line": 41,
+      "signature": "constructor()",
+      "visibility": "constructor",
+      "modifiers": [],
+      "properties": [
+        "ALETH-CONSTRUCTOR"
+      ]
+    },
+    {
+      "id": "AlEth.mint@55",
+      "file": "src/external/AlEth.sol",
+      "contract": "AlEth",
+      "name": "mint",
+      "line": 55,
+      "end_line": 59,
+      "signature": "function mint(address _recipient, uint256 _amount) external onlyWhitelisted",
+      "visibility": "external",
+      "modifiers": [
+        "onlyWhitelisted"
+      ],
+      "properties": [
+        "ALETH-MINT"
+      ]
+    },
+    {
+      "id": "AlEth.setWhitelist@65",
+      "file": "src/external/AlEth.sol",
+      "contract": "AlEth",
+      "name": "setWhitelist",
+      "line": 65,
+      "end_line": 67,
+      "signature": "function setWhitelist(address _toWhitelist, bool _state) external",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "ALETH-CONTROLS"
+      ]
+    },
+    {
+      "id": "AlEth.pauseAlchemist@73",
+      "file": "src/external/AlEth.sol",
+      "contract": "AlEth",
+      "name": "pauseAlchemist",
+      "line": 73,
+      "end_line": 75,
+      "signature": "function pauseAlchemist(address _toPause, bool _state) external",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "ALETH-CONTROLS"
+      ]
+    },
+    {
+      "id": "AlEth.setCeiling@81",
+      "file": "src/external/AlEth.sol",
+      "contract": "AlEth",
+      "name": "setCeiling",
+      "line": 81,
+      "end_line": 83,
+      "signature": "function setCeiling(address _toSetCeiling, uint256 _ceiling) external",
+      "visibility": "external",
+      "modifiers": [],
+      "properties": [
+        "ALETH-CONTROLS"
+      ]
+    },
+    {
+      "id": "AlEth.burn@90",
+      "file": "src/external/AlEth.sol",
+      "contract": "AlEth",
+      "name": "burn",
+      "line": 90,
+      "end_line": 92,
+      "signature": "function burn(uint256 amount) public virtual",
+      "visibility": "public",
+      "modifiers": [],
+      "properties": [
+        "ALETH-BURN"
+      ]
+    },
+    {
+      "id": "AlEth.burnFrom@105",
+      "file": "src/external/AlEth.sol",
+      "contract": "AlEth",
+      "name": "burnFrom",
+      "line": 105,
+      "end_line": 110,
+      "signature": "function burnFrom(address account, uint256 amount) public virtual",
+      "visibility": "public",
+      "modifiers": [],
+      "properties": [
+        "ALETH-BURNFROM"
+      ]
+    },
+    {
+      "id": "AlEth.lowerHasMinted@116",
+      "file": "src/external/AlEth.sol",
+      "contract": "AlEth",
+      "name": "lowerHasMinted",
+      "line": 116,
+      "end_line": 122,
+      "signature": "function lowerHasMinted(uint256 amount) public onlyWhitelisted",
+      "visibility": "public",
+      "modifiers": [
+        "onlyWhitelisted"
+      ],
+      "properties": [
+        "ALETH-LOWER"
+      ]
+    }
+  ],
+  "properties": [
+    {
+      "id": "TR-CONSTRUCTOR",
+      "functions": [
+        "Transmuter.constructor@82"
+      ],
+      "source": [
+        "src/Transmuter.sol:82-95"
+      ],
+      "catalog": [
+        "AC-1",
+        "AS-2",
+        "FB-4"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Constructor stores the exact configuration and rejects zero receiver, zero duration, duration above int256.max, and either fee above 10000.",
+      "test_file": "test/dinosat/TransmuterAdminSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Constructor syntheticToken may be zero and graphSize is unused. Test the implemented guards, then report absent configuration guards.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-ADMIN",
+      "functions": [
+        "Transmuter.setPendingAdmin@98",
+        "Transmuter.setAlchemist@120",
+        "Transmuter.setDepositCap@127",
+        "Transmuter.setTransmutationFee@135",
+        "Transmuter.setExitFee@143",
+        "Transmuter.setTransmutationTime@151",
+        "Transmuter.setProtocolFeeReceiver@160",
+        "Transmuter._checkArgument@348"
+      ],
+      "source": [
+        "src/Transmuter.sol:98-102",
+        "src/Transmuter.sol:120-124",
+        "src/Transmuter.sol:127-132",
+        "src/Transmuter.sol:135-140",
+        "src/Transmuter.sol:143-148",
+        "src/Transmuter.sol:151-157",
+        "src/Transmuter.sol:160-164",
+        "src/Transmuter.sol:348-352"
+      ],
+      "catalog": [
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Each admin method rejects a non-admin with unchanged state, and the admin succeeds with valid arguments.",
+      "test_file": "test/dinosat/TransmuterAdminSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Use a distinct nonzero sender and valid arguments. Assert the custom selector on rejection, avoiding unrelated reverts.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-HANDOFF",
+      "functions": [
+        "Transmuter.setPendingAdmin@98",
+        "Transmuter.acceptAdmin@105",
+        "Transmuter._checkState@357"
+      ],
+      "source": [
+        "src/Transmuter.sol:98-102",
+        "src/Transmuter.sol:105-117",
+        "src/Transmuter.sol:357-361"
+      ],
+      "catalog": [
+        "AC-4",
+        "AC-5"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Only the nonzero pending admin can accept. Acceptance replaces admin, clears pendingAdmin, and revokes the prior admin.",
+      "test_file": "test/dinosat/TransmuterAdminSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-CAP",
+      "functions": [
+        "Transmuter.setDepositCap@127"
+      ],
+      "source": [
+        "src/Transmuter.sol:127-132"
+      ],
+      "catalog": [
+        "AS-4"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Accept exactly cap <= int256.max and store it. Characterize that the setter permits a cap below totalActiveLocked.",
+      "test_file": "test/dinosat/TransmuterAdminSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Boundary partitions include 0, int256.max, and values above int256.max.",
+      "evidence_target": "real bytecode",
+      "notes": "Interface ITransmuter.sol:97 says cap must exceed current locked amount. The implementation lacks this check.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-FEES",
+      "functions": [
+        "Transmuter.setTransmutationFee@135",
+        "Transmuter.setExitFee@143"
+      ],
+      "source": [
+        "src/Transmuter.sol:135-140",
+        "src/Transmuter.sol:143-148"
+      ],
+      "catalog": [
+        "FB-2",
+        "FB-4"
+      ],
+      "priority": "P1",
+      "classification": "DIRECT",
+      "obligation": "Both fee setters enforce inclusive 0..10000 bounds. Changing a fee affects later claims but not position principal.",
+      "test_file": "test/dinosat/TransmuterAdminSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Fee=10000 is legal, so assert fee <= amount rather than the catalog strict fee < amount.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-TIME",
+      "functions": [
+        "Transmuter.setTransmutationTime@151"
+      ],
+      "source": [
+        "src/Transmuter.sol:151-157"
+      ],
+      "catalog": [
+        "AS-2",
+        "AS-4",
+        "SM-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Duration remains positive and <= int256.max. Existing positions retain their start and maturation blocks after an update.",
+      "test_file": "test/dinosat/TransmuterAdminSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Graph accepts only block endpoints below 2^32-1. Duration setter bounds are broader than executable deposit bounds.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-RECEIVER",
+      "functions": [
+        "Transmuter.setProtocolFeeReceiver@160"
+      ],
+      "source": [
+        "src/Transmuter.sol:160-164"
+      ],
+      "catalog": [
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Admin can set any nonzero fee receiver. A zero receiver reverts and preserves the prior receiver.",
+      "test_file": "test/dinosat/TransmuterAdminSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-GET",
+      "functions": [
+        "Transmuter.getPosition@171"
+      ],
+      "source": [
+        "src/Transmuter.sol:171-173"
+      ],
+      "catalog": [
+        "CC-1"
+      ],
+      "priority": "P2",
+      "classification": "DIRECT",
+      "obligation": "The getter returns the stored principal and original block interval. Unknown and deleted positions return zero fields.",
+      "test_file": "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Fixture includes real create and claim calls, plus an unused ID.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-METADATA",
+      "functions": [
+        "Transmuter.tokenURI@166"
+      ],
+      "source": [
+        "src/Transmuter.sol:166-168"
+      ],
+      "catalog": [
+        "SM-4"
+      ],
+      "priority": "P2",
+      "classification": "FUZZ",
+      "obligation": "The URI encodes the requested token ID and the Transmuter title, with bounded output and valid Base64 JSON/SVG.",
+      "test_file": "test/dinosat/NFTMetadataSymbolic.t.sol",
+      "technique": "T17 fuzz against actual implementation",
+      "domain": "Use uint256 ID boundaries and representative titles.",
+      "evidence_target": "real bytecode",
+      "notes": "tokenURI currently does not check ownership or existence, unlike default ERC721.tokenURI. This is an observable behavior, not a fund safety claim.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-CREATE-GATES",
+      "functions": [
+        "Transmuter.createRedemption@176"
+      ],
+      "source": [
+        "src/Transmuter.sol:176-206"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-4",
+        "IC-3"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "Create rejects zero deposit, zero recipient, active-cap overflow, and totalLocked exceeding totalSyntheticsIssued. Rejections preserve tokens, NFTs, totals, and graph.",
+      "test_file": "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Use bounded concrete block/duration fixtures with valid ERC20 and Alchemist dependencies. Split each rejection from the successful path.",
+      "evidence_target": "real bytecode",
+      "notes": "Inherits StakingGraph loops. A reverting arithmetic expression must not count as proof of successful-case safety.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-CREATE-ACCOUNTING",
+      "functions": [
+        "Transmuter.createRedemption@176",
+        "Transmuter._updateStakingGraph@341"
+      ],
+      "source": [
+        "src/Transmuter.sol:176-206",
+        "src/Transmuter.sol:341-343"
+      ],
+      "catalog": [
+        "CC-1",
+        "CC-3",
+        "STK-1"
+      ],
+      "priority": "P1",
+      "classification": "ENUMERATE",
+      "obligation": "A successful deposit transfers exactly principal, mints one NFT to recipient, stores the interval, and increments each total once.",
+      "test_file": "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Symbolic amount 1..1e27 is an explicit scenario range, not a supply limit. Concrete starts/durations selected around tree growth boundaries.",
+      "evidence_target": "real bytecode",
+      "notes": "Token transfer is assumed exact and non-reentrant. Test malicious callbacks separately. Graph rate can truncate to zero for very small amount/duration ratios.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-CREATE-FUZZ",
+      "functions": [
+        "Transmuter.createRedemption@176"
+      ],
+      "source": [
+        "src/Transmuter.sol:176-206"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-4",
+        "CC-1"
+      ],
+      "priority": "P0",
+      "classification": "FUZZ",
+      "obligation": "Exercise signed conversion, amount*1e8, graph packed bounds, and maturation arithmetic through the real deposit function.",
+      "test_file": "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "technique": "T17 stateful boundary fuzz",
+      "domain": "Include int256.max/1e8, signed 112-bit rate boundaries, and start+duration near 2^32-1. Separate expected-revert partitions.",
+      "evidence_target": "real bytecode",
+      "notes": "A safe rejection is distinct from liveness throughout the admin-accepted configuration domain.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-CLAIM-GATES",
+      "functions": [
+        "Transmuter.claimRedemption@209"
+      ],
+      "source": [
+        "src/Transmuter.sol:209-309"
+      ],
+      "catalog": [
+        "AC-1",
+        "SM-1"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "Only the current NFT owner can claim after the creation block. Missing, burned, and same-block positions reject with no state changes.",
+      "test_file": "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Use valid arithmetic and backing fixtures so owner rejection cannot be masked. Cover NFT transfer and approved-but-not-owner callers.",
+      "evidence_target": "real bytecode",
+      "notes": "Early claim before maturity is legal, contrary to ITransmuter.sol:155. The implemented gate blocks only the creation block.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-CLAIM-TIME",
+      "functions": [
+        "Transmuter.claimRedemption@209"
+      ],
+      "source": [
+        "src/Transmuter.sol:209-309"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-2",
+        "AS-3"
+      ],
+      "priority": "P0",
+      "classification": "INLINE",
+      "obligation": "For an actual position and current block >= start, untransmuted = ceil(amount*blocksLeft/duration) lies within amount. Matured positions have zero untransmuted.",
+      "test_file": "test/dinosat/TransmuterClaimLemmas.t.sol",
+      "technique": "T10 exact ceil helper and T6 floor/remainder identity",
+      "domain": "amount <=1e27, duration <=2^32, blocksLeft<=duration gives product <=~4.3e36. Include amount=0 in a separate model branch.",
+      "evidence_target": "bounded arithmetic model plus implementation correspondence test",
+      "notes": "Model lemma only. Pair with actual FixedPointMath and Transmuter tests. Use ceil via quotient plus nonzero remainder, preserving rounding.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-CLAIM-BAD-DEBT",
+      "functions": [
+        "Transmuter.claimRedemption@209"
+      ],
+      "source": [
+        "src/Transmuter.sol:209-309"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-2",
+        "TS-3"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "Backing denominator is positive. Ceil debt ratio never understates debt/backing, and bad-debt scaling cannot exceed amountTransmuted.",
+      "test_file": "test/dinosat/TransmuterClaimLemmas.t.sol",
+      "technique": "T9 concrete decimals and T10 ceil helper",
+      "domain": "Enumerate decimals 0,6,8,12,18 for meaningful supported deployments plus 77/78/255 rejection edges. These are not an exhaustive uint8 domain.",
+      "evidence_target": "bounded arithmetic model plus implementation correspondence test",
+      "notes": "Token decimals lack a local upper bound. A production restriction must come from the actual Alchemist/deployment. Source default amount range 1e27 is explicit analysis scope.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-CLAIM-SPLIT",
+      "functions": [
+        "Transmuter.claimRedemption@209"
+      ],
+      "source": [
+        "src/Transmuter.sol:209-309"
+      ],
+      "catalog": [
+        "PD-1",
+        "PD-2",
+        "FB-4",
+        "AS-3"
+      ],
+      "priority": "P1",
+      "classification": "DECOMPOSE",
+      "obligation": "claimYield+feeYield equals distributable <= sharesAvailable. syntheticReturned+syntheticFee+burn equals principal. Each fee is bounded by its own base.",
+      "test_file": "test/dinosat/TransmuterClaimLemmas.t.sol",
+      "technique": "T4 branch partition and T14 conservation",
+      "domain": "fees 0..10000, amount/shares <=1e27. Partition early/mature, bad debt/no bad debt, repayment shortfall/no shortfall.",
+      "evidence_target": "bounded arithmetic model plus implementation correspondence test",
+      "notes": "Do not assert all synthetics burn on bad debt. The haircutted transmuted principal can burn despite no yield payment.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-CLAIM-SETTLEMENT",
+      "functions": [
+        "Transmuter.claimRedemption@209"
+      ],
+      "source": [
+        "src/Transmuter.sol:209-309"
+      ],
+      "catalog": [
+        "CC-1",
+        "CC-2",
+        "CC-3",
+        "TOK-4"
+      ],
+      "priority": "P1",
+      "classification": "FUZZ",
+      "obligation": "Actual claim transfers the four return amounts, burns exactly the remaining synths, reduces issued supply by the burn, sets the final MYT balance, and deletes the NFT/position.",
+      "test_file": "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "technique": "T17 stateful integration fuzz",
+      "domain": "Real Transmuter bytecode with faithful dependency mocks first, then real Alchemist integration. Include zero payout, complete haircut, shortfall, rounding dust and repeat claims.",
+      "evidence_target": "real bytecode",
+      "notes": "Mocks prove only Transmuter behavior under declared responses. Full integration must reuse actual Alchemist and token adapter.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-CLAIM-CAP",
+      "functions": [
+        "Transmuter.claimRedemption@209",
+        "Transmuter.pokeMatured@322"
+      ],
+      "source": [
+        "src/Transmuter.sol:209-309",
+        "src/Transmuter.sol:322-338"
+      ],
+      "catalog": [
+        "CC-1",
+        "AS-3",
+        "SM-1"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "Claim lowers totalLocked once. Active total decreases once, either on poke or claim. Matured poke is permissionless and cannot double-decrement.",
+      "test_file": "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Successful positions with and without poke, multiple positions, transfer before claim, repeated poke/claim.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-REENTRY",
+      "functions": [
+        "Transmuter.createRedemption@176",
+        "Transmuter.claimRedemption@209",
+        "Transmuter.pokeMatured@322"
+      ],
+      "source": [
+        "src/Transmuter.sol:176-206",
+        "src/Transmuter.sol:209-309",
+        "src/Transmuter.sol:322-338"
+      ],
+      "catalog": [
+        "CC-1",
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "FUZZ",
+      "obligation": "Explore callback sequences during synthetic transferFrom, yield transfer, burn and Alchemist calls for duplicate principal or accounting desynchronization.",
+      "test_file": "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "technique": "T17 adversarial callback fuzz",
+      "domain": "Malicious dependency harness, bounded 1-2 callbacks and 2 positions.",
+      "evidence_target": "real bytecode",
+      "notes": "No local nonReentrant guard. Trusted-token assumption limits ordinary proofs. Reentrancy safety requires real callback execution and is not established by NFT burn alone.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-GRAPH",
+      "functions": [
+        "Transmuter.queryGraph@312",
+        "Transmuter._updateStakingGraph@341"
+      ],
+      "source": [
+        "src/Transmuter.sol:312-319",
+        "src/Transmuter.sol:341-343"
+      ],
+      "catalog": [
+        "CC-1",
+        "AS-3",
+        "AS-4"
+      ],
+      "priority": "P1",
+      "classification": "ENUMERATE",
+      "obligation": "queryGraph returns the ceil of nonnegative graph stake /1e8, returns zero for reversed intervals, and follows graph block bounds.",
+      "test_file": "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "technique": "T9 bounded timelines with real graph harness",
+      "domain": "Concrete representative graph timelines and symbolic rate/principal; include start=0, end=2^32, and empty graph.",
+      "evidence_target": "real bytecode",
+      "notes": "queryStake rejects start=0. Bound results against sum of per-position rate contributions, not original principal without rounding loss.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PG-CONSTRUCTOR",
+      "functions": [
+        "PerpetualGauge.constructor@39"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:39-44"
+      ],
+      "catalog": [
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Constructor rejects any zero dependency and stores each supplied nonzero address.",
+      "test_file": "test/dinosat/PerpetualGaugeSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PG-VOTE-STATE",
+      "functions": [
+        "PerpetualGauge.vote@46"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:46-92"
+      ],
+      "catalog": [
+        "SM-1",
+        "AS-1",
+        "CC-1"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "Vote rejects mismatched/empty arrays and preserves aggregate weight when a same-balance user replaces a vote. Expiry branches follow 30-day and 365-day rules.",
+      "test_file": "test/dinosat/PerpetualGaugeLemmas.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Enumerate 1-3 strategy entries, bounded power/weights and timestamps avoiding arithmetic overflow. Include duplicate strategy IDs.",
+      "evidence_target": "real bytecode",
+      "notes": "A model is not enough. Run actual vote bytecode and inspect aggregate via a read-only harness or storage layout.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PG-POWER-CHANGE",
+      "functions": [
+        "PerpetualGauge.vote@46",
+        "PerpetualGauge.clearVote@94"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:46-92",
+        "src/PerpetualGauge.sol:94-108"
+      ],
+      "catalog": [
+        "AS-3",
+        "CC-1",
+        "GOV-3"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "After a voting-token balance change, replacing or clearing a vote should not underflow or leave a prior contribution in aggregate weight.",
+      "test_file": "test/dinosat/PerpetualGaugeSymbolic.t.sol",
+      "technique": "T9 bounded real-bytecode sequences",
+      "domain": "One strategy, initial power 1..1e18, power increase/decrease/zero, active and expired prior vote.",
+      "evidence_target": "real bytecode",
+      "notes": "Source-only suspected failure: subtraction uses current power instead of power at the original vote. Expired votes also skip removal in vote.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PG-CLEAR",
+      "functions": [
+        "PerpetualGauge.clearVote@94"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:94-108"
+      ],
+      "catalog": [
+        "CC-1",
+        "SM-1"
+      ],
+      "priority": "P1",
+      "classification": "ENUMERATE",
+      "obligation": "With unchanged power, clear removes exactly stored contributions and deletes the vote. Repeated clear rejects.",
+      "test_file": "test/dinosat/PerpetualGaugeSymbolic.t.sol",
+      "technique": "T9 real-bytecode sequences",
+      "domain": "1-3 strategy entries and bounded weights. Voter registry is not cleared, so verify it does not create duplicate entries on next vote.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PG-REGISTER",
+      "functions": [
+        "PerpetualGauge.registerNewStrategy@110"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:110-113"
+      ],
+      "catalog": [
+        "AC-1",
+        "SM-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Characterize who can reset lastStrategyAddedAt and whether registration creates a reachable allocation entry.",
+      "test_file": "test/dinosat/PerpetualGaugeSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Arbitrary sender and strategyId.",
+      "evidence_target": "real bytecode",
+      "notes": "Source-only incomplete implementation: permissionless register only sets timestamp. strategyList is never populated.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PG-ALLOCATIONS",
+      "functions": [
+        "PerpetualGauge.getCurrentAllocations@115"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:115-136"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-2",
+        "IC-1",
+        "IC-2"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "For a seeded valid strategyList, outputs preserve IDs and sum(normalizedWeights)<=1e18 with rounding deficit < n. Zero total yields all zero weights.",
+      "test_file": "test/dinosat/PerpetualGaugeSymbolic.t.sol",
+      "technique": "T9 real-bytecode synthetic-state test",
+      "domain": "Enumerate list lengths 0..3 and positive aggregate bounds.",
+      "evidence_target": "real bytecode",
+      "notes": "Nonempty strategyList requires a storage-seeded harness. Label as synthetic state, not reachable production state. Expiration is not checked in this function.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PG-EXECUTION",
+      "functions": [
+        "PerpetualGauge.executeAllocation@138"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:138-172"
+      ],
+      "catalog": [
+        "IC-3",
+        "AS-1",
+        "AS-3",
+        "CC-2"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "Actual allocation respects individual and per-risk global WAD caps and never exceeds idle assets. Allocation calls receive the expected target and strategy ID.",
+      "test_file": "test/dinosat/PerpetualGaugeSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Seed 1-3 strategies only in a disclosed synthetic state. Also prove fresh deployment always rejects No allocations.",
+      "evidence_target": "real bytecode",
+      "notes": "Source-only expected mismatches: /1e4 instead of classifier WAD /1e18, one totalRiskAllocated for all positive risks, caller supplies totalIdleAssets, no caller guard. Production allocator may provide downstream guards.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PG-FUZZ",
+      "functions": [
+        "PerpetualGauge.vote@46",
+        "PerpetualGauge.clearVote@94",
+        "PerpetualGauge.getCurrentAllocations@115",
+        "PerpetualGauge.executeAllocation@138"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:46-92",
+        "src/PerpetualGauge.sol:94-108",
+        "src/PerpetualGauge.sol:115-136",
+        "src/PerpetualGauge.sol:138-172"
+      ],
+      "catalog": [
+        "CC-1",
+        "IC-3"
+      ],
+      "priority": "P1",
+      "classification": "FUZZ",
+      "obligation": "Exercise bounded many-voter histories, balances, expiry changes, duplicate IDs and multiple risk classes through actual bytecode.",
+      "test_file": "test/dinosat/PerpetualGaugeSymbolic.t.sol",
+      "technique": "T17 stateful fuzz",
+      "domain": "1-5 voters,1-8 strategies,1-20 operations. Include extreme-weight arithmetic rejection.",
+      "evidence_target": "real bytecode",
+      "notes": "Unbounded lists and unrestricted histories remain unverified.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "FM-ENCODE",
+      "functions": [
+        "FixedPointMath.encode@30",
+        "FixedPointMath.encodeRaw@41",
+        "FixedPointMath.rational@62"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:30-32",
+        "src/libraries/FixedPointMath.sol:41-43",
+        "src/libraries/FixedPointMath.sol:62-65"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-2",
+        "TS-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Encoding multiplies by 1e18 without loss in the valid range. Rational equals floor(n*1e18/d) and rejects zero d or encoding overflow.",
+      "test_file": "test/dinosat/FixedPointMathSymbolic.t.sol",
+      "technique": "Library bytecode harness with T6 remainder identities",
+      "domain": "n<=uint256.max/1e18, d>0. Partition boundary rejection from successful calls.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "FM-ADDSUB",
+      "functions": [
+        "FixedPointMath.add@74",
+        "FixedPointMath.add@85",
+        "FixedPointMath.sub@96",
+        "FixedPointMath.sub@107"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:74-76",
+        "src/libraries/FixedPointMath.sol:85-87",
+        "src/libraries/FixedPointMath.sol:96-98",
+        "src/libraries/FixedPointMath.sol:107-109"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-3"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Each overload equals exact checked addition/subtraction after scalar conversion and rejects overflow/underflow without wrap.",
+      "test_file": "test/dinosat/FixedPointMathSymbolic.t.sol",
+      "technique": "Library bytecode harness",
+      "domain": "Encode scalar operand before comparing. Cover both Number and uint256 overloads.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "FM-MULDIV-SIMPLE",
+      "functions": [
+        "FixedPointMath.mul@118",
+        "FixedPointMath.mul@129",
+        "FixedPointMath.div@140",
+        "FixedPointMath.truncate@249"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:118-120",
+        "src/libraries/FixedPointMath.sol:129-131",
+        "src/libraries/FixedPointMath.sol:140-142",
+        "src/libraries/FixedPointMath.sol:249-251"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-2",
+        "TS-2"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Simple multiplication/division matches exact bounded integer arithmetic with stated floor rounding and checked overflow.",
+      "test_file": "test/dinosat/FixedPointMathSymbolic.t.sol",
+      "technique": "T6 library harness",
+      "domain": "For Number*Number restrict product to uint256. Use independent quotient/remainder inequalities rather than an identical expression oracle.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "FM-COMPARE",
+      "functions": [
+        "FixedPointMath.max@51",
+        "FixedPointMath.cmp@220",
+        "FixedPointMath.equals@240"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:51-53",
+        "src/libraries/FixedPointMath.sol:220-230",
+        "src/libraries/FixedPointMath.sol:240-242"
+      ],
+      "catalog": [
+        "SM-1"
+      ],
+      "priority": "P2",
+      "classification": "DIRECT",
+      "obligation": "Comparison returns exactly -1,0,1 by operand order, equals agrees with cmp==0, and max returns uint256.max.",
+      "test_file": "test/dinosat/FixedPointMathSymbolic.t.sol",
+      "technique": "Library bytecode harness",
+      "domain": "Full operand bit widths are tractable for comparison.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "FM-MULDIV-BOUNDED",
+      "functions": [
+        "FixedPointMath.mulDiv@145",
+        "FixedPointMath.mulDivUp@201"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:145-198",
+        "src/libraries/FixedPointMath.sol:201-209"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-2"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "Actual mulDiv and mulDivUp match floor/ceil integer product division where product fits 256 bits. Each rejects denominator zero.",
+      "test_file": "test/dinosat/FixedPointMathSymbolic.t.sol",
+      "technique": "T4 bounded actual-bytecode equivalence plus T10 model",
+      "domain": "Partition denominator zero, exact quotient, nonzero remainder, zero operands. Bound symbolic operands by 1e27 initially.",
+      "evidence_target": "real bytecode",
+      "notes": "This tests the local custom implementation, not OpenZeppelin. The model helper alone cannot establish this property.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "FM-MULDIV-WIDE",
+      "functions": [
+        "FixedPointMath.mulDiv@145",
+        "FixedPointMath.mulDivUp@201"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:145-198",
+        "src/libraries/FixedPointMath.sol:201-209"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-2"
+      ],
+      "priority": "P0",
+      "classification": "FUZZ",
+      "obligation": "Full-width implementation matches an independent wide-precision oracle and rejects quotient overflow, including ceil overflow at uint256.max.",
+      "test_file": "test/dinosat/FixedPointMathSymbolic.t.sol",
+      "technique": "T17 full-width differential fuzz",
+      "domain": "Target prod1==0, prod1>0, denominator<=prod1, powers of two/odd denominators and nonzero remainders.",
+      "evidence_target": "real bytecode",
+      "notes": "Reference can be OpenZeppelin Math.mulDiv with independently reviewed rounding or precomputed arbitrary-precision vectors. Fuzz agreement is not formal equivalence.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "FM-QMUL",
+      "functions": [
+        "FixedPointMath.mulQ128@254"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:254-272"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-4"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "For domain a<=uint256.max,b<=2^128, mulQ128 equals ceil(a*b/2^128) and never wraps. Identity b=2^128 and zero operands hold.",
+      "test_file": "test/dinosat/FixedPointMathSymbolic.t.sol",
+      "technique": "T4 actual-bytecode domain partitions and T17 full-width fuzz",
+      "domain": "Propagate the ratio <=2^128 precondition to every Alchemist caller. Use bounded symbolic small, exact-boundary and wide-product fuzz partitions.",
+      "evidence_target": "real bytecode",
+      "notes": "Outside the ratio domain, high quotient bits can truncate and ceil can wrap because there is no explicit overflow guard.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "FM-QDIV",
+      "functions": [
+        "FixedPointMath.divQ128@274"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:274-286"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-2"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "For 0<=numer<=2^128 and denom>=numer>0, divQ128 equals floor(numer*2^128/denom), returns at most 2^128, and handles numer=2^128.",
+      "test_file": "test/dinosat/FixedPointMathSymbolic.t.sol",
+      "technique": "T4 exact fast/boundary paths with actual bytecode",
+      "domain": "Split numer=0,0<numer<2^128,numer=2^128,denom=0.",
+      "evidence_target": "real bytecode",
+      "notes": "Zero numerator returns zero even with zero denom. Outside numer<=2^128, remainder shift can lose high bits. Caller-domain proof is required.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SG-ADD-QUERY",
+      "functions": [
+        "StakingGraph.addStake@53",
+        "StakingGraph.queryStake@111",
+        "StakingGraph.update@144",
+        "StakingGraph.query@182"
+      ],
+      "source": [
+        "src/libraries/StakingGraph.sol:53-101",
+        "src/libraries/StakingGraph.sol:111-136",
+        "src/libraries/StakingGraph.sol:144-174",
+        "src/libraries/StakingGraph.sol:182-207"
+      ],
+      "catalog": [
+        "STK-1",
+        "CC-1",
+        "SM-2"
+      ],
+      "priority": "P1",
+      "classification": "ENUMERATE",
+      "obligation": "Real graph query equals the sum of amount times the overlap of each scheduled interval with inclusive query blocks. Tree expansion preserves existing results.",
+      "test_file": "test/dinosat/StakingGraphSymbolic.t.sol",
+      "technique": "T9 bounded timelines and real storage harness",
+      "domain": "Enumerate small starts/durations around 1,2,4,8,16 tree boundaries. Symbolic signed amounts within 112-bit packed bounds.",
+      "evidence_target": "real bytecode",
+      "notes": "Derive the exact first accrual block from code: change at start affects cumulative blocks start+1 through start+duration. Test cancellations and after-expiration queries.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SG-PACK",
+      "functions": [
+        "StakingGraph.update@144",
+        "StakingGraph.query@182"
+      ],
+      "source": [
+        "src/libraries/StakingGraph.sol:144-174",
+        "src/libraries/StakingGraph.sol:182-207"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-3",
+        "AS-4"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "Packed signed delta/product round-trip exactly and node updates reject out-of-range sums without corrupting neighboring packed fields.",
+      "test_file": "test/dinosat/StakingGraphLemmas.t.sol",
+      "technique": "T4 sign partitions",
+      "domain": "delta in [-2^111,2^111-1], product in [-2^143,2^143-1].",
+      "evidence_target": "pack model plus real-bytecode storage traces",
+      "notes": "Pure pack lemmas do not prove update storage behavior. Pair each pack partition with real add/query storage traces.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SG-BOUNDS",
+      "functions": [
+        "StakingGraph.addStake@53",
+        "StakingGraph.queryStake@111"
+      ],
+      "source": [
+        "src/libraries/StakingGraph.sol:53-101",
+        "src/libraries/StakingGraph.sol:111-136"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-2",
+        "AS-4"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "Graph bounds reject invalid blocks/rates and handle maximum valid start/expiration/query edges without wrap or infinite iteration.",
+      "test_file": "test/dinosat/StakingGraphSymbolic.t.sol",
+      "technique": "T4 branch partitions and T17 adversarial fuzz",
+      "domain": "GRAPH_MAX=2^32. add start and expiration <2^32-1. query start>=1, end<=2^32.",
+      "evidence_target": "real bytecode",
+      "notes": "Unchecked start+duration can wrap for unconstrained uint256 duration. Test wrapped duration explicitly. Transmuter duration<=int256.max prevents wrap with valid start, but library is broader.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SG-HISTORY",
+      "functions": [
+        "StakingGraph.addStake@53",
+        "StakingGraph.queryStake@111",
+        "StakingGraph.update@144",
+        "StakingGraph.query@182"
+      ],
+      "source": [
+        "src/libraries/StakingGraph.sol:53-101",
+        "src/libraries/StakingGraph.sol:111-136",
+        "src/libraries/StakingGraph.sol:144-174",
+        "src/libraries/StakingGraph.sol:182-207"
+      ],
+      "catalog": [
+        "CC-1",
+        "STK-1"
+      ],
+      "priority": "P1",
+      "classification": "FUZZ",
+      "obligation": "Random reachable add/cancel sequences match an independent interval model across tree growth, sign changes, and packed extrema.",
+      "test_file": "test/dinosat/StakingGraphSymbolic.t.sol",
+      "technique": "T17 stateful model-based fuzz",
+      "domain": "Bound operations and timeline explicitly. Derive cancellations from existing intervals.",
+      "evidence_target": "real bytecode",
+      "notes": "Full 32-bit symbolic loops and unbounded history are not proved. Finite Halmos loop unrolling must reject incomplete exploration.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SC-toInt256",
+      "functions": [
+        "SafeCast.toInt256@12"
+      ],
+      "source": [
+        "src/libraries/SafeCast.sol:12-17"
+      ],
+      "catalog": [
+        "AS-4"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Accept y<2^255 and preserve its value. Reject y>=2^255.",
+      "test_file": "test/dinosat/SafeCastSymbolic.t.sol",
+      "technique": "Actual library harness",
+      "domain": "Use separate accepted/rejected partitions and exact custom-error checks.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SC-toUint256",
+      "functions": [
+        "SafeCast.toUint256@22"
+      ],
+      "source": [
+        "src/libraries/SafeCast.sol:22-27"
+      ],
+      "catalog": [
+        "AS-4"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Accept y>=0 and preserve its value. Reject negative y.",
+      "test_file": "test/dinosat/SafeCastSymbolic.t.sol",
+      "technique": "Actual library harness",
+      "domain": "Use separate accepted/rejected partitions and exact custom-error checks.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SC-uint256ToUint128",
+      "functions": [
+        "SafeCast.uint256ToUint128@32"
+      ],
+      "source": [
+        "src/libraries/SafeCast.sol:32-37"
+      ],
+      "catalog": [
+        "AS-4"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Accept y<=uint128.max and preserve its value. Reject larger y.",
+      "test_file": "test/dinosat/SafeCastSymbolic.t.sol",
+      "technique": "Actual library harness",
+      "domain": "Use separate accepted/rejected partitions and exact custom-error checks.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SC-uint128ToUint256",
+      "functions": [
+        "SafeCast.uint128ToUint256@42"
+      ],
+      "source": [
+        "src/libraries/SafeCast.sol:42-45"
+      ],
+      "catalog": [
+        "AS-4"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Preserve every input exactly and round-trip to uint128.",
+      "test_file": "test/dinosat/SafeCastSymbolic.t.sol",
+      "technique": "Actual library harness",
+      "domain": "Use separate accepted/rejected partitions and exact custom-error checks.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TokenUtils-READ",
+      "functions": [
+        "TokenUtils.expectDecimals@26",
+        "TokenUtils.safeBalanceOf@44"
+      ],
+      "source": [
+        "src/libraries/TokenUtils.sol:26-34",
+        "src/libraries/TokenUtils.sol:44-52"
+      ],
+      "catalog": [
+        "AS-4",
+        "CC-3"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Read wrappers decode valid full-length returns and reject failed, truncated, or malformed return data.",
+      "test_file": "test/dinosat/TokenWrappersSymbolic.t.sol",
+      "technique": "Real wrapper harness with return-data mock",
+      "domain": "Enumerate return lengths 0,1,31,32,64 and uint8 overflow for decimals.",
+      "evidence_target": "real bytecode",
+      "notes": "TokenUtils also rejects zero-code targets. SafeERC20 lacks that check but its read functions reject empty data.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TokenUtils-WRITE",
+      "functions": [
+        "TokenUtils.safeTransfer@61",
+        "TokenUtils.safeApprove@76",
+        "TokenUtils.safeTransferFrom@92",
+        "TokenUtils.safeMint@107",
+        "TokenUtils.safeBurn@121",
+        "TokenUtils.safeBurnFrom@136"
+      ],
+      "source": [
+        "src/libraries/TokenUtils.sol:61-67",
+        "src/libraries/TokenUtils.sol:76-82",
+        "src/libraries/TokenUtils.sol:92-98",
+        "src/libraries/TokenUtils.sol:107-113",
+        "src/libraries/TokenUtils.sol:121-127",
+        "src/libraries/TokenUtils.sol:136-142"
+      ],
+      "catalog": [
+        "CC-3"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "Each write wrapper forwards the correct selector and arguments. It accepts empty/true returns and rejects false, failed, and malformed returns.",
+      "test_file": "test/dinosat/TokenWrappersSymbolic.t.sol",
+      "technique": "T9 return-data partitions with real library code",
+      "domain": "Finite return-data modes with symbolic amount/address fields.",
+      "evidence_target": "real bytecode",
+      "notes": "Success only proves the ABI return contract. It cannot prove that an arbitrary token actually changed balances.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TokenUtils-CODE",
+      "functions": [
+        "TokenUtils.safeTransfer@61",
+        "TokenUtils.safeApprove@76",
+        "TokenUtils.safeTransferFrom@92",
+        "TokenUtils.safeMint@107",
+        "TokenUtils.safeBurn@121",
+        "TokenUtils.safeBurnFrom@136"
+      ],
+      "source": [
+        "src/libraries/TokenUtils.sol:61-67",
+        "src/libraries/TokenUtils.sol:76-82",
+        "src/libraries/TokenUtils.sol:92-98",
+        "src/libraries/TokenUtils.sol:107-113",
+        "src/libraries/TokenUtils.sol:121-127",
+        "src/libraries/TokenUtils.sol:136-142"
+      ],
+      "catalog": [
+        "AC-1",
+        "CC-3"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Characterize zero-code target behavior and preserve caller state on failed token calls.",
+      "test_file": "test/dinosat/TokenWrappersSymbolic.t.sol",
+      "technique": "Actual bytecode with contract/EOA partitions",
+      "domain": "Use EOA, zero address, valid token and reverting contract.",
+      "evidence_target": "real bytecode",
+      "notes": "TokenUtils requires token.code.length>0. Local SafeERC20 writes accept empty success from an EOA. Report this as a source behavior unless a production caller can select it.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SafeERC20-READ",
+      "functions": [
+        "SafeERC20.expectDecimals@26"
+      ],
+      "source": [
+        "src/libraries/SafeERC20.sol:26-34"
+      ],
+      "catalog": [
+        "AS-4",
+        "CC-3"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Read wrappers decode valid full-length returns and reject failed, truncated, or malformed return data.",
+      "test_file": "test/dinosat/TokenWrappersSymbolic.t.sol",
+      "technique": "Real wrapper harness with return-data mock",
+      "domain": "Enumerate return lengths 0,1,31,32,64 and uint8 overflow for decimals.",
+      "evidence_target": "real bytecode",
+      "notes": "TokenUtils also rejects zero-code targets. SafeERC20 lacks that check but its read functions reject empty data.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SafeERC20-WRITE",
+      "functions": [
+        "SafeERC20.safeTransfer@44",
+        "SafeERC20.safeApprove@60",
+        "SafeERC20.safeTransferFrom@77"
+      ],
+      "source": [
+        "src/libraries/SafeERC20.sol:44-50",
+        "src/libraries/SafeERC20.sol:60-66",
+        "src/libraries/SafeERC20.sol:77-83"
+      ],
+      "catalog": [
+        "CC-3"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "Each write wrapper forwards the correct selector and arguments. It accepts empty/true returns and rejects false, failed, and malformed returns.",
+      "test_file": "test/dinosat/TokenWrappersSymbolic.t.sol",
+      "technique": "T9 return-data partitions with real library code",
+      "domain": "Finite return-data modes with symbolic amount/address fields.",
+      "evidence_target": "real bytecode",
+      "notes": "Success only proves the ABI return contract. It cannot prove that an arbitrary token actually changed balances.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SafeERC20-CODE",
+      "functions": [
+        "SafeERC20.safeTransfer@44",
+        "SafeERC20.safeApprove@60",
+        "SafeERC20.safeTransferFrom@77"
+      ],
+      "source": [
+        "src/libraries/SafeERC20.sol:44-50",
+        "src/libraries/SafeERC20.sol:60-66",
+        "src/libraries/SafeERC20.sol:77-83"
+      ],
+      "catalog": [
+        "AC-1",
+        "CC-3"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Characterize zero-code target behavior and preserve caller state on failed token calls.",
+      "test_file": "test/dinosat/TokenWrappersSymbolic.t.sol",
+      "technique": "Actual bytecode with contract/EOA partitions",
+      "domain": "Use EOA, zero address, valid token and reverting contract.",
+      "evidence_target": "real bytecode",
+      "notes": "TokenUtils requires token.code.length>0. Local SafeERC20 writes accept empty success from an EOA. Report this as a source behavior unless a production caller can select it.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SETS-ADD",
+      "functions": [
+        "Sets.add@20",
+        "Sets.contains@65"
+      ],
+      "source": [
+        "src/libraries/Sets.sol:20-27",
+        "src/libraries/Sets.sol:65-67"
+      ],
+      "catalog": [
+        "SM-2",
+        "CC-1"
+      ],
+      "priority": "P2",
+      "classification": "DIRECT",
+      "obligation": "Add inserts an absent address exactly once and contains reflects membership. Duplicate addition returns false without mutation.",
+      "test_file": "test/dinosat/SetsSymbolic.t.sol",
+      "technique": "Real storage harness",
+      "domain": "Include zero address and symbolic alias/distinct addresses.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "SETS-REMOVE",
+      "functions": [
+        "Sets.remove@35",
+        "Sets.contains@65"
+      ],
+      "source": [
+        "src/libraries/Sets.sol:35-57",
+        "src/libraries/Sets.sol:65-67"
+      ],
+      "catalog": [
+        "AS-3",
+        "SM-2",
+        "CC-1"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "Remove preserves membership/index bijection, updates a moved last element, and leaves state unchanged when absent.",
+      "test_file": "test/dinosat/SetsSymbolic.t.sol",
+      "technique": "T9 real storage harness",
+      "domain": "Enumerate empty/singleton/two/three-element histories, first/middle/last removal and repeated removal.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "WL-CONSTRUCTOR",
+      "functions": [
+        "Whitelist.constructor@18"
+      ],
+      "source": [
+        "src/utils/Whitelist.sol:18-18"
+      ],
+      "catalog": [
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Constructor sets owner to deployer and starts enabled with no entries.",
+      "test_file": "test/dinosat/WhitelistSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "WL-ADMIN",
+      "functions": [
+        "Whitelist.add@26",
+        "Whitelist.remove@36",
+        "Whitelist.disable@46",
+        "Whitelist._onlyAdmin@59"
+      ],
+      "source": [
+        "src/utils/Whitelist.sol:26-33",
+        "src/utils/Whitelist.sol:36-43",
+        "src/utils/Whitelist.sol:46-51",
+        "src/utils/Whitelist.sol:59-63"
+      ],
+      "catalog": [
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Only the current owner can add, remove, or disable. Ownership transfer changes the authorized caller.",
+      "test_file": "test/dinosat/WhitelistSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Valid enable-state arguments isolate authorization failure. Inherited OpenZeppelin transfer/renounce behavior is an external dependency.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "WL-DISABLE",
+      "functions": [
+        "Whitelist.add@26",
+        "Whitelist.remove@36",
+        "Whitelist.disable@46",
+        "Whitelist.isWhitelisted@54"
+      ],
+      "source": [
+        "src/utils/Whitelist.sol:26-33",
+        "src/utils/Whitelist.sol:36-43",
+        "src/utils/Whitelist.sol:46-51",
+        "src/utils/Whitelist.sol:54-56"
+      ],
+      "catalog": [
+        "AC-3",
+        "SM-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Disable is irreversible, makes every account whitelisted, and blocks further add/remove or repeated disable.",
+      "test_file": "test/dinosat/WhitelistSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Use successful disable followed by each real method, not an assumed disabled flag.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "WL-SET",
+      "functions": [
+        "Whitelist.getAddresses@21",
+        "Whitelist.add@26",
+        "Whitelist.remove@36",
+        "Whitelist.isWhitelisted@54"
+      ],
+      "source": [
+        "src/utils/Whitelist.sol:21-23",
+        "src/utils/Whitelist.sol:26-33",
+        "src/utils/Whitelist.sol:36-43",
+        "src/utils/Whitelist.sol:54-56"
+      ],
+      "catalog": [
+        "CC-1",
+        "SM-2"
+      ],
+      "priority": "P2",
+      "classification": "ENUMERATE",
+      "obligation": "Returned addresses match set membership after duplicate add and swap-pop removal. Enabled isWhitelisted returns membership exactly.",
+      "test_file": "test/dinosat/WhitelistSymbolic.t.sol",
+      "technique": "T9 real contract sequences",
+      "domain": "0..3 entries and symbolic address equality partitions.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PP-CONSTRUCTOR",
+      "functions": [
+        "PermissionedProxy.constructor@11"
+      ],
+      "source": [
+        "src/utils/PermissionedProxy.sol:11-16"
+      ],
+      "catalog": [
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Constructor rejects zero admin/operator and grants exactly the supplied operator.",
+      "test_file": "test/dinosat/PermissionedProxySymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PP-ADMIN",
+      "functions": [
+        "PermissionedProxy._onlyAdmin@23",
+        "PermissionedProxy.transferAdminOwnerShip@40",
+        "PermissionedProxy.setOperator@51",
+        "PermissionedProxy.setPermissionedCall@57"
+      ],
+      "source": [
+        "src/utils/PermissionedProxy.sol:23-25",
+        "src/utils/PermissionedProxy.sol:40-42",
+        "src/utils/PermissionedProxy.sol:51-55",
+        "src/utils/PermissionedProxy.sol:57-60"
+      ],
+      "catalog": [
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Only admin can alter pending admin, operator status, or the selector allowlist. Valid admin calls store exact values.",
+      "test_file": "test/dinosat/PermissionedProxySymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PP-HANDOFF",
+      "functions": [
+        "PermissionedProxy.transferAdminOwnerShip@40",
+        "PermissionedProxy.acceptAdminOwnership@44"
+      ],
+      "source": [
+        "src/utils/PermissionedProxy.sol:40-42",
+        "src/utils/PermissionedProxy.sol:44-49"
+      ],
+      "catalog": [
+        "AC-4",
+        "AC-5"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Only pending admin accepts, acceptance clears pending state, and former admin loses control.",
+      "test_file": "test/dinosat/PermissionedProxySymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Real transaction senders are nonzero. Pending zero cancels the transfer. Avoid impossible msg.sender=zero vacuity.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PP-OPERATOR",
+      "functions": [
+        "PermissionedProxy._onlyOperator@32",
+        "PermissionedProxy.setOperator@51"
+      ],
+      "source": [
+        "src/utils/PermissionedProxy.sol:32-34",
+        "src/utils/PermissionedProxy.sol:51-55"
+      ],
+      "catalog": [
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Only nonzero operators can be assigned, and revocation prevents subsequent proxy calls.",
+      "test_file": "test/dinosat/PermissionedProxySymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "PP-PROXY",
+      "functions": [
+        "PermissionedProxy.proxy@62"
+      ],
+      "source": [
+        "src/utils/PermissionedProxy.sol:62-72"
+      ],
+      "catalog": [
+        "AC-1",
+        "CC-2",
+        "CC-3"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "Only an operator with an allowed first four calldata bytes can forward. The target receives exact calldata/value and failed targets revert atomically.",
+      "test_file": "test/dinosat/PermissionedProxySymbolic.t.sol",
+      "technique": "T9 byte-length partitions with target recorder",
+      "domain": "Enumerate calldata lengths 0..4 and representative longer payloads. Symbolic selector/address/value within funded amounts.",
+      "evidence_target": "real bytecode",
+      "notes": "Assembly selector extraction is byte-level, not nonlinear math. Enumerate calldata shape and execute real assembly. Any vault address is allowed.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ALETH-CONSTRUCTOR",
+      "functions": [
+        "AlEth.constructor@41"
+      ],
+      "source": [
+        "src/external/AlEth.sol:41-41"
+      ],
+      "catalog": [
+        "TOK-1"
+      ],
+      "priority": "P1",
+      "classification": "DIRECT",
+      "obligation": "Constructor produces zero supply, empty roles, and fixed name/symbol metadata.",
+      "test_file": "test/dinosat/AlEthSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "File header identifies this as the invariant-testing version.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ALETH-MINT",
+      "functions": [
+        "AlEth.mint@55"
+      ],
+      "source": [
+        "src/external/AlEth.sol:55-59"
+      ],
+      "catalog": [
+        "AC-1",
+        "TOK-1",
+        "TOK-3",
+        "AS-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Only whitelisted unpaused callers mint. A mint increases supply, recipient balance, and hasMinted by the amount atomically.",
+      "test_file": "test/dinosat/AlEthSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Bound mint amounts/sums for success and test checked-overflow rejection separately.",
+      "evidence_target": "real bytecode",
+      "notes": "There is no mint ceiling enforcement. Include a concrete characterization test with amount>ceiling rather than claiming TOK-3 passes.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ALETH-CONTROLS",
+      "functions": [
+        "AlEth.setWhitelist@65",
+        "AlEth.pauseAlchemist@73",
+        "AlEth.setCeiling@81"
+      ],
+      "source": [
+        "src/external/AlEth.sol:65-67",
+        "src/external/AlEth.sol:73-75",
+        "src/external/AlEth.sol:81-83"
+      ],
+      "catalog": [
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Characterize that every caller can change whitelist, pause state, and ceilings, and a caller can self-whitelist then mint.",
+      "test_file": "test/dinosat/AlEthSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "No admin role exists in the implementation despite comments/constants.",
+      "evidence_target": "real bytecode",
+      "notes": "Expected test-fixture behavior. Must not silently assume production access controls.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ALETH-BURN",
+      "functions": [
+        "AlEth.burn@90"
+      ],
+      "source": [
+        "src/external/AlEth.sol:90-92"
+      ],
+      "catalog": [
+        "TOK-4",
+        "AS-3"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Burn reduces caller balance and supply equally, leaves hasMinted unchanged, and rejects insufficient balance.",
+      "test_file": "test/dinosat/AlEthSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ALETH-BURNFROM",
+      "functions": [
+        "AlEth.burnFrom@105"
+      ],
+      "source": [
+        "src/external/AlEth.sol:105-110"
+      ],
+      "catalog": [
+        "AC-1",
+        "TOK-4",
+        "AS-3"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "burnFrom consumes exact allowance and balance while reducing supply, and insufficient allowance/balance reverts atomically.",
+      "test_file": "test/dinosat/AlEthSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "Unlike standard infinite-allowance ERC20 handling, this function subtracts from uint256.max allowance.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ALETH-LOWER",
+      "functions": [
+        "AlEth.lowerHasMinted@116"
+      ],
+      "source": [
+        "src/external/AlEth.sol:116-122"
+      ],
+      "catalog": [
+        "AC-1",
+        "AS-3"
+      ],
+      "priority": "P0",
+      "classification": "DIRECT",
+      "obligation": "Only a whitelisted caller reduces its own hasMinted by min(amount,hasMinted), without changing supply or balances.",
+      "test_file": "test/dinosat/AlEthSymbolic.t.sol",
+      "technique": "T16 stateful",
+      "domain": "",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "NFT-SVG",
+      "functions": [
+        "NFTMetadataGenerator.generateSVG@22",
+        "NFTMetadataGenerator._generateTokenIdText@41",
+        "NFTMetadataGenerator._generateLogo@78",
+        "NFTMetadataGenerator._generateLogoWordmark@89",
+        "NFTMetadataGenerator._generateLogoMark@106"
+      ],
+      "source": [
+        "src/libraries/NFTMetadataGenerator.sol:22-39",
+        "src/libraries/NFTMetadataGenerator.sol:41-76",
+        "src/libraries/NFTMetadataGenerator.sol:78-87",
+        "src/libraries/NFTMetadataGenerator.sol:89-104",
+        "src/libraries/NFTMetadataGenerator.sol:106-119"
+      ],
+      "catalog": [
+        "SM-4",
+        "AS-1"
+      ],
+      "priority": "P2",
+      "classification": "FUZZ",
+      "obligation": "The SVG includes the exact decimal token ID without truncation, splits at 25 characters, and preserves fixed logo content.",
+      "test_file": "test/dinosat/NFTMetadataSymbolic.t.sol",
+      "technique": "T17 actual code with decoded output assertions",
+      "domain": "uint256 has at most 78 digits plus #, so at most four lines. Include 0 and uint256.max.",
+      "evidence_target": "real bytecode",
+      "notes": "Inner text loop reaches 25 and Strings/Base64 contain loops/assembly. Metadata does not secure custody.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "NFT-JSON",
+      "functions": [
+        "NFTMetadataGenerator.generateJSONString@127",
+        "NFTMetadataGenerator.generateTokenURI@148"
+      ],
+      "source": [
+        "src/libraries/NFTMetadataGenerator.sol:127-140",
+        "src/libraries/NFTMetadataGenerator.sol:148-152"
+      ],
+      "catalog": [
+        "SM-4"
+      ],
+      "priority": "P2",
+      "classification": "FUZZ",
+      "obligation": "The Base64 URI decodes into valid expected JSON with embedded SVG, and round-trip preserves the ID and image.",
+      "test_file": "test/dinosat/NFTMetadataSymbolic.t.sol",
+      "technique": "T17 actual output parsing",
+      "domain": "Real callers pass fixed safe titles. Arbitrary titles can contain markup; do not claim arbitrary string escaping.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ZX-ENTRY",
+      "functions": [
+        "ZeroXSwapVerifier.decodeAndVerifyActions@76",
+        "ZeroXSwapVerifier.verifySwapCalldata@99"
+      ],
+      "source": [
+        "src/utils/ZeroXSwapVerifier.sol:76-88",
+        "src/utils/ZeroXSwapVerifier.sol:99-115"
+      ],
+      "catalog": [
+        "AC-1"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "Inputs below four bytes return false at the external entry. Unsupported function selectors reject. Accepted selector branches dispatch to the expected decoder.",
+      "test_file": "test/dinosat/ZeroXSwapVerifierSymbolic.t.sol",
+      "technique": "T9 real library harness",
+      "domain": "Enumerate the two accepted selectors, unknown selector, lengths 0..4, and malformed ABI cases.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ZX-SLICE",
+      "functions": [
+        "ZeroXSwapVerifier._slice@51",
+        "ZeroXSwapVerifier._slice@65"
+      ],
+      "source": [
+        "src/utils/ZeroXSwapVerifier.sol:51-57",
+        "src/utils/ZeroXSwapVerifier.sol:65-67"
+      ],
+      "catalog": [
+        "AS-1",
+        "AS-3",
+        "SM-4"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "Slice preserves exactly the requested bytes and rejects out-of-bounds intervals or start beyond length.",
+      "test_file": "test/dinosat/ZeroXSwapVerifierSymbolic.t.sol",
+      "technique": "T9 bounded-byte harness",
+      "domain": "Bound bytes length to 0..8 for symbolic tests. Fuzz longer action payloads.",
+      "evidence_target": "real bytecode",
+      "notes": "",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ZX-ACTIONS",
+      "functions": [
+        "ZeroXSwapVerifier._verifyExecuteCalldata@125",
+        "ZeroXSwapVerifier._verifyExecuteMetaTxnCalldata@138",
+        "ZeroXSwapVerifier._verifyActions@151",
+        "ZeroXSwapVerifier._verifyAction@163"
+      ],
+      "source": [
+        "src/utils/ZeroXSwapVerifier.sol:125-130",
+        "src/utils/ZeroXSwapVerifier.sol:138-143",
+        "src/utils/ZeroXSwapVerifier.sol:151-155",
+        "src/utils/ZeroXSwapVerifier.sol:163-189"
+      ],
+      "catalog": [
+        "AC-1",
+        "CC-3"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "Each accepted action selector checks the intended token. Empty/malformed/unsupported actions and invalid ABI fail as specified.",
+      "test_file": "test/dinosat/ZeroXSwapVerifierSymbolic.t.sol",
+      "technique": "T4 selector partitions and T9 list lengths",
+      "domain": "Enumerate six supported action types, native deposit rejection and unknown selector. Bound actions to 0..3 and disclose loop limits.",
+      "evidence_target": "real bytecode",
+      "notes": "No checks bind saa.recipient, saa.buyToken, saa.minAmountOut or owner. Empty actions pass. Source behavior cannot establish end-to-end slippage.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ZX-BPS",
+      "functions": [
+        "ZeroXSwapVerifier._verifyBasicSellToPool@195",
+        "ZeroXSwapVerifier._verifyUniswapV3VIP@209",
+        "ZeroXSwapVerifier._verifyVelodromeV2VIP@264"
+      ],
+      "source": [
+        "src/utils/ZeroXSwapVerifier.sol:195-203",
+        "src/utils/ZeroXSwapVerifier.sol:209-219",
+        "src/utils/ZeroXSwapVerifier.sol:264-273"
+      ],
+      "catalog": [
+        "FB-4",
+        "AS-1"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "Token mismatch or bps>maxSlippageBps rejects. Valid bounded fields follow the declared encoding.",
+      "test_file": "test/dinosat/ZeroXSwapVerifierSymbolic.t.sol",
+      "technique": "T9 fixed-format real-bytecode tests",
+      "domain": "Concrete ABI layout with symbolic token/bps, exact threshold and threshold+1.",
+      "evidence_target": "real bytecode",
+      "notes": "Whether action bps actually means slippage needs current official 0x ABI/semantic validation. Do not assume it does.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ZX-NO-AMOUNT-GUARD",
+      "functions": [
+        "ZeroXSwapVerifier._verifyRFQVIP@225",
+        "ZeroXSwapVerifier._verifyTransferFrom@238",
+        "ZeroXSwapVerifier._verifySellToLiquidityProvider@251"
+      ],
+      "source": [
+        "src/utils/ZeroXSwapVerifier.sol:225-232",
+        "src/utils/ZeroXSwapVerifier.sol:238-246",
+        "src/utils/ZeroXSwapVerifier.sol:251-259"
+      ],
+      "catalog": [
+        "AC-1",
+        "CC-3"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "Characterize accepted token-matching actions with arbitrary amount, owner/from and recipient fields.",
+      "test_file": "test/dinosat/ZeroXSwapVerifierSymbolic.t.sol",
+      "technique": "T9 acceptance/rejection contrast",
+      "domain": "Concrete well-formed action per branch with adversarial owner/recipient/amount.",
+      "evidence_target": "real bytecode",
+      "notes": "Code explicitly removed balance checks and ignores these fields. A security property that the verifier bounds them should be expected to fail.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ZX-PARSERS",
+      "functions": [
+        "ZeroXSwapVerifier._extractTokenFromUniswapFills@281",
+        "ZeroXSwapVerifier._extractTokenAndAmountFromRFQ@293"
+      ],
+      "source": [
+        "src/utils/ZeroXSwapVerifier.sol:281-287",
+        "src/utils/ZeroXSwapVerifier.sol:293-299"
+      ],
+      "catalog": [
+        "AS-4",
+        "SM-4"
+      ],
+      "priority": "P0",
+      "classification": "ENUMERATE",
+      "obligation": "Parser accepts only enough bytes and decodes the first address/amount words exactly. Boundary malformed data rejects.",
+      "test_file": "test/dinosat/ZeroXSwapVerifierSymbolic.t.sol",
+      "technique": "T9 parser length partitions",
+      "domain": "Lengths 0,31,32,63,64,65. Fuzz malformed ABI address high bits.",
+      "evidence_target": "real bytecode",
+      "notes": "Both parsers are explicitly simplified TODO implementations. Actual 0x format compatibility remains unverified.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "ZX-FUZZ",
+      "functions": [
+        "ZeroXSwapVerifier._slice@51",
+        "ZeroXSwapVerifier._slice@65",
+        "ZeroXSwapVerifier.verifySwapCalldata@99",
+        "ZeroXSwapVerifier._verifyActions@151",
+        "ZeroXSwapVerifier._verifyAction@163"
+      ],
+      "source": [
+        "src/utils/ZeroXSwapVerifier.sol:51-57",
+        "src/utils/ZeroXSwapVerifier.sol:65-67",
+        "src/utils/ZeroXSwapVerifier.sol:99-115",
+        "src/utils/ZeroXSwapVerifier.sol:151-155",
+        "src/utils/ZeroXSwapVerifier.sol:163-189"
+      ],
+      "catalog": [
+        "AC-1",
+        "AS-1",
+        "AS-4"
+      ],
+      "priority": "P0",
+      "classification": "FUZZ",
+      "obligation": "Exercise arbitrary bounded calldata, nested offsets, truncation, large lengths, supported selectors, and mutation of valid encodings.",
+      "test_file": "test/dinosat/ZeroXSwapVerifierSymbolic.t.sol",
+      "technique": "T17 parser mutation fuzz",
+      "domain": "Payload lengths 0..2048, actions 0..8, deterministic malformed samples.",
+      "evidence_target": "real bytecode",
+      "notes": "Do not replace raw calldata with only valid encodings. Accepted output is not proof of actual swap correctness.",
+      "status": "PLANNED, NOT EXECUTED"
+    },
+    {
+      "id": "TR-PERSISTENT-INVARIANTS",
+      "functions": [
+        "Transmuter.setTransmutationFee@135",
+        "Transmuter.setExitFee@143",
+        "Transmuter.setTransmutationTime@151",
+        "Transmuter.createRedemption@176",
+        "Transmuter.claimRedemption@209",
+        "Transmuter.pokeMatured@322"
+      ],
+      "source": [
+        "src/Transmuter.sol:135-140",
+        "src/Transmuter.sol:143-148",
+        "src/Transmuter.sol:151-157",
+        "src/Transmuter.sol:176-206",
+        "src/Transmuter.sol:209-309",
+        "src/Transmuter.sol:322-338"
+      ],
+      "catalog": [
+        "FB-4",
+        "AS-2",
+        "CC-1",
+        "CC-3"
+      ],
+      "priority": "P0",
+      "classification": "DECOMPOSE",
+      "obligation": "After each completed real transaction, both fees are <=10000, duration>0, totalLocked<=issued, totalActiveLocked<=totalLocked, and synthetic balance>=totalLocked.",
+      "test_file": "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "technique": "T4 reachable transition partitions plus bounded multi-contract histories",
+      "domain": "Real reachable states with 1-2 positions and standard exact-transfer synthetic token. Check empty state, deposits, early/mature claims, poke, admin updates and supply changes.",
+      "evidence_target": "real bytecode and actual Alchemist integration",
+      "notes": "Parent reports six analogous Certora branch invariants. These are planned fresh checks, not imported proof results. Invariants hold at transaction boundaries, while callback-visible intermediate state requires separate TR-REENTRY analysis.",
+      "status": "PLANNED, NOT EXECUTED"
+    }
+  ],
+  "slow_paths": [
+    {
+      "functions": [
+        "FixedPointMath.mulDiv@145",
+        "FixedPointMath.mulDivUp@201"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:145-198",
+        "src/libraries/FixedPointMath.sol:201-209"
+      ],
+      "patterns": "512-bit mulmod assembly, unchecked modular inverse, ceil mulmod",
+      "strategy": "DECOMPOSE bounded actual-bytecode short path, INLINE model with exact floor/ceil, FUZZ full-width differential oracle",
+      "inherits_to": "Transmuter.claimRedemption, Transmuter.queryGraph and all Alchemist FixedPointMath callers",
+      "domain": "Bounded model product<=uint256.max. Full-width library behavior is a separate obligation."
+    },
+    {
+      "functions": [
+        "FixedPointMath.mulQ128@254"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:254-272"
+      ],
+      "patterns": "512-bit product assembly, discarded high quotient bits, unchecked ceil",
+      "strategy": "DECOMPOSE ratio<=2^128 actual-bytecode cases; FUZZ full-width oracle",
+      "inherits_to": "All AlchemistV3 survival/index/earmark paths",
+      "domain": "a arbitrary uint256, b<=2^128 for no quotient overflow. Callers must prove the ratio domain."
+    },
+    {
+      "functions": [
+        "FixedPointMath.divQ128@274"
+      ],
+      "source": [
+        "src/libraries/FixedPointMath.sol:274-286"
+      ],
+      "patterns": "Unchecked symbolic division and left shifts, special numerator=2^128 path",
+      "strategy": "DECOMPOSE zero/fast/boundary paths with quotient/remainder inequalities, FUZZ broader domain",
+      "inherits_to": "All AlchemistV3 ratio callers",
+      "domain": "For successful ratio theorem: 0<numer<=2^128 and denom>=numer. General inputs need separate rejection/behavior tests."
+    },
+    {
+      "functions": [
+        "StakingGraph.update@144",
+        "StakingGraph.query@182"
+      ],
+      "source": [
+        "src/libraries/StakingGraph.sol:144-174",
+        "src/libraries/StakingGraph.sol:182-207"
+      ],
+      "patterns": "Packed signed arithmetic, while loops, index bit-manipulation assembly",
+      "strategy": "ENUMERATE finite timelines for real bytecode and DECOMPOSE signed packing lemmas; FUZZ whole 32-bit timeline",
+      "inherits_to": "StakingGraph.addStake/queryStake, Transmuter._updateStakingGraph/createRedemption/claimRedemption/queryGraph",
+      "domain": "Explicit loop bound at least maximum path for chosen timeline. Treat incomplete paths as unverified."
+    },
+    {
+      "functions": [
+        "StakingGraph.addStake@53"
+      ],
+      "source": [
+        "src/libraries/StakingGraph.sol:53-101"
+      ],
+      "patterns": "Unchecked start+duration, graph expansion loop, update dependency",
+      "strategy": "ENUMERATE concrete timeline boundaries with symbolic amounts; FUZZ wrap/range/general history",
+      "inherits_to": "Transmuter._updateStakingGraph/createRedemption/claimRedemption",
+      "domain": "start,expiration<2^32-1 with nonwrapping duration in reachable Transmuter state"
+    },
+    {
+      "functions": [
+        "StakingGraph.queryStake@111"
+      ],
+      "source": [
+        "src/libraries/StakingGraph.sol:111-136"
+      ],
+      "patterns": "Two symbolic while-loop traversals, packed decode, signed products",
+      "strategy": "ENUMERATE concrete query indices with symbolic graph amounts; FUZZ general queries",
+      "inherits_to": "Transmuter.queryGraph",
+      "domain": "start>=1,end<=2^32, valid graph state"
+    },
+    {
+      "functions": [
+        "Transmuter.createRedemption@176",
+        "Transmuter._updateStakingGraph@341"
+      ],
+      "source": [
+        "src/Transmuter.sol:176-206",
+        "src/Transmuter.sol:341-343"
+      ],
+      "patterns": "Inherited Fenwick tree loops/assembly, amount*1e8 signed arithmetic",
+      "strategy": "ENUMERATE bounded timeline state transitions, DECOMPOSE guard paths, FUZZ general sequences",
+      "inherits_to": "Alchemist earmarking through graph views",
+      "domain": "amount<=1e27 scenario range, graph rate fits signed112, time positive, endpoint<2^32-1"
+    },
+    {
+      "functions": [
+        "Transmuter.claimRedemption@209"
+      ],
+      "source": [
+        "src/Transmuter.sol:209-309"
+      ],
+      "patterns": "mulDivUp x2, runtime 10**decimals, many conditionals/divisions, graph dependency, external callbacks",
+      "strategy": "DECOMPOSE branch-specific claims; ENUMERATE decimals/timelines; INLINE exact rounding lemmas; FUZZ complete bytecode settlement",
+      "inherits_to": "Protocol redemption and debt accounting",
+      "domain": "Each assumed bound documented. No production-wide theorem from bounded math lemmas."
+    },
+    {
+      "functions": [
+        "Transmuter.queryGraph@312"
+      ],
+      "source": [
+        "src/Transmuter.sol:312-319"
+      ],
+      "patterns": "Inherited Fenwick traversal plus mulDivUp",
+      "strategy": "ENUMERATE bounded graph paths, INLINE ceil(x/1e8) lemma, FUZZ arbitrary query sequences",
+      "inherits_to": "AlchemistV3 earmarking",
+      "domain": "Nonnegative queried amount required for toUint256. Prove it on reachable graph histories."
+    },
+    {
+      "functions": [
+        "PerpetualGauge.vote@46"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:46-92"
+      ],
+      "patterns": "Nested expiry branches, two unbounded arrays loops, symbolic weights*power",
+      "strategy": "DECOMPOSE expiry branches; ENUMERATE 1..3 entries actual bytecode; FUZZ histories",
+      "inherits_to": "clearVote/getCurrentAllocations/executeAllocation state",
+      "domain": "No source bounds on arrays/weights. Test arithmetic reverts separately from positive liveness."
+    },
+    {
+      "functions": [
+        "PerpetualGauge.clearVote@94"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:94-108"
+      ],
+      "patterns": "Unbounded vote array loop and current-balance multiplication",
+      "strategy": "ENUMERATE 1..3 entries and token balance transitions; FUZZ long history",
+      "inherits_to": "getCurrentAllocations/executeAllocation state",
+      "domain": "Balance changes must not be assumed away for the desync obligation."
+    },
+    {
+      "functions": [
+        "PerpetualGauge.getCurrentAllocations@115"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:115-136"
+      ],
+      "patterns": "Two strategyList loops and normalization division",
+      "strategy": "ENUMERATE 0..3 strategies, DECOMPOSE zero/positive total; FUZZ general list",
+      "inherits_to": "PerpetualGauge.executeAllocation",
+      "domain": "Nonempty lists require disclosed synthetic state because registration never populates them."
+    },
+    {
+      "functions": [
+        "PerpetualGauge.executeAllocation@138"
+      ],
+      "source": [
+        "src/PerpetualGauge.sol:138-172"
+      ],
+      "patterns": "Inherited loops/division, per-strategy branching and external calls",
+      "strategy": "DECOMPOSE risk/cap branches with concrete lists, FUZZ mixed-risk allocation",
+      "inherits_to": "Allocator external dependency",
+      "domain": "Keep WAD cap units. Never change expected cap to /1e4 just to obtain passes."
+    },
+    {
+      "functions": [
+        "PermissionedProxy.proxy@62"
+      ],
+      "source": [
+        "src/utils/PermissionedProxy.sol:62-72"
+      ],
+      "patterns": "Selector mload assembly",
+      "strategy": "ENUMERATE byte lengths and selectors while executing actual assembly",
+      "inherits_to": "AlchemistAllocator and AlchemistCurator inherited proxy",
+      "domain": "No arithmetic abstraction needed. First four bytes must match exactly."
+    },
+    {
+      "functions": [
+        "NFTMetadataGenerator.generateSVG@22",
+        "NFTMetadataGenerator._generateTokenIdText@41",
+        "NFTMetadataGenerator.generateJSONString@127",
+        "NFTMetadataGenerator.generateTokenURI@148"
+      ],
+      "source": [
+        "src/libraries/NFTMetadataGenerator.sol:22-39",
+        "src/libraries/NFTMetadataGenerator.sol:41-76",
+        "src/libraries/NFTMetadataGenerator.sol:127-140",
+        "src/libraries/NFTMetadataGenerator.sol:148-152"
+      ],
+      "patterns": "Nested decimal digit loops, imported Strings/Base64 assembly/loops",
+      "strategy": "FUZZ actual generated output, concrete 0/max/boundary ID regressions",
+      "inherits_to": "Transmuter.tokenURI and AlchemistV3Position.tokenURI",
+      "domain": "At most four ID lines, inner loop at most25. Unbounded title/svg input not exhaustively proved."
+    },
+    {
+      "functions": [
+        "Transmuter.tokenURI@166"
+      ],
+      "source": [
+        "src/Transmuter.sol:166-168"
+      ],
+      "patterns": "Inherited metadata loops and Base64 assembly",
+      "strategy": "FUZZ decoded URI output checks",
+      "inherits_to": "NFT consumers",
+      "domain": "Financial properties unaffected by the metadata proof limit."
+    },
+    {
+      "functions": [
+        "ZeroXSwapVerifier._slice@51",
+        "ZeroXSwapVerifier._slice@65"
+      ],
+      "source": [
+        "src/utils/ZeroXSwapVerifier.sol:51-57",
+        "src/utils/ZeroXSwapVerifier.sol:65-67"
+      ],
+      "patterns": "Variable byte-copy loop",
+      "strategy": "ENUMERATE lengths0..8; FUZZ general payload length",
+      "inherits_to": "Every action decoder and both parser functions",
+      "domain": "Small symbolic domain is explicitly bounded."
+    },
+    {
+      "functions": [
+        "ZeroXSwapVerifier.decodeAndVerifyActions@76",
+        "ZeroXSwapVerifier.verifySwapCalldata@99",
+        "ZeroXSwapVerifier._verifyExecuteCalldata@125",
+        "ZeroXSwapVerifier._verifyExecuteMetaTxnCalldata@138",
+        "ZeroXSwapVerifier._verifyActions@151",
+        "ZeroXSwapVerifier._verifyAction@163"
+      ],
+      "source": [
+        "src/utils/ZeroXSwapVerifier.sol:76-88",
+        "src/utils/ZeroXSwapVerifier.sol:99-115",
+        "src/utils/ZeroXSwapVerifier.sol:125-130",
+        "src/utils/ZeroXSwapVerifier.sol:138-143",
+        "src/utils/ZeroXSwapVerifier.sol:151-155",
+        "src/utils/ZeroXSwapVerifier.sol:163-189"
+      ],
+      "patterns": "Dynamic actions loop, eight action branches, inherited slice loops",
+      "strategy": "DECOMPOSE action selectors with ENUMERATE finite payload/list lengths; FUZZ arbitrary bytes",
+      "inherits_to": "No production source importer found by exhaustive source search excluding tests",
+      "domain": "Malformed ABI paths need successful positive witnesses too."
+    },
+    {
+      "functions": [
+        "ZeroXSwapVerifier._verifyBasicSellToPool@195",
+        "ZeroXSwapVerifier._verifyUniswapV3VIP@209",
+        "ZeroXSwapVerifier._verifyRFQVIP@225",
+        "ZeroXSwapVerifier._verifyTransferFrom@238",
+        "ZeroXSwapVerifier._verifySellToLiquidityProvider@251",
+        "ZeroXSwapVerifier._verifyVelodromeV2VIP@264",
+        "ZeroXSwapVerifier._extractTokenFromUniswapFills@281",
+        "ZeroXSwapVerifier._extractTokenAndAmountFromRFQ@293"
+      ],
+      "source": [
+        "src/utils/ZeroXSwapVerifier.sol:195-203",
+        "src/utils/ZeroXSwapVerifier.sol:209-219",
+        "src/utils/ZeroXSwapVerifier.sol:225-232",
+        "src/utils/ZeroXSwapVerifier.sol:238-246",
+        "src/utils/ZeroXSwapVerifier.sol:251-259",
+        "src/utils/ZeroXSwapVerifier.sol:264-273",
+        "src/utils/ZeroXSwapVerifier.sol:281-287",
+        "src/utils/ZeroXSwapVerifier.sol:293-299"
+      ],
+      "patterns": "Inherited slice loop and dynamic ABI decode",
+      "strategy": "ENUMERATE fixed encoded action shapes; FUZZ mutated/longer payloads",
+      "inherits_to": "ZeroXSwapVerifier action dispatch and external entry",
+      "domain": "ABI semantic alignment with real 0x Settler not established."
+    }
+  ],
+  "protocol_types": [
+    "Token",
+    "Staking/redemption queue",
+    "Governance allocation",
+    "lending redemption boundary"
+  ],
+  "assets_at_risk": [
+    "Synthetic tokens held by Transmuter positions",
+    "Yield-token claims and protocol fees",
+    "Alchemist issued-debt accounting synchronized on burns",
+    "Gauge vote weights and vault allocation limits",
+    "Proxy operator authority and forwarded ETH",
+    "Allowlist membership"
+  ],
+  "actors": [
+    "Transmuter admin and pending admin: privileged configuration",
+    "Position owner: adversarial create, transfer, early/mature claim",
+    "Permissionless caller: pokeMatured and gauge registration/allocation",
+    "Voting-token holder: vote, revote, clear; balance can change",
+    "Whitelist owner: irreversible disable and membership",
+    "Proxy admin and operators: selector-gated calls to arbitrary target",
+    "External token/Alchemist/allocator/classifier contracts",
+    "AlEth caller: unrestricted fixture controls, whitelisted mint"
+  ],
+  "constants": {
+    "Transmuter.BPS": 10000,
+    "Transmuter.FIXED_POINT_SCALAR": "1e18",
+    "Transmuter.BLOCK_SCALING_FACTOR": "1e8 signed",
+    "FixedPointMath.ONE": "1e18",
+    "Q128": "2^128",
+    "StakingGraph.DELTA_BITS": 112,
+    "StakingGraph.PRODUCT_BITS": 144,
+    "StakingGraph.GRAPH_MAX": "2^32",
+    "PerpetualGauge.MAX_VOTE_DURATION": "365 days",
+    "PerpetualGauge.MIN_RESET_DURATION": "30 days",
+    "NFTMetadataGenerator.TOKEN_ID_CHARS_PER_LINE": 25
+  },
+  "imported_dependencies": {
+    "Transmuter": [
+      "IAlchemistV3",
+      "OpenZeppelin ERC721Enumerable/ERC721",
+      "local StakingGraph/SafeCast/FixedPointMath/TokenUtils/NFTMetadataGenerator"
+    ],
+    "PerpetualGauge": [
+      "IERC20.balanceOf",
+      "IStrategyClassifier (WAD cap units)",
+      "IAllocatorProxy.allocate",
+      "OpenZeppelin ReentrancyGuard"
+    ],
+    "PermissionedProxy": [
+      "arbitrary vault.call target"
+    ],
+    "Whitelist": [
+      "OpenZeppelin Ownable",
+      "local Sets"
+    ],
+    "AlEth": [
+      "OpenZeppelin ERC20"
+    ],
+    "NFTMetadataGenerator": [
+      "OpenZeppelin Base64/Strings"
+    ]
+  },
+  "implicit_public_getters": {
+    "Transmuter": [
+      "BPS",
+      "FIXED_POINT_SCALAR",
+      "BLOCK_SCALING_FACTOR",
+      "version",
+      "depositCap",
+      "exitFee",
+      "transmutationFee",
+      "timeToTransmute",
+      "totalLocked",
+      "totalActiveLocked",
+      "admin",
+      "pendingAdmin",
+      "protocolFeeReceiver",
+      "syntheticToken",
+      "alchemist"
+    ],
+    "PerpetualGauge": [
+      "stratClassifier",
+      "allocatorProxy",
+      "votingToken",
+      "MAX_VOTE_DURATION",
+      "MIN_RESET_DURATION",
+      "votes",
+      "lastStrategyAddedAt",
+      "strategyList"
+    ],
+    "PermissionedProxy": [
+      "operators",
+      "permissionedCalls",
+      "pendingAdmin"
+    ],
+    "Whitelist": [
+      "disabled"
+    ],
+    "AlEth": [
+      "ADMIN_ROLE",
+      "SENTINEL_ROLE",
+      "whiteList",
+      "paused",
+      "ceiling",
+      "hasMinted"
+    ],
+    "FixedPointMath": [
+      "DECIMALS",
+      "ONE"
+    ]
+  },
+  "inherited_surface": [
+    "Transmuter ERC721/ERC721Enumerable transfer/approval/owner enumeration must participate in ownership/claim integration tests. Dependency code is not re-certified by these local tests.",
+    "Whitelist Ownable transferOwnership/renounceOwnership must participate in permission tests.",
+    "AlEth inherits ERC20 transfer/transferFrom/approve and metadata getters. Cover balance changes used by gauge and supply invariants."
+  ],
+  "trust_assumptions": [
+    "Transmuter standard flow assumes exact-transfer, non-rebasing, non-reentrant synthetic and yield tokens. Explicit callback cases are a separate obligation.",
+    "Alchemist mock responses must state conversion formulas, backing units, returned shares, supply updates, and redeem transfer effects. Mock proofs do not prove the real Alchemist.",
+    "Admin can replace Alchemist with any address and set fees up to 100%. A benign admin configuration is an explicit economic assumption, not access-control proof.",
+    "Token decimal compatibility and valid runtime exponent must be derived from the concrete deployment. Transmuter does not locally restrict uint8 decimals.",
+    "FixedPointMath.mulQ128 requires ratio-domain restrictions to avoid high-bit truncation. divQ128 assumes numer<=2^128 for its stated exactness domain.",
+    "StakingGraph user histories must retain valid packed sums and nonnegative aggregate scheduled stake. Arbitrary storage is not a reachable-state assumption.",
+    "IStrategyClassifier caps are WAD, not basis points. The production allocator may independently restrict authority and cap total allocation.",
+    "PermissionedProxy trusts authorized operators to choose target/arguments for allowed selectors. The selector allowlist does not restrict vault address.",
+    "OpenZeppelin dependencies remain external implementation dependencies unless included in bytecode path assertions.",
+    "ZeroX action selector constants and ABI semantics need independent official source validation before any actual swap safety claim.",
+    "AlEth is an explicitly modified invariant-test token. Its public controls are not evidence about a deployed production synthetic token."
+  ],
+  "threats": [
+    {
+      "threat": "Unauthorized config or ownership takeover",
+      "properties": [
+        "TR-ADMIN",
+        "TR-HANDOFF",
+        "PP-ADMIN",
+        "PP-HANDOFF",
+        "WL-ADMIN"
+      ]
+    },
+    {
+      "threat": "Double claim, unauthorized NFT claim, cap double decrement",
+      "properties": [
+        "TR-CLAIM-GATES",
+        "TR-CLAIM-CAP",
+        "TR-REENTRY"
+      ]
+    },
+    {
+      "threat": "Rounding leak or bad-debt distribution error",
+      "properties": [
+        "TR-CLAIM-TIME",
+        "TR-CLAIM-BAD-DEBT",
+        "TR-CLAIM-SPLIT",
+        "TR-CLAIM-SETTLEMENT"
+      ]
+    },
+    {
+      "threat": "Fenwick packed overflow, truncation, interval accounting error",
+      "properties": [
+        "SG-PACK",
+        "SG-BOUNDS",
+        "SG-ADD-QUERY",
+        "SG-HISTORY"
+      ]
+    },
+    {
+      "threat": "Full-width arithmetic or survival-ratio truncation",
+      "properties": [
+        "FM-MULDIV-WIDE",
+        "FM-QMUL",
+        "FM-QDIV"
+      ]
+    },
+    {
+      "threat": "Balance-based vote desync and expiry manipulation",
+      "properties": [
+        "PG-POWER-CHANGE",
+        "PG-REGISTER",
+        "PG-VOTE-STATE"
+      ]
+    },
+    {
+      "threat": "Incorrect cap units or mixed-risk allocation",
+      "properties": [
+        "PG-EXECUTION",
+        "PG-FUZZ"
+      ]
+    },
+    {
+      "threat": "ABI false-success token calls and selector bypass",
+      "properties": [
+        "TokenUtils-WRITE",
+        "SafeERC20-CODE",
+        "PP-PROXY"
+      ]
+    },
+    {
+      "threat": "Malformed 0x calldata, unbound recipient or amount",
+      "properties": [
+        "ZX-ENTRY",
+        "ZX-ACTIONS",
+        "ZX-NO-AMOUNT-GUARD",
+        "ZX-PARSERS",
+        "ZX-FUZZ"
+      ]
+    }
+  ],
+  "source_observations_not_verified_findings": [
+    {
+      "file": "src/PerpetualGauge.sol",
+      "lines": [
+        64,
+        70,
+        71,
+        98,
+        102,
+        103
+      ],
+      "observation": "Removal uses current token balance, so changed balance can cause underflow or stale aggregate weight. Need executable counterexample."
+    },
+    {
+      "file": "src/PerpetualGauge.sol",
+      "lines": [
+        67,
+        76,
+        82,
+        110,
+        111,
+        118,
+        140,
+        175
+      ],
+      "observation": "Expired prior contributions persist. Registration does not populate strategyList. Nonempty allocations are unreachable from fresh public state."
+    },
+    {
+      "file": "src/PerpetualGauge.sol",
+      "lines": [
+        153,
+        158,
+        160
+      ],
+      "observation": "Gauge uses /1e4 for WAD classifier caps and one aggregate across all positive risk classes. Nonempty state requires a disclosed synthetic harness."
+    },
+    {
+      "file": "src/external/AlEth.sol",
+      "lines": [
+        13,
+        55,
+        65,
+        73,
+        81
+      ],
+      "observation": "Invariant-testing token allows anyone to whitelist/pause/set ceiling and never enforces ceiling on mint."
+    },
+    {
+      "file": "src/utils/ZeroXSwapVerifier.sol",
+      "lines": [
+        128,
+        141,
+        225,
+        238,
+        251,
+        279,
+        291
+      ],
+      "observation": "Recipient/output/minimum-out/owner fields lack checks and two parsers are simplified placeholders. No production source importer found."
+    },
+    {
+      "file": "src/libraries/SafeERC20.sol",
+      "lines": [
+        44,
+        60,
+        77
+      ],
+      "observation": "Unlike TokenUtils, write wrappers accept empty-success EOA calls. Production relevance depends on MYTStrategy target configuration."
+    },
+    {
+      "file": "src/libraries/StakingGraph.sol",
+      "lines": [
+        54,
+        58,
+        59
+      ],
+      "observation": "Unchecked start+duration could wrap for standalone arbitrary duration. Transmuter duration bound plus valid start prevents that wrap."
+    },
+    {
+      "file": "src/libraries/FixedPointMath.sol",
+      "lines": [
+        265,
+        269,
+        281,
+        284
+      ],
+      "observation": "Q128 helpers are partial-domain routines. Out-of-domain inputs can truncate rather than reject."
+    },
+    {
+      "file": "src/Transmuter.sol",
+      "lines": [
+        127,
+        151,
+        196
+      ],
+      "observation": "Admin-accepted cap/time ranges exceed graph/int multiplication liveness ranges. Prove explicit rejection behavior and bounded successful domain."
+    }
+  ],
+  "limitations": [
+    "No tests, solver runs, compilation, or repository writes occurred in this task. All entries are planned obligations.",
+    "Parent already confirmed graft CLI and graft/INDEX.md absent. This analysis used source reads and rg as the fallback.",
+    "Do not report a pure guard comparison, assumed range, assert(true), zero explored paths, or all-reverting run as an implementation proof.",
+    "The skill CROSSMUL examples are not integer equivalences. For positive denominators use proven sufficient directions or q*d<=n<(q+1)*d with overflow-safe products.",
+    "One symbolic path can still represent many inputs. Inspect path conditions and successful witnesses instead of treating path count alone as a vacuity verdict.",
+    "For every rejected operation, check the intended error or pair with a valid positive witness so unrelated failure cannot satisfy the property.",
+    "Abstract ceil/floor/packing lemmas require separate actual-bytecode correspondence checks. State mutations and external effects cannot follow from copied formulas alone.",
+    "Enumeration is bounded coverage unless the enumerated set exhausts the actual valid domain. Decimal examples are not exhaustive uint8 verification.",
+    "Unbounded graphs, voter arrays, callback recursion, histories and dynamic bytes remain outside finite Halmos bounds unless separately proved.",
+    "Fuzz wrappers must avoid skipped/returned cases counting as useful coverage. Construct satisfying domains and record successful assertion counts where feasible.",
+    "Private graph packing helpers are only observable through a real harness or source-preserving exposure. Label any copied model distinctly.",
+    "Solidity library functions can remain pure despite assembly. Compiler mutability is authoritative over the skill blanket claim that assembly requires view."
+  ],
+  "summary": {
+    "file_count": 16,
+    "function_count_including_private_and_constructors": 111,
+    "explicit_public_external_count": 37,
+    "property_count": 77,
+    "classes": {
+      "DIRECT": 36,
+      "FUZZ": 10,
+      "DECOMPOSE": 13,
+      "ENUMERATE": 17,
+      "INLINE": 1
+    },
+    "priorities": {
+      "P0": 60,
+      "P1": 10,
+      "P2": 7
+    },
+    "unmapped_functions": [],
+    "slow_path_groups": 19,
+    "proof_files": [
+      "test/dinosat/AlEthSymbolic.t.sol",
+      "test/dinosat/FixedPointMathSymbolic.t.sol",
+      "test/dinosat/NFTMetadataSymbolic.t.sol",
+      "test/dinosat/PermissionedProxySymbolic.t.sol",
+      "test/dinosat/PerpetualGaugeLemmas.t.sol",
+      "test/dinosat/PerpetualGaugeSymbolic.t.sol",
+      "test/dinosat/SafeCastSymbolic.t.sol",
+      "test/dinosat/SetsSymbolic.t.sol",
+      "test/dinosat/StakingGraphLemmas.t.sol",
+      "test/dinosat/StakingGraphSymbolic.t.sol",
+      "test/dinosat/TokenWrappersSymbolic.t.sol",
+      "test/dinosat/TransmuterAdminSymbolic.t.sol",
+      "test/dinosat/TransmuterClaimLemmas.t.sol",
+      "test/dinosat/TransmuterStateSymbolic.t.sol",
+      "test/dinosat/WhitelistSymbolic.t.sol",
+      "test/dinosat/ZeroXSwapVerifierSymbolic.t.sol"
+    ]
+  }
+}

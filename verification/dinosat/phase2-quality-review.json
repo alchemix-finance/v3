@@ -1,0 +1,101 @@
+{
+  "scope": "Independent quality review of core plan and Certora crosswalk. No repository edits, tests, solver runs or proof-result claims.",
+  "reviewed": [
+    "/tmp/dinosat-core-scope.json",
+    "/tmp/dinosat-certora-crosswalk.json",
+    "Current AlchemistV3 and AlchemistRouter relevant source spans",
+    "origin/certora specs and scene/mock harnesses",
+    "Current VaultV2 transient accrual source"
+  ],
+  "corrections": [
+    {
+      "id": "QR-1",
+      "target": "AV3-DEPOSIT,AV3-MINT",
+      "severity": "material specification correction",
+      "evidence": [
+        "src/AlchemistV3.sol:430-434",
+        "src/AlchemistV3.sol:484-486",
+        "src/AlchemistV3.sol:1430-1452"
+      ],
+      "correction": "Measure position collateral and debt deltas from a synchronized checkpoint. A public deposit or mint can first realize historical redemption, so net changes from pre-call stored values need not equal the new amount.",
+      "suggested_obligation": "Assert postCollateral=projectedCollateralBefore+deposit and postDebt=projectedDebtBefore+mint under stable dependencies. Keep actual issued-supply and global-debt increments distinct."
+    },
+    {
+      "id": "QR-2",
+      "target": "AV3-PACKED",
+      "severity": "material specification correction",
+      "evidence": [
+        "src/AlchemistV3.sol:1735-1750",
+        "src/AlchemistV3.sol:1756-1773"
+      ],
+      "correction": "Specify chronological checkpoints and handle oldPacked==0 before the epoch theorem. Valid packed shape alone does not imply a nonincreasing index or ratio<=Q128.",
+      "suggested_obligation": "If oldPacked!=0 and newEpoch>oldEpoch, ratio=0. For same epoch require a reachable transition with newIndex<=oldIndex. For oldPacked==0, actual helper returns Q128."
+    },
+    {
+      "id": "QR-3",
+      "target": "AV3-BATCH",
+      "severity": "material oracle correction",
+      "evidence": [
+        "src/AlchemistV3.sol:607-615",
+        "src/AlchemistV3.sol:620-650"
+      ],
+      "correction": "Do not use repeated public liquidate calls as an unconditional equivalence oracle. Batch skips invalid IDs and preserves internal no-progress effects unless the whole batch lacks progress. Public liquidate reverts each no-progress call.",
+      "suggested_obligation": "Compare a sequence of internal liquidation semantics with identical invalid-ID filtering and one final anyProgress guard. Alternatively constrain the public-call comparison domain and retain separate invalid/no-progress tests."
+    },
+    {
+      "id": "QR-4",
+      "target": "Certora harness reuse",
+      "severity": "harness bug",
+      "evidence": [
+        "origin/certora:certora/harnesses/AlchemistV3SceneHarness.sol:245-246",
+        "src/AlchemistV3.sol:512"
+      ],
+      "correction": "The existing __burn(tokenId,amount) wrapper calls this.burn(tokenId,amount). Production burn expects (amount,recipientId). Do not copy the argument order.",
+      "suggested_obligation": "Use the real burn API with the correct argument order and include an explicit successful burn witness. Do not regard old harness text as evidence of burn coverage."
+    },
+    {
+      "id": "QR-5",
+      "target": "Crosswalk totalAssetsBoundedByReal",
+      "severity": "transaction-scope correction",
+      "evidence": [
+        "lib/vault-v2/src/VaultV2.sol:219",
+        "lib/vault-v2/src/VaultV2.sol:637-645",
+        "lib/vault-v2/src/VaultV2.sol:653-661"
+      ],
+      "correction": "When firstTotalAssets!=0, accrueInterestView returns cached _totalAssets without reading current strategy values. A same-transaction injected strategy loss can make a blanket bound false.",
+      "suggested_obligation": "Separate fresh-transaction firstTotalAssets==0 valuation from cached same-transaction behavior. Model actual transient reset boundaries. Block/time changes alone do not clear transient storage."
+    },
+    {
+      "id": "QR-6",
+      "target": "Certora crosswalk mock/harness assumptions",
+      "severity": "refinement requirement",
+      "evidence": [
+        "origin/certora:certora/harnesses/TypedAnchors.sol",
+        "origin/certora:certora/harnesses/AlchemistV3SceneHarness.sol",
+        "origin/certora:certora/harnesses/TransmuterMocks.sol",
+        "origin/certora:certora/harnesses/TransmuterSceneHarness.sol"
+      ],
+      "correction": "Reuse properties, not unchanged harness semantics as production evidence. Anchors bypass allowances and use a simplified vault without virtual offsets. Alchemist scene bypasses initialize and writes fixed storage slots. Transmuter uses 1:1 conversions and self-owned redemption positions.",
+      "suggested_obligation": "Retain separate proxy initialization tests, compiler-checked storage-layout readers, distinct external actors, exact dependency units/rounding, and real Alchemist/Transmuter/Vault integration. Note the Transmuter reader uses mockAlchemist even if configured alchemist changes."
+    },
+    {
+      "id": "QR-7",
+      "target": "AV3-RATIOS and Transmuter persistent invariants",
+      "severity": "reachable-domain qualification",
+      "evidence": [
+        "src/AlchemistV3.sol:167-183",
+        "src/AlchemistV3.sol:301-337",
+        "src/Transmuter.sol:120-123"
+      ],
+      "correction": "Do not assume all intended ratio orderings or cross-contract invariants survive arbitrary authorized admin changes. setMinimumCollateralization can reduce minimum below an existing lowerBound. Transmuter admin can replace Alchemist with an unrelated contract.",
+      "suggested_obligation": "Keep these as discovery obligations with possible counterexamples. State benign-configuration assumptions for economic invariants, and separately test the full accepted admin input domain."
+    }
+  ],
+  "positive_checks": [
+    "No missing source-defined public/external function or receive entry found in core function inventory or property associations. Compiler-generated getters are a separate implicit surface.",
+    "Crosswalk correctly labels declarations as lacking committed proof results.",
+    "Crosswalk correctly reassesses stale local debt/collateral, changed cover semantics and debt-token supply assumptions.",
+    "Current Transmuter source and VaultV2 source match origin/certora for inspected paths.",
+    "Global Certora spec is explicitly an unimplemented skeleton. It cannot provide cross-contract proof evidence."
+  ]
+}

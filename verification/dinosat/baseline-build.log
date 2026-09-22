@@ -1,0 +1,2651 @@
+Warning: Found unknown `exclude` config for profile `default` defined in foundry.toml.
+Warning: Found unknown `exclude` config for profile `lite` defined in foundry.toml.
+Warning: Found unknown `fuzz_runs` config for profile `lite` defined in foundry.toml.
+Warning: Found unknown `exclude` config for profile `test` defined in foundry.toml.
+Compiling 144 files with Solc 0.8.28
+Solc 0.8.28 finished in 8.94s
+Compiler run successful with warnings:
+Warning (5740): Unreachable code.
+  --> src/MYTStrategy.sol:84:9:
+   |
+84 |         uint256 oldAllocation = allocation();
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/MYTStrategy.sol:85:9:
+   |
+85 |         uint256 newAllocation = _totalValue();
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/MYTStrategy.sol:86:9:
+   |
+86 |         emit Allocate(amountAllocated, address(this));
+   |         ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (5740): Unreachable code.
+   --> src/MYTStrategy.sol:115:9:
+    |
+115 |         uint256 totalValueAfter = _totalValue();
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+   --> src/MYTStrategy.sol:116:9:
+    |
+116 |         require(totalValueAfter >= assets, "inconsistent totalValue");
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+   --> src/MYTStrategy.sol:117:9:
+    |
+117 |         uint256 newAllocation = totalValueAfter - assets;
+    |         ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:91:9:
+   |
+91 |         require(sellToken != address(0), "No intermediate token");
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:92:9:
+   |
+92 |         require(sellAmount > 0, "No intermediate amount");
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:94:9:
+   |
+94 |         dexSwap(_asset(), sellToken, sellAmount, shortfall, callData);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:95:9:
+   |
+95 |         uint256 receivedAssets = _idleAssets();
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:96:9:
+   |
+96 |         if (receivedAssets < amount) revert InsufficientBalance(amount, receivedAssets);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:97:9:
+   |
+97 |         TokenUtils.safeApprove(_asset(), msg.sender, amount);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:98:9:
+   |
+98 |         return amount;
+   |         ^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:66:9:
+   |
+66 |         require(oracleTokenToSwap > 0, "No oracle token to swap");
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:68:9:
+   |
+68 |         dexSwap(_asset(), _oracleToken(), oracleTokenToSwap, shortfall, callData);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:69:9:
+   |
+69 |         uint256 receivedAssets = _idleAssets();
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:70:9:
+   |
+70 |         if (receivedAssets < amount) revert InsufficientBalance(amount, receivedAssets);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:71:9:
+   |
+71 |         TokenUtils.safeApprove(_asset(), msg.sender, amount);
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5740): Unreachable code.
+  --> src/strategies/OraclePricedSwapStrategy.sol:72:9:
+   |
+72 |         return amount;
+   |         ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> src/MYTStrategy.sol:65:58:
+   |
+65 |     function allocate(bytes memory data, uint256 assets, bytes4 selector, address sender)
+   |                                                          ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> src/MYTStrategy.sol:65:75:
+   |
+65 |     function allocate(bytes memory data, uint256 assets, bytes4 selector, address sender)
+   |                                                                           ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+  --> src/MYTStrategy.sol:91:77:
+   |
+91 |     function deallocate(bytes memory data, uint256 assets, bytes4 selector, address sender)
+   |                                                                             ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/MYTStrategy.sol:278:24:
+    |
+278 |     function _allocate(uint256 amount) internal virtual returns (uint256) {
+    |                        ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/MYTStrategy.sol:286:24:
+    |
+286 |     function _allocate(uint256 amount, bytes memory callData) internal virtual returns (uint256) {
+    |                        ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/MYTStrategy.sol:286:40:
+    |
+286 |     function _allocate(uint256 amount, bytes memory callData) internal virtual returns (uint256) {
+    |                                        ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/MYTStrategy.sol:297:26:
+    |
+297 |     function _deallocate(uint256 amount) internal virtual returns (uint256) {
+    |                          ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/MYTStrategy.sol:308:26:
+    |
+308 |     function _deallocate(uint256 amount, bytes memory callData) internal virtual returns (uint256) {
+    |                          ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/MYTStrategy.sol:308:42:
+    |
+308 |     function _deallocate(uint256 amount, bytes memory callData) internal virtual returns (uint256) {
+    |                                          ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/MYTStrategy.sol:317:26:
+    |
+317 |     function _deallocate(uint256 amount, bytes memory callData, uint256 minIntermediateOutAmount) internal virtual returns (uint256) {
+    |                          ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/MYTStrategy.sol:317:42:
+    |
+317 |     function _deallocate(uint256 amount, bytes memory callData, uint256 minIntermediateOutAmount) internal virtual returns (uint256) {
+    |                                          ^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/MYTStrategy.sol:317:65:
+    |
+317 |     function _deallocate(uint256 amount, bytes memory callData, uint256 minIntermediateOutAmount) internal virtual returns (uint256) {
+    |                                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/PerpetualGauge.sol:110:48:
+    |
+110 |     function registerNewStrategy(uint256 ytId, uint256 strategyId) external nonReentrant {
+    |                                                ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/strategies/OraclePricedSwapStrategy.sol:214:42:
+    |
+214 |     function _prepareIntermediateForSwap(uint256 maxOracleTokenIn, uint256 minIntermediateOutAmount)
+    |                                          ^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/strategies/OraclePricedSwapStrategy.sol:214:68:
+    |
+214 |     function _prepareIntermediateForSwap(uint256 maxOracleTokenIn, uint256 minIntermediateOutAmount)
+    |                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/strategies/OraclePricedSwapStrategy.sol:217:18:
+    |
+217 |         returns (address sellToken, uint256 sellAmount)
+    |                  ^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/strategies/OraclePricedSwapStrategy.sol:217:37:
+    |
+217 |         returns (address sellToken, uint256 sellAmount)
+    |                                     ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/utils/ZeroXSwapVerifier.sol:195:58:
+    |
+195 |     function _verifyBasicSellToPool(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view {
+    |                                                          ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/utils/ZeroXSwapVerifier.sol:209:55:
+    |
+209 |     function _verifyUniswapV3VIP(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view {
+    |                                                       ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/utils/ZeroXSwapVerifier.sol:225:49:
+    |
+225 |     function _verifyRFQVIP(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view {
+    |                                                 ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/utils/ZeroXSwapVerifier.sol:225:85:
+    |
+225 |     function _verifyRFQVIP(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view {
+    |                                                                                     ^^^^^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> src/utils/ZeroXSwapVerifier.sol:229:29:
+    |
+229 |         (address sellToken, uint256 amount) = _extractTokenAndAmountFromRFQ(fillData);
+    |                             ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/utils/ZeroXSwapVerifier.sol:238:55:
+    |
+238 |     function _verifyTransferFrom(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view {
+    |                                                       ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/utils/ZeroXSwapVerifier.sol:238:91:
+    |
+238 |     function _verifyTransferFrom(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view {
+    |                                                                                           ^^^^^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> src/utils/ZeroXSwapVerifier.sol:239:29:
+    |
+239 |         (address token, , , uint256 amount) = abi.decode(
+    |                             ^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/utils/ZeroXSwapVerifier.sol:251:66:
+    |
+251 |     function _verifySellToLiquidityProvider(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view {
+    |                                                                  ^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/utils/ZeroXSwapVerifier.sol:251:102:
+    |
+251 |     function _verifySellToLiquidityProvider(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view {
+    |                                                                                                      ^^^^^^^^^^^^^^^^^^^^
+
+Warning (2072): Unused local variable.
+   --> src/utils/ZeroXSwapVerifier.sol:252:31:
+    |
+252 |         (address sellToken, , uint256 sellAmount, , ) = abi.decode(
+    |                               ^^^^^^^^^^^^^^^^^^
+
+Warning (5667): Unused function parameter. Remove or comment out the variable name to silence this warning.
+   --> src/utils/ZeroXSwapVerifier.sol:264:57:
+    |
+264 |     function _verifyVelodromeV2VIP(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view {
+    |                                                         ^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> src/Transmuter.sol:166:5:
+    |
+166 |     function tokenURI(uint256 id) public view override returns (string memory) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> src/strategies/EtherfiEETHStrategy.sol:175:5:
+    |
+175 |     function _prepareOracleTokenForSwap(uint256 maxOracleTokenIn) internal override returns (uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> src/utils/ZeroXSwapVerifier.sol:195:5:
+    |
+195 |     function _verifyBasicSellToPool(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> src/utils/ZeroXSwapVerifier.sol:209:5:
+    |
+209 |     function _verifyUniswapV3VIP(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> src/utils/ZeroXSwapVerifier.sol:225:5:
+    |
+225 |     function _verifyRFQVIP(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> src/utils/ZeroXSwapVerifier.sol:238:5:
+    |
+238 |     function _verifyTransferFrom(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> src/utils/ZeroXSwapVerifier.sol:251:5:
+    |
+251 |     function _verifySellToLiquidityProvider(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> src/utils/ZeroXSwapVerifier.sol:264:5:
+    |
+264 |     function _verifyVelodromeV2VIP(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+  --> src/Transmuter.sol:15:8
+   |
+15 | import "./base/TransmuterErrors.sol";
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/StakeDAOWETHStrategy.sol:22:29
+   |
+22 |     IERC20 public immutable weth;
+   |                             ^^^^ help: consider using: `WETH`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/StakeDAOWETHStrategy.sol:23:43
+   |
+23 |     IStakeDAORewardVault public immutable rewardVault;
+   |                                           ^^^^^^^^^^^ help: consider using: `REWARD_VAULT`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/StakeDAOWETHStrategy.sol:24:43
+   |
+24 |     ICurveStableSwapPool public immutable curvePool;
+   |                                           ^^^^^^^^^ help: consider using: `CURVE_POOL`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-const]: constants should use SCREAMING_SNAKE_CASE
+  --> src/Transmuter.sol:30:28
+   |
+30 |     string public constant version = "3.0.0";
+   |                            ^^^^^^^ help: consider using: `VERSION`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-const
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/interfaces/test/ITestYieldToken.sol:3:8
+  |
+3 | import "../../../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/AlchemistCurator.sol:20:40
+   |
+20 |     mapping(address => address) public adapterToMYT;
+   |                                        ^^^^^^^^^^^^ help: consider using: `adapterToMyt`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/AlchemistStrategyClassifier.sol:38:26
+   |
+38 |         riskClasses[0] = RiskClass(1e18, 1e18); // Low risk
+   |                          ^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `RiskClass({ globalCap: 1e18, localCap: 1e18 })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+ --> src/strategies/WstETHL2Strategy.sol:9:34
+  |
+9 |     IWstETHLike public immutable wsteth;
+  |                                  ^^^^^^ help: consider using: `WSTETH`
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/WstETHL2Strategy.sol:14:17
+   |
+14 |         address _wstETH,
+   |                 ^^^^^^^ help: consider using: `_wstEth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[named-struct-fields]: prefer initializing structs with named fields
+   --> src/Transmuter.sol:193:32
+    |
+193 |         _positions[++_nonce] = StakingPosition(syntheticDepositAmount, block.number, block.number + timeToTransmute);
+    |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `StakingPosition({ amount: syntheticDepositAmount, startBlock: block.number, maturationBlock: block.number + timeToTransmute })`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[unused-import]: unused imports should be removed
+ --> src/mocks/Stake.sol:6:9
+  |
+6 | import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+  |         ^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unused-import
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/StakeDAOWETHStrategy.sol:25:42
+   |
+25 |     IStakeDAOAccountant public immutable accountant;
+   |                                          ^^^^^^^^^^ help: consider using: `ACCOUNTANT`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/StakeDAOWETHStrategy.sol:26:30
+   |
+26 |     address public immutable mainRewardToken;
+   |                              ^^^^^^^^^^^^^^^ help: consider using: `MAIN_REWARD_TOKEN`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/AlchemistStrategyClassifier.sol:39:26
+   |
+39 |         riskClasses[1] = RiskClass(4e17, 25e16); // Medium risk
+   |                          ^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `RiskClass({ globalCap: 4e17, localCap: 25e16 })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[mixed-case-function]: function names should use mixedCase
+ --> src/interfaces/IWstETHLike.sol:6:14
+  |
+6 |     function getStETHByWstETH(uint256 wstETHAmount) external view returns (uint256);
+  |              ^^^^^^^^^^^^^^^^ help: consider using: `getStEthByWstEth`
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+ --> src/interfaces/IWstETHLike.sol:6:39
+  |
+6 |     function getStETHByWstETH(uint256 wstETHAmount) external view returns (uint256);
+  |                                       ^^^^^^^^^^^^ help: consider using: `wstEthAmount`
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-function]: function names should use mixedCase
+ --> src/interfaces/IWstETHLike.sol:7:14
+  |
+7 |     function getWstETHByStETH(uint256 stETHAmount) external view returns (uint256);
+  |              ^^^^^^^^^^^^^^^^ help: consider using: `getWstEthByStEth`
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+ --> src/interfaces/IWstETHLike.sol:7:39
+  |
+7 |     function getWstETHByStETH(uint256 stETHAmount) external view returns (uint256);
+  |                                       ^^^^^^^^^^^ help: consider using: `stEthAmount`
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/interfaces/IERC20Burnable.sol:3:8
+  |
+3 | import "../../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/WstETHL2Strategy.sol:39:17
+   |
+39 |         uint256 wstETHBalance = wsteth.balanceOf(address(this));
+   |                 ^^^^^^^^^^^^^ help: consider using: `wstEthBalance`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/AlchemistStrategyClassifier.sol:40:26
+   |
+40 |         riskClasses[2] = RiskClass(1e17, 1e17); // High risk
+   |                          ^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `RiskClass({ globalCap: 1e17, localCap: 1e17 })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/AlchemistStrategyClassifier.sol:63:32
+   |
+63 |         riskClasses[classId] = RiskClass(globalCap, localCap);
+   |                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `RiskClass({ globalCap: globalCap, localCap: localCap })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[unused-import]: unused imports should be removed
+ --> src/mocks/Pool.sol:6:9
+  |
+6 | import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+  |         ^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unused-import
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/Transmuter.sol:318:64
+    |
+318 |         return FixedPointMath.mulDivUp(queried.toUint256(), 1, uint256(BLOCK_SCALING_FACTOR));
+    |                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'uint256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/PerpetualGauge.sol:6:8
+  |
+6 | import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/strategies/EtherfiEETHStrategy.sol:11:14
+   |
+11 |     function depositWETHForWeETH(uint256 amount, address referral) external returns (uint256);
+   |              ^^^^^^^^^^^^^^^^^^^ help: consider using: `depositWethForWeEth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/adapters/AbstractFeeVault.sol:4:8
+  |
+4 | import "@openzeppelin/contracts/access/Ownable.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/StakeDAOWETHStrategy.sol:27:30
+   |
+27 |     address public immutable gauge;
+   |                              ^^^^^ help: consider using: `GAUGE`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[unused-import]: unused imports should be removed
+ --> src/mocks/StakingPoolMock.sol:6:9
+  |
+6 | import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+  |         ^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unused-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/interfaces/IAlchemistTokenVault.sol:4:8
+  |
+4 | import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/interfaces/IERC20Mintable.sol:3:8
+  |
+3 | import "../../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/strategies/EtherfiEETHStrategy.sol:40:14
+   |
+40 |     function getEETHByWeETH(uint256 weETHAmount) external view returns (uint256);
+   |              ^^^^^^^^^^^^^^ help: consider using: `getEethByWeEth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/EtherfiEETHStrategy.sol:40:37
+   |
+40 |     function getEETHByWeETH(uint256 weETHAmount) external view returns (uint256);
+   |                                     ^^^^^^^^^^^ help: consider using: `weEthAmount`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/strategies/EtherfiEETHStrategy.sol:41:14
+   |
+41 |     function getWeETHByeETH(uint256 eETHAmount) external view returns (uint256);
+   |              ^^^^^^^^^^^^^^ help: consider using: `getWeEthByeEth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/EtherfiEETHStrategy.sol:41:37
+   |
+41 |     function getWeETHByeETH(uint256 eETHAmount) external view returns (uint256);
+   |                                     ^^^^^^^^^^ help: consider using: `eEthAmount`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/interfaces/IAlchemistV3.sol:624:119
+    |
+624 |     event BatchLiquidated(uint256[] indexed accounts, address liquidator, uint256 amount, uint256 feeInYield, uint256 feeInETH);
+    |                                                                                                                       ^^^^^^^^ help: consider using: `feeInEth`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[unwrapped-modifier-logic]: wrap modifier logic to reduce code size
+  --> src/mocks/StakingPoolMock.sol:86:5
+   |
+86 | /     modifier onlyGovernance() {
+87 | |         require(msg.sender == governance, "StakingPools: only governance");
+88 | |         _;
+89 | |     }
+   | |_____^
+   |
+help: wrap modifier logic to reduce code size
+   |
+86 ~     modifier onlyGovernance() {
+87 +         _onlyGovernance();
+88 +         _;
+89 +     }
+90 + 
+91 +     function _onlyGovernance() internal {
+92 +         require(msg.sender == governance, "StakingPools: only governance");
+93 +     }
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unwrapped-modifier-logic
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/WstETHEthereumStrategy.sol:10:34
+   |
+10 |     IWstETHLike public immutable wsteth;
+   |                                  ^^^^^^ help: consider using: `WSTETH`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/WstETHEthereumStrategy.sol:15:17
+   |
+15 |         address _wstETH,
+   |                 ^^^^^^^ help: consider using: `_wstEth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/interfaces/IAlchemistV3.sol:714:14
+    |
+714 |     function alchemistPositionNFT() external view returns (address nftContract);
+    |              ^^^^^^^^^^^^^^^^^^^^ help: consider using: `alchemistPositionNft`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/EtherfiEETHStrategy.sol:56:38
+   |
+56 |     IDepositAdapter public immutable depositAdapter;
+   |                                      ^^^^^^^^^^^^^^ help: consider using: `DEPOSIT_ADAPTER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/EtherfiEETHStrategy.sol:57:41
+   |
+57 |     IRedemptionManager public immutable redemptionManager;
+   |                                         ^^^^^^^^^^^^^^^^^ help: consider using: `REDEMPTION_MANAGER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/EtherfiEETHStrategy.sol:58:29
+   |
+58 |     IWeETH public immutable weETH;
+   |                             ^^^^^ help: consider using: `WE_ETH`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/EtherfiEETHStrategy.sol:59:29
+   |
+59 |     IERC20 public immutable eETH;
+   |                             ^^^^ help: consider using: `E_ETH`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/interfaces/IYearnVaultV2.sol:4:8
+  |
+4 | import "../../lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/strategies/StakeDAOWETHStrategy.sol:321:14
+    |
+321 |     function _minLpForWethVP(uint256 wethAmount) internal view returns (uint256) {
+    |              ^^^^^^^^^^^^^^^ help: consider using: `_minLpForWethVp`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/WstETHEthereumStrategy.sol:26:17
+   |
+26 |         uint256 wstETHBefore = wsteth.balanceOf(address(this));
+   |                 ^^^^^^^^^^^^ help: consider using: `wstEthBefore`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/adapters/AbstractFeeVault.sol:13:30
+   |
+13 |     address public immutable token;
+   |                              ^^^^^ help: consider using: `TOKEN`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/libraries/StakingGraph.sol:29:41
+   |
+29 |     int256 private constant DELTA_MAX = int256(DELTA_SIGNBIT - 1);
+   |                                         ^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'int256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/EtherfiEETHStrategy.sol:72:17
+   |
+72 |         address _eETH,
+   |                 ^^^^^ help: consider using: `_eEth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/strategies/StakeDAOWETHStrategy.sol:328:14
+    |
+328 |     function _maxLpForWethVP(uint256 wethAmount) internal view returns (uint256) {
+    |              ^^^^^^^^^^^^^^^ help: consider using: `_maxLpForWethVp`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/libraries/StakingGraph.sol:30:42
+   |
+30 |     int256 private constant DELTA_MIN = -int256(DELTA_SIGNBIT);
+   |                                          ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'int256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/EtherfiEETHStrategy.sol:73:17
+   |
+73 |         address _weETH,
+   |                 ^^^^^^ help: consider using: `_weEth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:111:17
+    |
+111 |         uint256 weETHBalance = weETH.balanceOf(address(this));
+    |                 ^^^^^^^^^^^^ help: consider using: `weEthBalance`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:114:17
+    |
+114 |         uint256 weETHToRedeem = _weETHForNetShortfall(shortfall, exitFeeInBps, weETHBalance);
+    |                 ^^^^^^^^^^^^^ help: consider using: `weEthToRedeem`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/libraries/StakingGraph.sol:32:43
+   |
+32 |     int256 private constant PRODUCT_MAX = int256(PRODUCT_SIGNBIT - 1);
+   |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'int256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/libraries/StakingGraph.sol:33:44
+   |
+33 |     int256 private constant PRODUCT_MIN = -int256(PRODUCT_SIGNBIT);
+   |                                            ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'int256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/WstETHEthereumStrategy.sol:32:17
+   |
+32 |         uint256 wstETHReceived = wsteth.balanceOf(address(this)) - wstETHBefore;
+   |                 ^^^^^^^^^^^^^^ help: consider using: `wstEthReceived`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/mocks/FixedPointMathOld.sol:15:12
+   |
+15 |     return FixedDecimal(x);
+   |            ^^^^^^^^^^^^^^^ help: consider using named fields: `FixedDecimal({ x: x })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/mocks/FixedPointMathOld.sol:21:12
+   |
+21 |     return FixedDecimal(x);
+   |            ^^^^^^^^^^^^^^^ help: consider using named fields: `FixedDecimal({ x: x })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/mocks/FixedPointMathOld.sol:31:12
+   |
+31 |     return FixedDecimal(x);
+   |            ^^^^^^^^^^^^^^^ help: consider using named fields: `FixedDecimal({ x: x })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/libraries/StakingGraph.sol:98:64
+   |
+98 |             update(g.g, start + 1, graphSize, amount, amount * int256(start));
+   |                                                                ^^^^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'int256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/libraries/StakingGraph.sol:99:71
+   |
+99 |             update(g.g, expiration + 1, graphSize, -amount, -amount * int256(expiration));
+   |                                                                       ^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'int256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[unwrapped-modifier-logic]: wrap modifier logic to reduce code size
+  --> src/adapters/AbstractFeeVault.sol:32:5
+   |
+32 | /     modifier onlyAuthorized() {
+33 | |         if (!authorized[msg.sender]) revert Unauthorized();
+34 | |         _;
+35 | |     }
+   | |_____^
+   |
+help: wrap modifier logic to reduce code size
+   |
+32 ~     modifier onlyAuthorized() {
+33 +         _onlyAuthorized();
+34 +         _;
+35 +     }
+36 + 
+37 +     function _onlyAuthorized() internal {
+38 +         if (!authorized[msg.sender]) revert Unauthorized();
+39 +     }
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unwrapped-modifier-logic
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/mocks/FixedPointMathOld.sol:41:12
+   |
+41 |     return FixedDecimal(x);
+   |            ^^^^^^^^^^^^^^^ help: consider using named fields: `FixedDecimal({ x: x })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/mocks/FixedPointMathOld.sol:46:12
+   |
+46 |     return FixedDecimal(self.x / value);
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `FixedDecimal({ x: self.x / value })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:140:14
+    |
+140 |     function _weETHForGrossRedeem(uint256 grossRedeemAmount, uint256 weETHBalance) internal view returns (uint256) {
+    |              ^^^^^^^^^^^^^^^^^^^^ help: consider using: `_weEthForGrossRedeem`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:140:70
+    |
+140 |     function _weETHForGrossRedeem(uint256 grossRedeemAmount, uint256 weETHBalance) internal view returns (uint256) {
+    |                                                                      ^^^^^^^^^^^^ help: consider using: `weEthBalance`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:141:17
+    |
+141 |         uint256 weETHToRedeem = weETH.getWeETHByeETH(grossRedeemAmount);
+    |                 ^^^^^^^^^^^^^ help: consider using: `weEthToRedeem`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:148:14
+    |
+148 |     function _weETHForNetShortfall(uint256 shortfall, uint256 exitFeeInBps, uint256 weETHBalance) internal view returns (uint256) {
+    |              ^^^^^^^^^^^^^^^^^^^^^ help: consider using: `_weEthForNetShortfall`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/libraries/StakingGraph.sol:134:22
+    |
+134 |             return ((int256(end) * endDelta) - endProd) - ((int256(start) * begDelta) - begProd);
+    |                      ^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'int256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/libraries/StakingGraph.sol:134:61
+    |
+134 |             return ((int256(end) * endDelta) - endProd) - ((int256(start) * begDelta) - begProd);
+    |                                                             ^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'int256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/libraries/StakingGraph.sol:155:26
+    |
+155 |                     ad = int256(packed | ~DELTA_MASK); //extend set sign bit
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'int256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/libraries/StakingGraph.sol:157:26
+    |
+157 |                     ad = int256(packed & DELTA_MASK); //extend zero sign bit
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'int256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/router/AlchemistRouter.sol:20:30
+   |
+20 |     address public immutable alchemist;
+   |                              ^^^^^^^^^ help: consider using: `ALCHEMIST`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/WstETHEthereumStrategy.sol:44:17
+   |
+44 |         uint256 minWstETHOut = _wstEthFromStEthUp(minStEthOut);
+   |                 ^^^^^^^^^^^^ help: consider using: `minWstEthOut`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/interfaces/IAlchemistV3.sol:826:14
+    |
+826 |     function getCDP(uint256 tokenId) external view returns (uint256 collateral, uint256 debt, uint256 earmarked);
+    |              ^^^^^^ help: consider using: `getCdp`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/FrxEthEthDualOracleAggregatorAdapter.sol:13:43
+   |
+13 |     IFrxEthEthDualOracle public immutable dualOracle;
+   |                                           ^^^^^^^^^^ help: consider using: `DUAL_ORACLE`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/libraries/StakingGraph.sol:159:22
+    |
+159 |                 ap = int256(packed)>>DELTA_BITS; //automatic sign extension
+    |                      ^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'int256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/router/AlchemistRouter.sol:79:14
+   |
+79 |     function depositETH(
+   |              ^^^^^^^^^^ help: consider using: `depositEth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/interfaces/IAlchemistV3.sol:858:71
+    |
+858 |     function getTotalUnderlyingValue() external view returns (uint256 TVL);
+    |                                                                       ^^^ help: consider using: `tvl`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/adapters/EulerUSDCAdapter.sol:4:8
+  |
+4 | import "../libraries/TokenUtils.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/adapters/EulerUSDCAdapter.sol:5:8
+  |
+5 | import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/strategies/StakeDAOWETHStrategy.sol:106:17
+    |
+106 |         amounts[uint256(uint128(WETH_COIN_INDEX))] = amount;
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'uint256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/router/AlchemistRouter.sol:113:14
+    |
+113 |     function depositMYT(
+    |              ^^^^^^^^^^ help: consider using: `depositMyt`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/FrxEthEthDualOracleAggregatorAdapter.sol:36:39
+   |
+36 |         return (uint80(block.number), int256(averagePrice), block.timestamp, block.timestamp, uint80(block.number));
+   |                                       ^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'int256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/WstETHEthereumStrategy.sol:65:17
+   |
+65 |         uint256 wstETHBalance = wsteth.balanceOf(address(this));
+   |                 ^^^^^^^^^^^^^ help: consider using: `wstEthBalance`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/strategies/StakeDAOWETHStrategy.sol:106:25
+    |
+106 |         amounts[uint256(uint128(WETH_COIN_INDEX))] = amount;
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'uint128' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/libraries/StakingGraph.sol:167:33
+    |
+167 |                 graph[index] = (uint256(ad)&DELTA_MASK)|uint256(ap<<DELTA_BITS);
+    |                                 ^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'uint256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/libraries/StakingGraph.sol:167:57
+    |
+167 |                 graph[index] = (uint256(ad)&DELTA_MASK)|uint256(ap<<DELTA_BITS);
+    |                                                         ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'uint256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/libraries/StakingGraph.sol:193:26
+    |
+193 |                     ad = int256(packed | ~DELTA_MASK); //extend set sign bit
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'int256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/strategies/StakeDAOWETHStrategy.sol:242:43
+    |
+242 |                 if (reason.length >= 4 && bytes4(reason) == IStakeDAOAccountant.NoPendingRewards.selector) return 0;
+    |                                           ^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'bytes4' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/WstETHEthereumStrategy.sol:66:17
+   |
+66 |         uint256 maxWstETHIn = wsteth.getWstETHByStETH(maxOracleTokenIn);
+   |                 ^^^^^^^^^^^ help: consider using: `maxWstEthIn`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/WstETHEthereumStrategy.sol:70:41
+   |
+70 |     function _wstEthFromStEthUp(uint256 stETHAmount) internal view returns (uint256 wstETHAmount) {
+   |                                         ^^^^^^^^^^^ help: consider using: `stEthAmount`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/WstETHEthereumStrategy.sol:70:85
+   |
+70 |     function _wstEthFromStEthUp(uint256 stETHAmount) internal view returns (uint256 wstETHAmount) {
+   |                                                                                     ^^^^^^^^^^^^ help: consider using: `wstEthAmount`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/interfaces/ITransmuter.sol:4:8
+  |
+4 | import "./IAlchemistV3.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/adapters/EulerUSDCAdapter.sol:6:8
+  |
+6 | import '../interfaces/ITokenAdapter.sol';
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/adapters/EulerUSDCAdapter.sol:7:8
+  |
+7 | import "@openzeppelin/contracts/interfaces/IERC4626.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[screaming-snake-case-const]: constants should use SCREAMING_SNAKE_CASE
+  --> src/adapters/EulerUSDCAdapter.sol:11:28
+   |
+11 |     string public constant version = "1.0.0";
+   |                            ^^^^^^^ help: consider using: `VERSION`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-const
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/adapters/EulerUSDCAdapter.sol:13:30
+   |
+13 |     address public immutable token;
+   |                              ^^^^^ help: consider using: `TOKEN`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/adapters/EulerUSDCAdapter.sol:15:30
+   |
+15 |     address public immutable underlyingToken;
+   |                              ^^^^^^^^^^^^^^^ help: consider using: `UNDERLYING_TOKEN`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/AlchemistTokenVault.sol:6:8
+  |
+6 | import "./base/Errors.sol";
+  |        ^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/AlchemistTokenVault.sol:7:8
+  |
+7 | import "./adapters/AbstractFeeVault.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/AlchemistETHVault.sol:53:14
+   |
+53 |     function depositWETH(uint256 amount) external nonReentrant {
+   |              ^^^^^^^^^^^ help: consider using: `depositWeth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[unwrapped-modifier-logic]: wrap modifier logic to reduce code size
+  --> src/AlchemistV3Position.sol:46:5
+   |
+46 | /     modifier onlyAlchemist() {
+47 | |         if (msg.sender != alchemist) {
+48 | |             revert CallerNotAlchemist();
+...  |
+51 | |         _;
+52 | |     }
+   | |_____^
+   |
+help: wrap modifier logic to reduce code size
+   |
+46 ~     modifier onlyAlchemist() {
+47 +         _onlyAlchemist();
+48 +         _;
+49 +     }
+50 + 
+51 +     function _onlyAlchemist() internal {
+52 +         if (msg.sender != alchemist) {
+53 +             revert CallerNotAlchemist();
+54 +         }
+55 +     }
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unwrapped-modifier-logic
+
+note[unwrapped-modifier-logic]: wrap modifier logic to reduce code size
+  --> src/AlchemistV3Position.sol:55:5
+   |
+55 | /     modifier onlyAdmin() {
+56 | |         if (msg.sender != admin) {
+57 | |             revert CallerNotAdmin();
+...  |
+60 | |         _;
+61 | |     }
+   | |_____^
+   |
+help: wrap modifier logic to reduce code size
+   |
+55 ~     modifier onlyAdmin() {
+56 +         _onlyAdmin();
+57 +         _;
+58 +     }
+59 + 
+60 +     function _onlyAdmin() internal {
+61 +         if (msg.sender != admin) {
+62 +             revert CallerNotAdmin();
+63 +         }
+64 +     }
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unwrapped-modifier-logic
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/router/AlchemistRouter.sol:135:14
+    |
+135 |     function depositETHToVaultOnly(
+    |              ^^^^^^^^^^^^^^^^^^^^^ help: consider using: `depositEthToVaultOnly`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/libraries/StakingGraph.sol:195:26
+    |
+195 |                     ad = int256(packed & DELTA_MASK); //extend zero sign bit
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'int256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:148:85
+    |
+148 |     function _weETHForNetShortfall(uint256 shortfall, uint256 exitFeeInBps, uint256 weETHBalance) internal view returns (uint256) {
+    |                                                                                     ^^^^^^^^^^^^ help: consider using: `weEthBalance`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:157:17
+    |
+157 |         uint256 weETHToRedeem = _weETHForGrossRedeem(grossRedeemAmount, weETHBalance);
+    |                 ^^^^^^^^^^^^^ help: consider using: `weEthToRedeem`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/router/AlchemistRouter.sol:195:14
+    |
+195 |     function repayETH(
+    |              ^^^^^^^^ help: consider using: `repayEth`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/strategies/StakeDAOWETHStrategy.sol:279:17
+    |
+279 |         amounts[uint256(uint128(WETH_COIN_INDEX))] = wethAmount;
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'uint256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/strategies/StakeDAOWETHStrategy.sol:279:25
+    |
+279 |         amounts[uint256(uint128(WETH_COIN_INDEX))] = wethAmount;
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'uint128' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/SiUSDStrategy.sol:37:29
+   |
+37 |     IERC20 public immutable usdc;
+   |                             ^^^^ help: consider using: `USDC`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/SiUSDStrategy.sol:38:29
+   |
+38 |     IERC20 public immutable iUSD;
+   |                             ^^^^ help: consider using: `I_USD`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/SiUSDStrategy.sol:39:29
+   |
+39 |     ISIUSD public immutable siUSD;
+   |                             ^^^^^ help: consider using: `SI_USD`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/OraclePricedSwapStrategy.sol:10:20
+   |
+10 |     uint256 public MAX_ORACLE_STALENESS;
+   |                    ^^^^^^^^^^^^^^^^^^^^ help: consider using: `maxOracleStaleness`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:161:14
+    |
+161 |     function _previewNetEthFromWeETH(uint256 weETHAmount) internal view returns (uint256) {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `_previewNetEthFromWeEth`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:161:46
+    |
+161 |     function _previewNetEthFromWeETH(uint256 weETHAmount) internal view returns (uint256) {
+    |                                              ^^^^^^^^^^^ help: consider using: `weEthAmount`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:162:17
+    |
+162 |         uint256 eETHAmount = weETH.getEETHByWeETH(weETHAmount);
+    |                 ^^^^^^^^^^ help: consider using: `eEthAmount`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/strategies/EtherfiEETHStrategy.sol:176:17
+    |
+176 |         uint256 weETHBalance = weETH.balanceOf(address(this));
+    |                 ^^^^^^^^^^^^ help: consider using: `weEthBalance`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/libraries/StakingGraph.sol:197:22
+    |
+197 |                 ap = int256(packed)>>DELTA_BITS; //automatic sign extension
+    |                      ^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'int256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/strategies/OraclePricedSwapStrategy.sol:143:18
+    |
+143 |         answer = uint256(raw);
+    |                  ^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'uint256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/ERC4626Strategy.sol:14:29
+   |
+14 |     IERC20 public immutable mytAsset;
+   |                             ^^^^^^^^ help: consider using: `MYT_ASSET`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/ERC4626Strategy.sol:15:31
+   |
+15 |     IERC4626 public immutable vault;
+   |                               ^^^^^ help: consider using: `VAULT`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/router/AlchemistRouter.sol:248:14
+    |
+248 |     function withdrawETH(
+    |              ^^^^^^^^^^^ help: consider using: `withdrawEth`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/libraries/NFTMetadataGenerator.sol:22:14
+   |
+22 |     function generateSVG(uint256 tokenId, string memory title) internal pure returns (string memory) {
+   |              ^^^^^^^^^^^ help: consider using: `generateSvg`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/strategies/interfaces/IStakeDAO.sol:53:14
+   |
+53 |     function add_liquidity(uint256[] calldata amounts, uint256 minMintAmount, address receiver) external returns (uint256);
+   |              ^^^^^^^^^^^^^ help: consider using: `addLiquidity`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/AlchemistV3.sol:4:8
+  |
+4 | import "./interfaces/IAlchemistV3.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/SiUSDStrategy.sol:40:38
+   |
+40 |     IMintController public immutable mintController;
+   |                                      ^^^^^^^^^^^^^^ help: consider using: `MINT_CONTROLLER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/libraries/NFTMetadataGenerator.sol:127:14
+    |
+127 |     function generateJSONString(uint256 tokenId, string memory svg) internal pure returns (string memory) {
+    |              ^^^^^^^^^^^^^^^^^^ help: consider using: `generateJsonString`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/MYTStrategy.sol:33:30
+   |
+33 |     bytes32 public immutable adapterId;
+   |                              ^^^^^^^^^ help: consider using: `ADAPTER_ID`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/router/AlchemistRouter.sol:286:14
+    |
+286 |     function selfLiquidateToETH(
+    |              ^^^^^^^^^^^^^^^^^^ help: consider using: `selfLiquidateToEth`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/router/AlchemistRouter.sol:312:14
+    |
+312 |         bool unwrapETH
+    |              ^^^^^^^^^ help: consider using: `unwrapEth`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[unused-import]: unused imports should be removed
+ --> src/external/AlEth.sol:7:9
+  |
+7 | import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+  |         ^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unused-import
+
+note[unused-import]: unused imports should be removed
+ --> src/external/AlEth.sol:8:9
+  |
+8 | import {IDetailedERC20} from "./interfaces/IDetailedERC20.sol";
+  |         ^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unused-import
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/strategies/interfaces/IStakeDAO.sol:55:14
+   |
+55 |     function remove_liquidity_one_coin(uint256 burnAmount, int128 i, uint256 minReceived, address receiver) external returns (uint256);
+   |              ^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `removeLiquidityOneCoin`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/strategies/interfaces/IStakeDAO.sol:57:14
+   |
+57 |     function calc_token_amount(uint256[] calldata amounts, bool deposit) external view returns (uint256);
+   |              ^^^^^^^^^^^^^^^^^ help: consider using: `calcTokenAmount`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/strategies/interfaces/IStakeDAO.sol:59:14
+   |
+59 |     function calc_withdraw_one_coin(uint256 tokenAmount, int128 i) external view returns (uint256);
+   |              ^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `calcWithdrawOneCoin`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/strategies/interfaces/IStakeDAO.sol:61:14
+   |
+61 |     function get_virtual_price() external view returns (uint256);
+   |              ^^^^^^^^^^^^^^^^^ help: consider using: `getVirtualPrice`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/TokeAutoStrategy.sol:88:29
+   |
+88 |     IERC20 public immutable mytAsset;
+   |                             ^^^^^^^^ help: consider using: `MYT_ASSET`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/TokeAutoStrategy.sol:89:35
+   |
+89 |     IERC4626Like public immutable autoVault;
+   |                                   ^^^^^^^^^ help: consider using: `AUTO_VAULT`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/MYTStrategy.sol:220:14
+    |
+220 |     function setSlippageBPS(uint256 newSlippageBPS) public onlyOwner {
+    |              ^^^^^^^^^^^^^^ help: consider using: `setSlippageBps`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/libraries/TokenUtils.sol:3:8
+  |
+3 | import "../../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/router/AlchemistRouter.sol:362:84
+    |
+362 |     function _withdraw(uint256 tokenId, uint256 shares, uint256 minAmountOut, bool unwrapETH) internal {
+    |                                                                                    ^^^^^^^^^ help: consider using: `unwrapEth`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/TokeAutoStrategy.sol:90:36
+   |
+90 |     IMainRewarder public immutable rewarder;
+   |                                    ^^^^^^^^ help: consider using: `REWARDER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/MYTStrategy.sol:220:37
+    |
+220 |     function setSlippageBPS(uint256 newSlippageBPS) public onlyOwner {
+    |                                     ^^^^^^^^^^^^^^ help: consider using: `newSlippageBps`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/SiUSDStrategy.sol:41:40
+   |
+41 |     IRedeemController public immutable redeemController;
+   |                                        ^^^^^^^^^^^^^^^^ help: consider using: `REDEEM_CONTROLLER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/SiUSDStrategy.sol:42:39
+   |
+42 |     IInfiniFiGateway public immutable gateway;
+   |                                       ^^^^^^^ help: consider using: `GATEWAY`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/TokeAutoStrategy.sol:91:30
+   |
+91 |     address public immutable tokeRewardsToken;
+   |                              ^^^^^^^^^^^^^^^^ help: consider using: `TOKE_REWARDS_TOKEN`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/TokeAutoStrategy.sol:92:49
+   |
+92 |     IAutopilotRouterWithRoutes public immutable autopilotRouter;
+   |                                                 ^^^^^^^^^^^^^^^ help: consider using: `AUTOPILOT_ROUTER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[unwrapped-modifier-logic]: wrap modifier logic to reduce code size
+  --> src/external/AlEth.sol:44:5
+   |
+44 | /     modifier onlyWhitelisted() {
+45 | |         require(whiteList[msg.sender], "AlETH: Alchemist is not whitelisted");
+46 | |         _;
+47 | |     }
+   | |_____^
+   |
+help: wrap modifier logic to reduce code size
+   |
+44 ~     modifier onlyWhitelisted() {
+45 +         _onlyWhitelisted();
+46 +         _;
+47 +     }
+48 + 
+49 +     function _onlyWhitelisted() internal {
+50 +         require(whiteList[msg.sender], "AlETH: Alchemist is not whitelisted");
+51 +     }
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unwrapped-modifier-logic
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/SiUSDStrategy.sol:48:17
+   |
+48 |         address _iUSD,
+   |                 ^^^^^ help: consider using: `_iUsd`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[unwrapped-modifier-logic]: wrap modifier logic to reduce code size
+  --> src/MYTStrategy.sol:40:5
+   |
+40 | /     modifier onlyVault() {
+41 | |         require(msg.sender == address(MYT), "PD");
+42 | |         _;
+43 | |     }
+   | |_____^
+   |
+help: wrap modifier logic to reduce code size
+   |
+40 ~     modifier onlyVault() {
+41 +         _onlyVault();
+42 +         _;
+43 +     }
+44 + 
+45 +     function _onlyVault() internal {
+46 +         require(msg.sender == address(MYT), "PD");
+47 +     }
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unwrapped-modifier-logic
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/libraries/TokenUtils.sol:4:8
+  |
+4 | import "../../lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/libraries/TokenUtils.sol:5:8
+  |
+5 | import "../interfaces/IERC20Burnable.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/libraries/TokenUtils.sol:6:8
+  |
+6 | import "../interfaces/IERC20Mintable.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-function]: function names should use mixedCase
+ --> src/external/interfaces/ISettlerActions.sol:8:14
+  |
+8 |     function TRANSFER_FROM(address recipient, ISignatureTransfer.PermitTransferFrom memory permit, bytes memory sig)
+  |              ^^^^^^^^^^^^^ help: consider using: `transferFrom`
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/external/interfaces/ISettlerActions.sol:12:14
+   |
+12 |     function NATIVE_CHECK(uint256 deadline, uint256 msgValue) external;
+   |              ^^^^^^^^^^^^ help: consider using: `nativeCheck`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/libraries/SafeCast.sol:16:13
+   |
+16 |         z = int256(y);
+   |             ^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'int256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/libraries/SafeCast.sol:26:13
+   |
+26 |         z = uint256(y);
+   |             ^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'uint256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/libraries/SafeCast.sol:36:13
+   |
+36 |         z = uint128(y);
+   |             ^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'uint128' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/SiUSDStrategy.sol:49:17
+   |
+49 |         address _siUSD,
+   |                 ^^^^^^ help: consider using: `_siUsd`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/router/AlchemistRouter.sol:409:14
+    |
+409 |         bool unwrapETH
+    |              ^^^^^^^^^ help: consider using: `unwrapEth`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[screaming-snake-case-const]: constants should use SCREAMING_SNAKE_CASE
+  --> src/AlchemistV3.sol:27:28
+   |
+27 |     string public constant version = "3.0.0";
+   |                            ^^^^^^^ help: consider using: `VERSION`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-const
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/external/interfaces/ISettlerActions.sol:15:14
+   |
+15 |     function METATXN_TRANSFER_FROM(address recipient, ISignatureTransfer.PermitTransferFrom memory permit) external;
+   |              ^^^^^^^^^^^^^^^^^^^^^ help: consider using: `metatxnTransferFrom`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/MYTStrategy.sol:87:24
+   |
+87 |         return (ids(), int256(newAllocation) - int256(oldAllocation));
+   |                        ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'int256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/utils/ZeroXSwapVerifier.sol:4:8
+  |
+4 | import "@openzeppelin/contracts/access/Ownable.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/utils/ZeroXSwapVerifier.sol:5:8
+  |
+5 | import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/utils/ZeroXSwapVerifier.sol:6:8
+  |
+6 | import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+  --> src/MYTStrategy.sol:87:48
+   |
+87 |         return (ids(), int256(newAllocation) - int256(oldAllocation));
+   |                                                ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider disabling this lint if you're certain the cast is safe
+           
+           // casting to 'int256' is safe because [explain why]
+           // forge-lint: disable-next-line(unsafe-typecast)
+           
+           
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/MoonwellStrategy.sol:32:29
+   |
+32 |     IERC20 public immutable mytAsset;
+   |                             ^^^^^^^^ help: consider using: `MYT_ASSET`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/libraries/FixedPointMath.sol:31:16
+   |
+31 |         return Number(FixedPointMath.encodeRaw(value));
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `Number({ n: FixedPointMath.encodeRaw(value) })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/external/interfaces/ISettlerActions.sol:19:14
+   |
+19 |     function RFQ_VIP(
+   |              ^^^^^^^ help: consider using: `rfqVip`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/utils/ZeroXSwapVerifier.sol:209:14
+    |
+209 |     function _verifyUniswapV3VIP(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view {
+    |              ^^^^^^^^^^^^^^^^^^^ help: consider using: `_verifyUniswapV3vip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/AlchemistV3.sol:87:20
+   |
+87 |     address public alchemistPositionNFT;
+   |                    ^^^^^^^^^^^^^^^^^^^^ help: consider using: `alchemistPositionNft`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/MYTStrategy.sol:119:24
+    |
+119 |         return (ids(), int256(newAllocation) - int256(oldAllocation));
+    |                        ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'int256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/MYTStrategy.sol:119:48
+    |
+119 |         return (ids(), int256(newAllocation) - int256(oldAllocation));
+    |                                                ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'int256' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/router/AlchemistRouter.sol:434:73
+    |
+434 |     function _selfLiquidate(uint256 tokenId, uint256 minAmountOut, bool unwrapETH) internal {
+    |                                                                         ^^^^^^^^^ help: consider using: `unwrapEth`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/utils/Whitelist.sol:3:8
+  |
+3 | import "../base/Errors.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/utils/Whitelist.sol:4:8
+  |
+4 | import "../interfaces/IWhitelist.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/utils/Whitelist.sol:5:8
+  |
+5 | import "../../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/utils/Whitelist.sol:6:8
+  |
+6 | import "../libraries/Sets.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/AlchemistV3.sol:201:14
+    |
+201 |     function setAlchemistPositionNFT(address nft) external onlyAdmin {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `setAlchemistPositionNft`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/libraries/FixedPointMath.sol:52:16
+   |
+52 |         return Number(type(uint256).max);
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `Number({ n: type(uint256).max })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/MoonwellStrategy.sol:33:30
+   |
+33 |     IMToken public immutable mToken;
+   |                              ^^^^^^ help: consider using: `M_TOKEN`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/MoonwellStrategy.sol:34:29
+   |
+34 |     IERC20 public immutable rewardToken;
+   |                             ^^^^^^^^^^^ help: consider using: `REWARD_TOKEN`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/MoonwellStrategy.sol:35:35
+   |
+35 |     IComptroller public immutable comptroller;
+   |                                   ^^^^^^^^^^^ help: consider using: `COMPTROLLER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/MoonwellStrategy.sol:36:27
+   |
+36 |     bool public immutable usePostRedeemETHWrap;
+   |                           ^^^^^^^^^^^^^^^^^^^^ help: consider using: `USE_POST_REDEEM_ETH_WRAP`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+warning[erc20-unchecked-transfer]: ERC20 'transfer' and 'transferFrom' calls should check the return value
+   --> src/MYTStrategy.sol:189:9
+    |
+189 |         IERC20(token).transfer(to, amount);
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#erc20-unchecked-transfer
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/router/AlchemistRouter.sol:463:96
+    |
+463 |     function _redeemAndDeliver(address mytVault, uint256 mytShares, uint256 minAmountOut, bool unwrapETH) internal {
+    |                                                                                                ^^^^^^^^^ help: consider using: `unwrapEth`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/libraries/FixedPointMath.sol:75:16
+   |
+75 |         return Number(self.n + value.n);
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `Number({ n: self.n + value.n })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[named-struct-fields]: prefer initializing structs with named fields
+  --> src/libraries/FixedPointMath.sol:97:16
+   |
+97 |         return Number(self.n - value.n);
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `Number({ n: self.n - value.n })`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[named-struct-fields]: prefer initializing structs with named fields
+   --> src/libraries/FixedPointMath.sol:119:16
+    |
+119 |         return Number((self.n * number.n) / ONE);
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `Number({ n: (self.n * number.n) / ONE })`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[named-struct-fields]: prefer initializing structs with named fields
+   --> src/libraries/FixedPointMath.sol:130:16
+    |
+130 |         return Number(self.n * value);
+    |                ^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `Number({ n: self.n * value })`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/AaveStrategy.sol:32:29
+   |
+32 |     IERC20 public immutable mytAsset;
+   |                             ^^^^^^^^ help: consider using: `MYT_ASSET`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/AaveStrategy.sol:33:43
+   |
+33 |     IPoolAddressProvider public immutable poolProvider;
+   |                                           ^^^^^^^^^^^^ help: consider using: `POOL_PROVIDER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[named-struct-fields]: prefer initializing structs with named fields
+   --> src/libraries/FixedPointMath.sol:141:16
+    |
+141 |         return Number(self.n / value);
+    |                ^^^^^^^^^^^^^^^^^^^^^^ help: consider using named fields: `Number({ n: self.n / value })`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#named-struct-fields
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/utils/ZeroXSwapVerifier.sol:225:14
+    |
+225 |     function _verifyRFQVIP(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view {
+    |              ^^^^^^^^^^^^^ help: consider using: `_verifyRfqvip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/external/interfaces/ISettlerActions.sol:29:14
+   |
+29 |     function METATXN_RFQ_VIP(
+   |              ^^^^^^^^^^^^^^^ help: consider using: `metatxnRfqVip`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/AlchemistV3.sol:352:14
+    |
+352 |     function getCDP(uint256 tokenId) external view returns (uint256, uint256, uint256) {
+    |              ^^^^^^ help: consider using: `getCdp`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/MoonwellStrategy.sol:48:14
+   |
+48 |         bool _usePostRedeemETHWrap
+   |              ^^^^^^^^^^^^^^^^^^^^^ help: consider using: `_usePostRedeemEthWrap`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/interfaces/IMYTStrategy.sol:22:17
+   |
+22 |         uint256 slippageBPS;
+   |                 ^^^^^^^^^^^ help: consider using: `slippageBps`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/AlchemistAllocator.sol:17:31
+   |
+17 |     IVaultV2 immutable public vault;
+   |                               ^^^^^ help: consider using: `VAULT`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/AlchemistAllocator.sol:18:42
+   |
+18 |     IStrategyClassifier immutable public strategyClassifier;
+   |                                          ^^^^^^^^^^^^^^^^^^ help: consider using: `STRATEGY_CLASSIFIER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/external/interfaces/IDetailedERC20.sol:4:8
+  |
+4 | import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/external/interfaces/ISettlerActions.sol:41:14
+   |
+41 |     function RFQ(
+   |              ^^^ help: consider using: `rfq`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/external/interfaces/ISettlerActions.sol:50:14
+   |
+50 |     function UNISWAPV4(
+   |              ^^^^^^^^^ help: consider using: `uniswapv4`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/interfaces/IMYTStrategy.sol:52:46
+   |
+52 |     event SlippageBPSUpdated(uint256 indexed newSlippageBPS);
+   |                                              ^^^^^^^^^^^^^^ help: consider using: `newSlippageBps`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[unaliased-plain-import]: use named imports '{A, B}' or alias 'import ".." as X'
+ --> src/AlchemistGate.sol:3:8
+  |
+3 | import "@openzeppelin/contracts/access/Ownable.sol";
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: https://book.getfoundry.sh/reference/forge/forge-lint#unaliased-plain-import
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/utils/ZeroXSwapVerifier.sol:264:14
+    |
+264 |     function _verifyVelodromeV2VIP(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view {
+    |              ^^^^^^^^^^^^^^^^^^^^^ help: consider using: `_verifyVelodromeV2vip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+    --> src/AlchemistV3.sol:1699:17
+     |
+1699 |         uint256 yieldTokenTVLInUnderlying = convertYieldTokensToUnderlying(_mytSharesDeposited);
+     |                 ^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `yieldTokenTvlInUnderlying`
+     |
+     = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/SFraxETHStrategy.sol:24:34
+   |
+24 |     IFraxMinter public immutable minter;
+   |                                  ^^^^^^ help: consider using: `MINTER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/SFraxETHStrategy.sol:25:29
+   |
+25 |     IERC20 public immutable frxETH;
+   |                             ^^^^^^ help: consider using: `FRX_ETH`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/external/interfaces/ISettlerActions.sol:60:14
+   |
+60 |     function UNISWAPV4_VIP(
+   |              ^^^^^^^^^^^^^ help: consider using: `uniswapv4Vip`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/interfaces/IMYTStrategy.sol:114:21
+    |
+114 |             uint256 slippageBPS
+    |                     ^^^^^^^^^^^ help: consider using: `slippageBps`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/utils/ZeroXSwapVerifier.sol:293:14
+    |
+293 |     function _extractTokenAndAmountFromRFQ(bytes memory fillData) internal pure returns (address token, uint256 amount) {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `_extractTokenAndAmountFromRfq`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/interfaces/IAlchemistETHVault.sol:20:14
+   |
+20 |     function depositWETH(uint256 amount) external;
+   |              ^^^^^^^^^^^ help: consider using: `depositWeth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+   --> src/utils/ZeroXSwapVerifier.sol:168:33
+    |
+168 |         bytes4 actionSelector = bytes4(action);
+    |                                 ^^^^^^^^^^^^^^
+    |
+    = note: consider disabling this lint if you're certain the cast is safe
+            
+            // casting to 'bytes4' is safe because [explain why]
+            // forge-lint: disable-next-line(unsafe-typecast)
+            
+            
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/SFraxETHStrategy.sol:26:31
+   |
+26 |     ISfrxETH public immutable sfrxETH;
+   |                               ^^^^^^^ help: consider using: `SFRX_ETH`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/SFraxETHStrategy.sol:33:17
+   |
+33 |         address _frxETH,
+   |                 ^^^^^^^ help: consider using: `_frxEth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+  --> src/strategies/SFraxETHStrategy.sol:34:17
+   |
+34 |         address _sfrxETH,
+   |                 ^^^^^^^^ help: consider using: `_sfrxEth`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-variable]: mutable variables should use mixedCase
+   --> src/strategies/SFraxETHStrategy.sol:114:17
+    |
+114 |         uint256 frxETHBefore = frxETH.balanceOf(address(this));
+    |                 ^^^^^^^^^^^^ help: consider using: `frxEthBefore`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-variable
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/external/interfaces/ISettlerActions.sol:70:14
+   |
+70 |     function METATXN_UNISWAPV4_VIP(
+   |              ^^^^^^^^^^^^^^^^^^^^^ help: consider using: `metatxnUniswapv4Vip`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/external/interfaces/ISettlerActions.sol:80:14
+   |
+80 |     function BALANCERV3(
+   |              ^^^^^^^^^^ help: consider using: `balancerv3`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+  --> src/external/interfaces/ISettlerActions.sol:90:14
+   |
+90 |     function BALANCERV3_VIP(
+   |              ^^^^^^^^^^^^^^ help: consider using: `balancerv3Vip`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:100:14
+    |
+100 |     function METATXN_BALANCERV3_VIP(
+    |              ^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `metatxnBalancerv3Vip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/AaveStrategy.sol:34:34
+   |
+34 |     IAaveAToken public immutable aToken;
+   |                                  ^^^^^^ help: consider using: `A_TOKEN`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/AaveStrategy.sol:35:41
+   |
+35 |     IRewardsController public immutable rewardsController;
+   |                                         ^^^^^^^^^^^^^^^^^ help: consider using: `REWARDS_CONTROLLER`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[screaming-snake-case-immutable]: immutables should use SCREAMING_SNAKE_CASE
+  --> src/strategies/AaveStrategy.sol:36:29
+   |
+36 |     IERC20 public immutable rewardToken;
+   |                             ^^^^^^^^^^^ help: consider using: `REWARD_TOKEN`
+   |
+   = help: https://book.getfoundry.sh/reference/forge/forge-lint#screaming-snake-case-immutable
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:110:14
+    |
+110 |     function PANCAKE_INFINITY(
+    |              ^^^^^^^^^^^^^^^^ help: consider using: `pancakeInfinity`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:120:14
+    |
+120 |     function PANCAKE_INFINITY_VIP(
+    |              ^^^^^^^^^^^^^^^^^^^^ help: consider using: `pancakeInfinityVip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:130:14
+    |
+130 |     function METATXN_PANCAKE_INFINITY_VIP(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `metatxnPancakeInfinityVip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:143:14
+    |
+143 |     function UNISWAPV3(address recipient, uint256 bps, bytes memory path, uint256 amountOutMin) external;
+    |              ^^^^^^^^^ help: consider using: `uniswapv3`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:145:14
+    |
+145 |     function UNISWAPV3_VIP(
+    |              ^^^^^^^^^^^^^ help: consider using: `uniswapv3Vip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:153:14
+    |
+153 |     function METATXN_UNISWAPV3_VIP(
+    |              ^^^^^^^^^^^^^^^^^^^^^ help: consider using: `metatxnUniswapv3Vip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:160:14
+    |
+160 |     function MAKERPSM(address recipient, uint256 bps, bool buyGem, uint256 amountOutMin, address psm, address dai)
+    |              ^^^^^^^^ help: consider using: `makerpsm`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:163:14
+    |
+163 |     function CURVE_TRICRYPTO_VIP(
+    |              ^^^^^^^^^^^^^^^^^^^ help: consider using: `curveTricryptoVip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:170:14
+    |
+170 |     function METATXN_CURVE_TRICRYPTO_VIP(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `metatxnCurveTricryptoVip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:177:14
+    |
+177 |     function DODOV1(address sellToken, uint256 bps, address pool, bool quoteForBase, uint256 minBuyAmount) external;
+    |              ^^^^^^ help: consider using: `dodov1`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:178:14
+    |
+178 |     function DODOV2(
+    |              ^^^^^^ help: consider using: `dodov2`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:187:14
+    |
+187 |     function VELODROME(address recipient, uint256 bps, address pool, uint24 swapInfo, uint256 minBuyAmount) external;
+    |              ^^^^^^^^^ help: consider using: `velodrome`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:192:14
+    |
+192 |     function MAVERICKV2(
+    |              ^^^^^^^^^^ help: consider using: `maverickv2`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:203:14
+    |
+203 |     function MAVERICKV2_VIP(
+    |              ^^^^^^^^^^^^^^ help: consider using: `maverickv2Vip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:212:14
+    |
+212 |     function METATXN_MAVERICKV2_VIP(
+    |              ^^^^^^^^^^^^^^^^^^^^^^ help: consider using: `metatxnMaverickv2Vip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:224:14
+    |
+224 |     function UNISWAPV2(
+    |              ^^^^^^^^^ help: consider using: `uniswapv2`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:233:14
+    |
+233 |     function POSITIVE_SLIPPAGE(address payable recipient, address token, uint256 expectedAmount, uint256 maxBps)
+    |              ^^^^^^^^^^^^^^^^^ help: consider using: `positiveSlippage`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:239:14
+    |
+239 |     function BASIC(address sellToken, uint256 bps, address pool, uint256 offset, bytes calldata data) external;
+    |              ^^^^^ help: consider using: `basic`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:241:14
+    |
+241 |     function EKUBO(
+    |              ^^^^^ help: consider using: `ekubo`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:252:14
+    |
+252 |     function EKUBO_VIP(
+    |              ^^^^^^^^^ help: consider using: `ekuboVip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:263:14
+    |
+263 |     function METATXN_EKUBO_VIP(
+    |              ^^^^^^^^^^^^^^^^^ help: consider using: `metatxnEkuboVip`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+
+note[mixed-case-function]: function names should use mixedCase
+   --> src/external/interfaces/ISettlerActions.sol:273:14
+    |
+273 |     function EULERSWAP(
+    |              ^^^^^^^^^ help: consider using: `eulerswap`
+    |
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#mixed-case-function
+

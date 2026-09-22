@@ -61,6 +61,21 @@ remappings = [
 runs = 10000
 max_test_rejects = 999999
 
+[profile.halmos]
+src = "src"
+test = "test/dinosat"
+out = "out-halmos"
+cache_path = "cache-halmos"
+libs = ["lib"]
+solc = "0.8.28"
+evm_version = "cancun"
+optimizer = false
+via_ir = true
+ast = true
+extra_output = ["storageLayout", "metadata"]
+ffi = false
+skip = ["src/test/**", "script/**"]
+
 [fmt]
 line_length = 160
 number_underscore = "thousands"

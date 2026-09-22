@@ -1,0 +1,60 @@
+{
+  "scope": "Two source-boundary failures from the Phase3 fixture smoke, reproduced once each with unchanged intended assertions.",
+  "source_changed": false,
+  "solver_executed": false,
+  "original_smoke_evidence": "verification/dinosat/phase3-fixture-smoke.json",
+  "cases": [
+    {
+      "id": "FM-QDIV-BOUNDARY",
+      "property": "FM-QDIV",
+      "source": "src/libraries/FixedPointMath.sol",
+      "lines": [
+        274,
+        282,
+        283,
+        284
+      ],
+      "original_test": "DinosatMathSymbolicTest.test_check_qDiv(uint128)",
+      "original_smoke_input": "2077 (incidental; the failing boundary call is constant)",
+      "isolated_test": "DinosatMathCounterexampleTest.test_check_qDivBoundary()",
+      "test_file": "test/dinosat/libraries/MathAndCastSymbolic.t.sol",
+      "expected": "divQ128(2^128,2^129) = floor(2^256 / 2^129) = 2^127 = 170141183460469231731687303715884105728",
+      "observed": "Returned 0; intended equality assertion failed with Panic(0x01).",
+      "cause": "Slow path has q=0 and r=2^128; the expression r << 128 drops the high bit before division.",
+      "reachability": "The input is within the stated library obligation numer<=Q128 and denom>=numer. It is outside Alchemist survival-index denominator bounds. Alchemist also uses debt amounts as divQ128 operands at lines666,1604,1807; these callers need an explicit numerator<2^128 bound before production unreachability can be asserted. This is an internal library exposed through a production-code harness, not an externally deployed entry point.",
+      "evidence": "verification/dinosat/qdiv-boundary-diagnostic.log",
+      "exit_code": 1,
+      "tests_run": 1,
+      "status": "REPRODUCED_SOURCE_COUNTEREXAMPLE",
+      "command": "FOUNDRY_PROFILE=halmos forge test --force --match-path 'test/dinosat/libraries/MathAndCastSymbolic.t.sol' --match-contract '^DinosatMathCounterexampleTest$' --match-test '^test_check_qDivBoundary' --fuzz-runs 1 -vvvv"
+    },
+    {
+      "id": "SG-ENDPOINT-RESIZE",
+      "property": "SG-BOUNDS",
+      "source": "src/libraries/StakingGraph.sol",
+      "lines": [
+        54,
+        56,
+        58,
+        59,
+        65,
+        66,
+        68,
+        78,
+        83
+      ],
+      "original_test": "DinosatStakingGraphSymbolicTest.test_check_maxTimeline()",
+      "isolated_test": "DinosatGraphCounterexampleTest.test_check_lastAdmittedExpiration()",
+      "test_file": "test/dinosat/libraries/StakingGraphSymbolic.t.sol",
+      "expected": "addStake(1,2^32-3,1) succeeds because start and expiration=2^32-2 are both below GRAPH_MAX-1.",
+      "observed": "addStake reverted with empty revert data; the intended success assertion failed with Panic(0x01).",
+      "cause": "expiration+2 equals GRAPH_MAX. The bit-spread plus increment rounds that exact power of two to 2*GRAPH_MAX, then the newSize<=GRAPH_MAX guard rejects it.",
+      "reachability": "Real Transmuter uses block.number as start and configured duration. Failure occurs only at the far 32-bit timeline endpoint (expiration 4294967294). The adjacent expiration4294967293 has a retained success assertion. No current near-term deposit failure is claimed.",
+      "evidence": "verification/dinosat/graph-endpoint-diagnostic.log",
+      "exit_code": 1,
+      "tests_run": 1,
+      "status": "REPRODUCED_SOURCE_COUNTEREXAMPLE",
+      "command": "FOUNDRY_PROFILE=halmos forge test --match-path 'test/dinosat/libraries/StakingGraphSymbolic.t.sol' --match-contract '^DinosatGraphCounterexampleTest$' --match-test '^test_check_lastAdmittedExpiration' --fuzz-runs 1 -vvvv"
+    }
+  ]
+}

@@ -1,0 +1,5099 @@
+[
+  {
+    "file": "src/AlTokenV3.sol",
+    "sha256": "1610cd239cbbeb9e523df122e56dfde6a75607cc3d10f22060b22f337a93f107",
+    "line_count": 59,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 11,
+        "end_line": 11,
+        "signature": "constructor() initializer",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "initialize",
+        "line": 13,
+        "end_line": 23,
+        "signature": "function initialize( string memory name, string memory symbol ) external initializer",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "burn",
+        "line": 25,
+        "end_line": 35,
+        "signature": "function burn(uint256 amount) external returns (bool)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "burnFrom",
+        "line": 41,
+        "end_line": 56,
+        "signature": "function burnFrom(address account, uint256 amount) external returns (bool)",
+        "visibility": "external",
+        "patterns": {
+          "branching": [
+            42,
+            48,
+            50
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "file": "src/AlchemistAllocator.sol",
+    "sha256": "8cb13c8613ccea2a5d4bcff4ec18015edf95bb861ee1fad047cc668def3066a0",
+    "line_count": 180,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 20,
+        "end_line": 25,
+        "signature": "constructor(address _vault, address _admin, address _operator, address _classifier) PermissionedProxy(_admin, _operator)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "allocate",
+        "line": 32,
+        "end_line": 40,
+        "signature": "function allocate(address adapter, uint256 amount) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "deallocate",
+        "line": 48,
+        "end_line": 55,
+        "signature": "function deallocate(address adapter, uint256 amount) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "allocateWithSwap",
+        "line": 63,
+        "end_line": 75,
+        "signature": "function allocateWithSwap(address adapter, uint256 amount, bytes memory txData) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "deallocateWithSwap",
+        "line": 84,
+        "end_line": 95,
+        "signature": "function deallocateWithSwap(address adapter, uint256 amount, bytes memory txData) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "deallocateWithUnwrapAndSwap",
+        "line": 104,
+        "end_line": 115,
+        "signature": "function deallocateWithUnwrapAndSwap(address adapter, uint256 amount, bytes memory txData, uint256 minIntermediateOut) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setLiquidityAdapter",
+        "line": 118,
+        "end_line": 121,
+        "signature": "function setLiquidityAdapter(address adapter, bytes memory data) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_validateCaps",
+        "line": 128,
+        "end_line": 175,
+        "signature": "function _validateCaps(address adapter, uint256 amount) internal view",
+        "visibility": "internal",
+        "patterns": {
+          "loops": [
+            153
+          ]
+        }
+      },
+      {
+        "name": "setMaxRate",
+        "line": 177,
+        "end_line": 179,
+        "signature": "function setMaxRate(uint256 rate) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/AlchemistCurator.sol",
+    "sha256": "56dde26b3d4992450d4c3af986785ab925ebe3b38f0720f2f2d8f7e0f3bc78e8",
+    "line_count": 177,
+    "functions": [
+      {
+        "name": "getIdData",
+        "line": 16,
+        "end_line": 16,
+        "signature": "function getIdData() external returns (bytes memory)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 22,
+        "end_line": 24,
+        "signature": "constructor(address _admin, address _operator) PermissionedProxy(_admin, _operator)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "submitSetStrategy",
+        "line": 26,
+        "end_line": 30,
+        "signature": "function submitSetStrategy(address adapter, address myt) external onlyOperator",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setStrategy",
+        "line": 32,
+        "end_line": 36,
+        "signature": "function setStrategy(address adapter, address myt) external onlyOperator",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "submitRemoveStrategy",
+        "line": 37,
+        "end_line": 41,
+        "signature": "function submitRemoveStrategy(address adapter, address myt) external onlyOperator",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "removeStrategy",
+        "line": 43,
+        "end_line": 47,
+        "signature": "function removeStrategy(address adapter, address myt) external onlyOperator",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_submitSetStrategy",
+        "line": 49,
+        "end_line": 54,
+        "signature": "function _submitSetStrategy(address adapter, address myt) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_submitRemoveStrategy",
+        "line": 56,
+        "end_line": 61,
+        "signature": "function _submitRemoveStrategy(address adapter, address myt) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_addStrategy",
+        "line": 63,
+        "end_line": 68,
+        "signature": "function _addStrategy(address adapter, address myt) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_removeStrategy",
+        "line": 70,
+        "end_line": 75,
+        "signature": "function _removeStrategy(address adapter, address myt) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "decreaseAbsoluteCap",
+        "line": 77,
+        "end_line": 80,
+        "signature": "function decreaseAbsoluteCap(address adapter, uint256 amount) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "decreaseRelativeCap",
+        "line": 82,
+        "end_line": 85,
+        "signature": "function decreaseRelativeCap(address adapter, uint256 amount) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_decreaseRelativeCap",
+        "line": 88,
+        "end_line": 92,
+        "signature": "function _decreaseRelativeCap(address adapter, bytes memory id, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_decreaseAbsoluteCap",
+        "line": 94,
+        "end_line": 98,
+        "signature": "function _decreaseAbsoluteCap(address adapter, bytes memory id, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "increaseAbsoluteCap",
+        "line": 100,
+        "end_line": 103,
+        "signature": "function increaseAbsoluteCap(address adapter, uint256 amount) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "increaseRelativeCap",
+        "line": 105,
+        "end_line": 108,
+        "signature": "function increaseRelativeCap(address adapter, uint256 amount) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "submitIncreaseAbsoluteCap",
+        "line": 110,
+        "end_line": 113,
+        "signature": "function submitIncreaseAbsoluteCap(address adapter, uint256 amount) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "submitIncreaseRelativeCap",
+        "line": 115,
+        "end_line": 118,
+        "signature": "function submitIncreaseRelativeCap(address adapter, uint256 amount) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_increaseAbsoluteCap",
+        "line": 120,
+        "end_line": 124,
+        "signature": "function _increaseAbsoluteCap(address adapter, bytes memory id, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_increaseRelativeCap",
+        "line": 126,
+        "end_line": 130,
+        "signature": "function _increaseRelativeCap(address adapter, bytes memory id, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_submitIncreaseAbsoluteCap",
+        "line": 132,
+        "end_line": 136,
+        "signature": "function _submitIncreaseAbsoluteCap(address adapter, bytes memory id, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_submitIncreaseRelativeCap",
+        "line": 138,
+        "end_line": 142,
+        "signature": "function _submitIncreaseRelativeCap(address adapter, bytes memory id, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "submitSetAllocator",
+        "line": 144,
+        "end_line": 148,
+        "signature": "function submitSetAllocator(address myt, address allocator, bool v) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "submitSetForceDeallocatePenalty",
+        "line": 150,
+        "end_line": 154,
+        "signature": "function submitSetForceDeallocatePenalty(address adapter, address myt, uint256 penalty) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "submitSetPerformanceFeeRecipient",
+        "line": 156,
+        "end_line": 160,
+        "signature": "function submitSetPerformanceFeeRecipient(address myt, address recipient) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "submitSetPerformanceFee",
+        "line": 162,
+        "end_line": 166,
+        "signature": "function submitSetPerformanceFee(address myt, uint256 fee) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_vaultSubmit",
+        "line": 168,
+        "end_line": 171,
+        "signature": "function _vaultSubmit(address adapter, bytes memory data) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_vault",
+        "line": 173,
+        "end_line": 176,
+        "signature": "function _vault(address adapter) internal view returns (IVaultV2)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/AlchemistETHVault.sol",
+    "sha256": "f4130223e0286781691014b529b36a389924dde4ee9138ca8b2b43940f31e19c",
+    "line_count": 93,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 26,
+        "end_line": 26,
+        "signature": "constructor(address _weth, address _alchemist, address _owner) AbstractFeeVault(_weth, _alchemist, _owner)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "totalDeposits",
+        "line": 32,
+        "end_line": 34,
+        "signature": "function totalDeposits() public view override returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "deposit",
+        "line": 39,
+        "end_line": 42,
+        "signature": "function deposit() external payable nonReentrant",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "receive",
+        "line": 47,
+        "end_line": 47,
+        "signature": "receive() external payable",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "depositWETH",
+        "line": 53,
+        "end_line": 64,
+        "signature": "function depositWETH(uint256 amount) external nonReentrant",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_deposit",
+        "line": 71,
+        "end_line": 73,
+        "signature": "function _deposit(address depositor, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "withdraw",
+        "line": 80,
+        "end_line": 92,
+        "signature": "function withdraw(address recipient, uint256 amount) external override onlyAuthorized nonReentrant",
+        "visibility": "external",
+        "patterns": {
+          "branching": [
+            82,
+            85,
+            89
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "file": "src/AlchemistGate.sol",
+    "sha256": "18ef353a1ac9e1ba7d7e7fff0565fc1c3ad68c49f30c22d020ffdbc494c38ded",
+    "line_count": 12,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 7,
+        "end_line": 7,
+        "signature": "constructor(address _owner) Ownable(_owner)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "setAuthorization",
+        "line": 9,
+        "end_line": 11,
+        "signature": "function setAuthorization(address _vault, address _to, bool value) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/AlchemistStrategyClassifier.sol",
+    "sha256": "41892c17c94019f2bc8f038f5585ecf60fc6bb64ec47df302b83a68e85c021f2",
+    "line_count": 89,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 33,
+        "end_line": 43,
+        "signature": "constructor(address _admin)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "transferOwnership",
+        "line": 47,
+        "end_line": 50,
+        "signature": "function transferOwnership(address _newAdmin) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "acceptOwnership",
+        "line": 52,
+        "end_line": 57,
+        "signature": "function acceptOwnership() external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setRiskClass",
+        "line": 61,
+        "end_line": 65,
+        "signature": "function setRiskClass(uint8 classId, uint256 globalCap, uint256 localCap) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "assignStrategyRiskLevel",
+        "line": 67,
+        "end_line": 70,
+        "signature": "function assignStrategyRiskLevel(uint256 strategyId, uint8 riskLevel) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getIndividualCap",
+        "line": 75,
+        "end_line": 78,
+        "signature": "function getIndividualCap(uint256 strategyId) external view override returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getGlobalCap",
+        "line": 81,
+        "end_line": 83,
+        "signature": "function getGlobalCap(uint8 riskLevel) external view override returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getStrategyRiskLevel",
+        "line": 86,
+        "end_line": 88,
+        "signature": "function getStrategyRiskLevel(uint256 strategyId) external view override returns (uint8)",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/AlchemistTokenVault.sol",
+    "sha256": "73187ae80ce262cb135ebeec8cbc6a9b2a452cff3638c33e16edf537f1d664f8",
+    "line_count": 53,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 22,
+        "end_line": 22,
+        "signature": "constructor(address _token, address _alchemist, address _owner) AbstractFeeVault(_token, _alchemist, _owner)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "deposit",
+        "line": 28,
+        "end_line": 32,
+        "signature": "function deposit(uint256 amount) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "withdraw",
+        "line": 39,
+        "end_line": 44,
+        "signature": "function withdraw(address recipient, uint256 amount) external override onlyAuthorized",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "totalDeposits",
+        "line": 50,
+        "end_line": 52,
+        "signature": "function totalDeposits() public view override returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/AlchemistV3.sol",
+    "sha256": "30932182dab788ca663f40d8d0a6be1d9ed49530c38a30f4bf55530c5fc4259f",
+    "line_count": 1872,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 165,
+        "end_line": 165,
+        "signature": "constructor() initializer",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "initialize",
+        "line": 167,
+        "end_line": 198,
+        "signature": "function initialize(AlchemistInitializationParams calldata params) external initializer",
+        "visibility": "external",
+        "patterns": {
+          "symbolic_exponent": [
+            175
+          ]
+        }
+      },
+      {
+        "name": "setAlchemistPositionNFT",
+        "line": 201,
+        "end_line": 211,
+        "signature": "function setAlchemistPositionNFT(address nft) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setAlchemistFeeVault",
+        "line": 214,
+        "end_line": 220,
+        "signature": "function setAlchemistFeeVault(address value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setPendingAdmin",
+        "line": 223,
+        "end_line": 227,
+        "signature": "function setPendingAdmin(address value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "acceptAdmin",
+        "line": 230,
+        "end_line": 242,
+        "signature": "function acceptAdmin() external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setDepositCap",
+        "line": 245,
+        "end_line": 250,
+        "signature": "function setDepositCap(uint256 value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setProtocolFeeReceiver",
+        "line": 253,
+        "end_line": 258,
+        "signature": "function setProtocolFeeReceiver(address value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setProtocolFee",
+        "line": 261,
+        "end_line": 266,
+        "signature": "function setProtocolFee(uint256 fee) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setLiquidatorFee",
+        "line": 269,
+        "end_line": 274,
+        "signature": "function setLiquidatorFee(uint256 fee) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setRepaymentFee",
+        "line": 277,
+        "end_line": 282,
+        "signature": "function setRepaymentFee(uint256 fee) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setTokenAdapter",
+        "line": 285,
+        "end_line": 290,
+        "signature": "function setTokenAdapter(address value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setGuardian",
+        "line": 293,
+        "end_line": 298,
+        "signature": "function setGuardian(address guardian, bool isActive) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setMinimumCollateralization",
+        "line": 301,
+        "end_line": 312,
+        "signature": "function setMinimumCollateralization(uint256 value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setGlobalMinimumCollateralization",
+        "line": 315,
+        "end_line": 319,
+        "signature": "function setGlobalMinimumCollateralization(uint256 value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setCollateralizationLowerBound",
+        "line": 322,
+        "end_line": 327,
+        "signature": "function setCollateralizationLowerBound(uint256 value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setLiquidationTargetCollateralization",
+        "line": 330,
+        "end_line": 337,
+        "signature": "function setLiquidationTargetCollateralization(uint256 value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "pauseDeposits",
+        "line": 340,
+        "end_line": 343,
+        "signature": "function pauseDeposits(bool isPaused) external onlyAdminOrGuardian",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "pauseLoans",
+        "line": 346,
+        "end_line": 349,
+        "signature": "function pauseLoans(bool isPaused) external onlyAdminOrGuardian",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getCDP",
+        "line": 352,
+        "end_line": 355,
+        "signature": "function getCDP(uint256 tokenId) external view returns (uint256, uint256, uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getTotalDeposited",
+        "line": 358,
+        "end_line": 360,
+        "signature": "function getTotalDeposited() external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getMaxBorrowable",
+        "line": 363,
+        "end_line": 368,
+        "signature": "function getMaxBorrowable(uint256 tokenId) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getMaxWithdrawable",
+        "line": 371,
+        "end_line": 385,
+        "signature": "function getMaxWithdrawable(uint256 tokenId) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {
+          "mulDiv": [
+            377
+          ]
+        }
+      },
+      {
+        "name": "mintAllowance",
+        "line": 388,
+        "end_line": 391,
+        "signature": "function mintAllowance(uint256 ownerTokenId, address spender) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getTotalUnderlyingValue",
+        "line": 394,
+        "end_line": 396,
+        "signature": "function getTotalUnderlyingValue() external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getTotalLockedUnderlyingValue",
+        "line": 400,
+        "end_line": 402,
+        "signature": "function getTotalLockedUnderlyingValue() external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "totalValue",
+        "line": 405,
+        "end_line": 407,
+        "signature": "function totalValue(uint256 tokenId) public view returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "getUnrealizedCumulativeEarmarked",
+        "line": 410,
+        "end_line": 414,
+        "signature": "function getUnrealizedCumulativeEarmarked() external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "deposit",
+        "line": 417,
+        "end_line": 443,
+        "signature": "function deposit(uint256 amount, address recipient, uint256 tokenId) external returns (uint256, uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "withdraw",
+        "line": 446,
+        "end_line": 472,
+        "signature": "function withdraw(uint256 amount, address recipient, uint256 tokenId) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {
+          "mulDiv": [
+            459
+          ]
+        }
+      },
+      {
+        "name": "mint",
+        "line": 475,
+        "end_line": 490,
+        "signature": "function mint(uint256 tokenId, uint256 amount, address recipient) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "mintFrom",
+        "line": 493,
+        "end_line": 509,
+        "signature": "function mintFrom(uint256 tokenId, uint256 amount, address recipient) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "burn",
+        "line": 512,
+        "end_line": 551,
+        "signature": "function burn(uint256 amount, uint256 recipientId) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {
+          "branching": [
+            516,
+            529,
+            532
+          ]
+        }
+      },
+      {
+        "name": "repay",
+        "line": 554,
+        "end_line": 604,
+        "signature": "function repay(uint256 amount, uint256 recipientTokenId) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {
+          "branching": [
+            559,
+            574,
+            586,
+            598
+          ]
+        }
+      },
+      {
+        "name": "liquidate",
+        "line": 607,
+        "end_line": 617,
+        "signature": "function liquidate(uint256 accountId) external override returns (uint256 yieldAmount, uint256 feeInYield, uint256 feeInUnderlying)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "batchLiquidate",
+        "line": 620,
+        "end_line": 652,
+        "signature": "function batchLiquidate(uint256[] calldata accountIds) external returns (uint256 totalAmountLiquidated, uint256 totalFeesInYield, uint256 totalFeesInUnderlying)",
+        "visibility": "external",
+        "patterns": {
+          "loops": [
+            629
+          ],
+          "branching": [
+            624,
+            631,
+            639,
+            646
+          ]
+        }
+      },
+      {
+        "name": "redeem",
+        "line": 655,
+        "end_line": 732,
+        "signature": "function redeem(uint256 amount) external onlyTransmuter returns (uint256 sharesSent)",
+        "visibility": "external",
+        "patterns": {
+          "branching": [
+            659,
+            663,
+            674,
+            677,
+            686,
+            705,
+            724
+          ]
+        }
+      },
+      {
+        "name": "selfLiquidate",
+        "line": 735,
+        "end_line": 773,
+        "signature": "function selfLiquidate(uint256 accountId, address recipient) external returns (uint256 amountLiquidated)",
+        "visibility": "external",
+        "patterns": {
+          "branching": [
+            741,
+            761,
+            767
+          ]
+        }
+      },
+      {
+        "name": "calculateLiquidation",
+        "line": 776,
+        "end_line": 820,
+        "signature": "function calculateLiquidation( uint256 collateral, uint256 debt, uint256 targetCollateralization, uint256 alchemistCurrentCollateralization, uint256 alchemistMinimumCollateralization, uint256 feeBps ) public pure returns (uint256 grossCollateralToSeize, uint256 debtToBurn, uint256 fee, uint256 outsourcedFee)",
+        "visibility": "public",
+        "patterns": {
+          "branching": [
+            784,
+            790,
+            806
+          ]
+        }
+      },
+      {
+        "name": "reduceSyntheticsIssued",
+        "line": 823,
+        "end_line": 825,
+        "signature": "function reduceSyntheticsIssued(uint256 amount) external onlyTransmuter",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setTransmuterTokenBalance",
+        "line": 828,
+        "end_line": 834,
+        "signature": "function setTransmuterTokenBalance(uint256 amount) external onlyTransmuter",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_syncEarmarkedTransmuterTransfer",
+        "line": 837,
+        "end_line": 842,
+        "signature": "function _syncEarmarkedTransmuterTransfer(uint256 sharesSent, uint256 earmarkedShares) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "poke",
+        "line": 845,
+        "end_line": 848,
+        "signature": "function poke(uint256 tokenId) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_poke",
+        "line": 853,
+        "end_line": 856,
+        "signature": "function _poke(uint256 tokenId) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "approveMint",
+        "line": 859,
+        "end_line": 862,
+        "signature": "function approveMint(uint256 tokenId, address spender, uint256 amount) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "resetMintAllowances",
+        "line": 865,
+        "end_line": 878,
+        "signature": "function resetMintAllowances(uint256 tokenId) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "convertYieldTokensToDebt",
+        "line": 881,
+        "end_line": 883,
+        "signature": "function convertYieldTokensToDebt(uint256 amount) public view returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "convertDebtTokensToYield",
+        "line": 886,
+        "end_line": 888,
+        "signature": "function convertDebtTokensToYield(uint256 amount) public view returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "convertYieldTokensToUnderlying",
+        "line": 891,
+        "end_line": 893,
+        "signature": "function convertYieldTokensToUnderlying(uint256 amount) public view returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "convertUnderlyingTokensToYield",
+        "line": 896,
+        "end_line": 898,
+        "signature": "function convertUnderlyingTokensToYield(uint256 amount) public view returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "normalizeUnderlyingTokensToDebt",
+        "line": 901,
+        "end_line": 903,
+        "signature": "function normalizeUnderlyingTokensToDebt(uint256 amount) public view returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "normalizeDebtTokensToUnderlying",
+        "line": 906,
+        "end_line": 908,
+        "signature": "function normalizeDebtTokensToUnderlying(uint256 amount) public view returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "_mint",
+        "line": 914,
+        "end_line": 929,
+        "signature": "function _mint(uint256 tokenId, uint256 amount, address recipient) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_forceRepay",
+        "line": 938,
+        "end_line": 981,
+        "signature": "function _forceRepay(uint256 accountId, uint256 amount, bool skipPoke) internal returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            939,
+            943,
+            954,
+            969,
+            975
+          ]
+        }
+      },
+      {
+        "name": "_subEarmarkedDebt",
+        "line": 987,
+        "end_line": 1004,
+        "signature": "function _subEarmarkedDebt(uint256 amountInDebtTokens, uint256 accountId) internal returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_subCollateralBalance",
+        "line": 1011,
+        "end_line": 1026,
+        "signature": "function _subCollateralBalance(uint256 amountInYieldTokens, uint256 accountId) internal returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_liquidate",
+        "line": 1033,
+        "end_line": 1090,
+        "signature": "function _liquidate(uint256 accountId) internal returns (uint256 amountLiquidated, uint256 feeInYield, uint256 feeInUnderlying)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            1042,
+            1046,
+            1052,
+            1056,
+            1058,
+            1065,
+            1066,
+            1071,
+            1077,
+            1080
+          ]
+        }
+      },
+      {
+        "name": "_payWithFeeVault",
+        "line": 1095,
+        "end_line": 1112,
+        "signature": "function _payWithFeeVault(uint256 amountInUnderlying) internal returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            1096,
+            1097,
+            1102,
+            1105
+          ]
+        }
+      },
+      {
+        "name": "_isAccountHealthy",
+        "line": 1120,
+        "end_line": 1127,
+        "signature": "function _isAccountHealthy(uint256 accountId, bool refresh) internal view returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_doLiquidation",
+        "line": 1134,
+        "end_line": 1229,
+        "signature": "function _doLiquidation(uint256 accountId) internal returns (uint256 amountLiquidated, uint256 feeInYield, uint256 feeInUnderlying)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            1150,
+            1152,
+            1154,
+            1160,
+            1164,
+            1174,
+            1185,
+            1186,
+            1189,
+            1195,
+            1197,
+            1202,
+            1207,
+            1209,
+            1216,
+            1222,
+            1224
+          ]
+        }
+      },
+      {
+        "name": "_calculateRepaymentFee",
+        "line": 1235,
+        "end_line": 1237,
+        "signature": "function _calculateRepaymentFee(uint256 repaidAmountInYield) internal view returns (uint256 feeInYield)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_maxRepaymentFeeInYield",
+        "line": 1242,
+        "end_line": 1263,
+        "signature": "function _maxRepaymentFeeInYield(uint256 accountId) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            1250
+          ],
+          "branching": [
+            1245,
+            1251,
+            1257
+          ]
+        }
+      },
+      {
+        "name": "_addDebt",
+        "line": 1269,
+        "end_line": 1282,
+        "signature": "function _addDebt(uint256 tokenId, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            1277
+          ]
+        }
+      },
+      {
+        "name": "_subDebt",
+        "line": 1288,
+        "end_line": 1297,
+        "signature": "function _subDebt(uint256 tokenId, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_capDebtCredit",
+        "line": 1300,
+        "end_line": 1304,
+        "signature": "function _capDebtCredit(uint256 requested, uint256 accountDebt) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_clearableDebt",
+        "line": 1307,
+        "end_line": 1309,
+        "signature": "function _clearableDebt(uint256 accountDebt) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_approveMint",
+        "line": 1316,
+        "end_line": 1320,
+        "signature": "function _approveMint(uint256 ownerTokenId, address spender, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_decreaseMintAllowance",
+        "line": 1327,
+        "end_line": 1330,
+        "signature": "function _decreaseMintAllowance(uint256 ownerTokenId, address spender, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_checkArgument",
+        "line": 1335,
+        "end_line": 1339,
+        "signature": "function _checkArgument(bool expression) internal pure",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_checkAccountOwnership",
+        "line": 1345,
+        "end_line": 1349,
+        "signature": "function _checkAccountOwnership(address owner, address user) internal pure",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_checkForValidAccountId",
+        "line": 1354,
+        "end_line": 1358,
+        "signature": "function _checkForValidAccountId(uint256 tokenId) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_onlyAdmin",
+        "line": 1360,
+        "end_line": 1364,
+        "signature": "function _onlyAdmin() internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_onlyAdminOrGuardian",
+        "line": 1366,
+        "end_line": 1370,
+        "signature": "function _onlyAdminOrGuardian() internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_onlyTransmuter",
+        "line": 1372,
+        "end_line": 1376,
+        "signature": "function _onlyTransmuter() internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_tokenExists",
+        "line": 1384,
+        "end_line": 1396,
+        "signature": "function _tokenExists(address nft, uint256 tokenId) internal view returns (bool exists)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_checkState",
+        "line": 1401,
+        "end_line": 1405,
+        "signature": "function _checkState(bool expression) internal pure",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_validate",
+        "line": 1411,
+        "end_line": 1413,
+        "signature": "function _validate(uint256 tokenId) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_totalCollateralValue",
+        "line": 1418,
+        "end_line": 1427,
+        "signature": "function _totalCollateralValue(uint256 tokenId, bool includeUnrealizedDebt) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_sync",
+        "line": 1430,
+        "end_line": 1460,
+        "signature": "function _sync(uint256 tokenId) internal",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            1441
+          ]
+        }
+      },
+      {
+        "name": "_computeUnrealizedAccount",
+        "line": 1466,
+        "end_line": 1567,
+        "signature": "function _computeUnrealizedAccount( Account storage account, uint256 earmarkWeightCurrent, uint256 redemptionWeightCurrent, uint256 survivalAccumulatorCurrent ) internal view returns (uint256 newDebt, uint256 newEarmarked, uint256 redeemedDebt)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            1488,
+            1491,
+            1498,
+            1503,
+            1509,
+            1517,
+            1527,
+            1532,
+            1539,
+            1554,
+            1566
+          ]
+        }
+      },
+      {
+        "name": "_earmark",
+        "line": 1570,
+        "end_line": 1629,
+        "signature": "function _earmark() internal",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            1593
+          ],
+          "branching": [
+            1571,
+            1572,
+            1577,
+            1588,
+            1594,
+            1599,
+            1601,
+            1616
+          ]
+        }
+      },
+      {
+        "name": "_calculateUnrealizedDebt",
+        "line": 1638,
+        "end_line": 1677,
+        "signature": "function _calculateUnrealizedDebt(uint256 tokenId) internal view returns (uint256, uint256, uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            1671
+          ],
+          "branching": [
+            1655,
+            1657,
+            1662,
+            1669,
+            1672
+          ]
+        }
+      },
+      {
+        "name": "_isUnderCollateralized",
+        "line": 1683,
+        "end_line": 1694,
+        "signature": "function _isUnderCollateralized(uint256 tokenId) internal view returns (bool)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            1691
+          ]
+        }
+      },
+      {
+        "name": "_getTotalUnderlyingValue",
+        "line": 1698,
+        "end_line": 1701,
+        "signature": "function _getTotalUnderlyingValue() internal view returns (uint256 totalUnderlyingValue)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_getTotalLockedUnderlyingValue",
+        "line": 1704,
+        "end_line": 1712,
+        "signature": "function _getTotalLockedUnderlyingValue() internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_isProtocolInBadDebt",
+        "line": 1716,
+        "end_line": 1724,
+        "signature": "function _isProtocolInBadDebt() internal view returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_requiredLockedShares",
+        "line": 1727,
+        "end_line": 1732,
+        "signature": "function _requiredLockedShares() internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            1731
+          ]
+        }
+      },
+      {
+        "name": "_earmarkSurvivalRatio",
+        "line": 1735,
+        "end_line": 1751,
+        "signature": "function _earmarkSurvivalRatio(uint256 oldPacked, uint256 newPacked) internal pure returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            1736,
+            1737,
+            1743,
+            1748
+          ]
+        }
+      },
+      {
+        "name": "_redemptionSurvivalRatio",
+        "line": 1756,
+        "end_line": 1774,
+        "signature": "function _redemptionSurvivalRatio(uint256 oldPacked, uint256 newPacked) internal pure returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            1757,
+            1758,
+            1764,
+            1770
+          ]
+        }
+      },
+      {
+        "name": "_simulateUnrealizedEarmark",
+        "line": 1779,
+        "end_line": 1814,
+        "signature": "function _simulateUnrealizedEarmark() internal view returns (uint256 earmarkWeightCopy, uint256 effectiveEarmarked)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            1781,
+            1787,
+            1796,
+            1802,
+            1803
+          ]
+        }
+      },
+      {
+        "name": "_simulateEarmarkPackedUpdate",
+        "line": 1824,
+        "end_line": 1853,
+        "signature": "function _simulateEarmarkPackedUpdate(uint256 packedOld, uint256 ratioWanted) internal pure returns (uint256 packedNew, uint256 ratioApplied, uint256 oldIndex, uint256 newEpoch, bool epochAdvanced)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            1832,
+            1835,
+            1843
+          ]
+        }
+      },
+      {
+        "name": "_redEpoch",
+        "line": 1856,
+        "end_line": 1858,
+        "signature": "function _redEpoch(uint256 packed) private pure returns (uint256)",
+        "visibility": "private",
+        "patterns": {}
+      },
+      {
+        "name": "_redIndex",
+        "line": 1860,
+        "end_line": 1862,
+        "signature": "function _redIndex(uint256 packed) private pure returns (uint256)",
+        "visibility": "private",
+        "patterns": {}
+      },
+      {
+        "name": "_packRed",
+        "line": 1864,
+        "end_line": 1866,
+        "signature": "function _packRed(uint256 epoch, uint256 index) private pure returns (uint256)",
+        "visibility": "private",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/AlchemistV3Position.sol",
+    "sha256": "ba0d5541d0334fe354d8519d8d12164d26374b0f3810d1e072f5e54934c64925",
+    "line_count": 142,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 68,
+        "end_line": 74,
+        "signature": "constructor(address alchemist_, address admin_) ERC721(\"AlchemistV3Position\", \"ALCV3\")",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "setMetadataRenderer",
+        "line": 78,
+        "end_line": 80,
+        "signature": "function setMetadataRenderer(address renderer) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setAdmin",
+        "line": 84,
+        "end_line": 86,
+        "signature": "function setAdmin(address newAdmin) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "mint",
+        "line": 94,
+        "end_line": 102,
+        "signature": "function mint(address to) external onlyAlchemist returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "burn",
+        "line": 104,
+        "end_line": 106,
+        "signature": "function burn(uint256 tokenId) public onlyAlchemist",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "tokenURI",
+        "line": 113,
+        "end_line": 120,
+        "signature": "function tokenURI(uint256 tokenId) public view override returns (string memory)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "supportsInterface",
+        "line": 125,
+        "end_line": 127,
+        "signature": "function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721Enumerable) returns (bool)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "_update",
+        "line": 132,
+        "end_line": 141,
+        "signature": "function _update(address to, uint256 tokenId, address auth) internal virtual override returns (address)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/AlchemistV3PositionRenderer.sol",
+    "sha256": "75377c49448ae205143e3412372f0d45877757881012cc184a1500c344c4f2c3",
+    "line_count": 14,
+    "functions": [
+      {
+        "name": "tokenURI",
+        "line": 11,
+        "end_line": 13,
+        "signature": "function tokenURI(uint256 tokenId) external pure override returns (string memory)",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/FrxEthEthDualOracleAggregatorAdapter.sol",
+    "sha256": "5e791a2f495ad8f931a3a33593b9183b24372e2b8c936196bbbfa913e6ea572a",
+    "line_count": 38,
+    "functions": [
+      {
+        "name": "getPrices",
+        "line": 5,
+        "end_line": 5,
+        "signature": "function getPrices() external view returns (bool isBadData, uint256 priceLow, uint256 priceHigh)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 15,
+        "end_line": 18,
+        "signature": "constructor(address _dualOracle)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "decimals",
+        "line": 20,
+        "end_line": 22,
+        "signature": "function decimals() external pure returns (uint8)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "latestRoundData",
+        "line": 24,
+        "end_line": 37,
+        "signature": "function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/MYTStrategy.sol",
+    "sha256": "e1b2fedc8e5af78697c5e5e7aab2d4faa1b436e639dcfac232fcf38a24a196a7",
+    "line_count": 345,
+    "functions": [
+      {
+        "name": "ownerOf",
+        "line": 14,
+        "end_line": 14,
+        "signature": "function ownerOf(uint256 tokenId) external view returns (address)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 52,
+        "end_line": 60,
+        "signature": "constructor(address _myt, StrategyParams memory _params) Ownable(_params.owner)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "allocate",
+        "line": 65,
+        "end_line": 88,
+        "signature": "function allocate(bytes memory data, uint256 assets, bytes4 selector, address sender) external onlyVault returns (bytes32[] memory strategyIds, int256 change)",
+        "visibility": "external",
+        "patterns": {
+          "branching": [
+            70,
+            71,
+            76,
+            78
+          ]
+        }
+      },
+      {
+        "name": "deallocate",
+        "line": 91,
+        "end_line": 120,
+        "signature": "function deallocate(bytes memory data, uint256 assets, bytes4 selector, address sender) external onlyVault returns (bytes32[] memory strategyIds, int256 change)",
+        "visibility": "external",
+        "patterns": {
+          "branching": [
+            96,
+            105,
+            107,
+            109
+          ]
+        }
+      },
+      {
+        "name": "dexSwap",
+        "line": 125,
+        "end_line": 135,
+        "signature": "function dexSwap(address to, address from, uint256 amount, uint256 minAmountOut, bytes memory callData) internal returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_ensureIdleBalance",
+        "line": 138,
+        "end_line": 141,
+        "signature": "function _ensureIdleBalance(address asset, uint256 amount) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_validateDeallocateAction",
+        "line": 144,
+        "end_line": 148,
+        "signature": "function _validateDeallocateAction(ActionType action, bytes4 selector) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "previewAdjustedWithdraw",
+        "line": 155,
+        "end_line": 158,
+        "signature": "function previewAdjustedWithdraw(uint256 amount) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "claimWithdrawalQueue",
+        "line": 161,
+        "end_line": 163,
+        "signature": "function claimWithdrawalQueue(uint256 positionId) public virtual onlyOwner returns (uint256 ret)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "claimRewards",
+        "line": 167,
+        "end_line": 170,
+        "signature": "function claimRewards(address token, bytes memory quote, uint256 minAmountOut) public onlyOwner virtual returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "withdrawToVault",
+        "line": 173,
+        "end_line": 178,
+        "signature": "function withdrawToVault() public virtual onlyOwner returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "rescueTokens",
+        "line": 184,
+        "end_line": 191,
+        "signature": "function rescueTokens(address token, address to, uint256 amount) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setRiskClass",
+        "line": 196,
+        "end_line": 199,
+        "signature": "function setRiskClass(RiskClass newClass) public onlyOwner",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "setAdditionalIncentives",
+        "line": 203,
+        "end_line": 206,
+        "signature": "function setAdditionalIncentives(bool newValue) public onlyOwner",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "setKillSwitch",
+        "line": 209,
+        "end_line": 212,
+        "signature": "function setKillSwitch(bool val) public onlyOwner",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "setAllowanceHolder",
+        "line": 214,
+        "end_line": 217,
+        "signature": "function setAllowanceHolder(address _new) public onlyOwner",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "setSlippageBPS",
+        "line": 220,
+        "end_line": 224,
+        "signature": "function setSlippageBPS(uint256 newSlippageBPS) public onlyOwner",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "getEstimatedYield",
+        "line": 231,
+        "end_line": 233,
+        "signature": "function getEstimatedYield() public view returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "getCap",
+        "line": 235,
+        "end_line": 237,
+        "signature": "function getCap() external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getGlobalCap",
+        "line": 239,
+        "end_line": 241,
+        "signature": "function getGlobalCap() external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "ids",
+        "line": 243,
+        "end_line": 247,
+        "signature": "function ids() public view returns (bytes32[] memory)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "allocation",
+        "line": 250,
+        "end_line": 252,
+        "signature": "function allocation() public view returns (uint256)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "getIdData",
+        "line": 254,
+        "end_line": 256,
+        "signature": "function getIdData() external view returns (bytes memory)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "realAssets",
+        "line": 259,
+        "end_line": 261,
+        "signature": "function realAssets() external view virtual returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_isProtectedToken",
+        "line": 270,
+        "end_line": 272,
+        "signature": "function _isProtectedToken(address token) internal view virtual returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 278,
+        "end_line": 280,
+        "signature": "function _allocate(uint256 amount) internal virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 286,
+        "end_line": 288,
+        "signature": "function _allocate(uint256 amount, bytes memory callData) internal virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 297,
+        "end_line": 299,
+        "signature": "function _deallocate(uint256 amount) internal virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 308,
+        "end_line": 310,
+        "signature": "function _deallocate(uint256 amount, bytes memory callData) internal virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 317,
+        "end_line": 319,
+        "signature": "function _deallocate(uint256 amount, bytes memory callData, uint256 minIntermediateOutAmount) internal virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_previewAdjustedWithdraw",
+        "line": 324,
+        "end_line": 324,
+        "signature": "function _previewAdjustedWithdraw(uint256 amount) internal view virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_claimWithdrawalQueue",
+        "line": 327,
+        "end_line": 327,
+        "signature": "function _claimWithdrawalQueue(uint256 positionId) internal virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_claimRewards",
+        "line": 332,
+        "end_line": 332,
+        "signature": "function _claimRewards(address token, bytes memory quote, uint256 minAmountOut) internal virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_totalValue",
+        "line": 336,
+        "end_line": 336,
+        "signature": "function _totalValue() internal view virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_idleAssets",
+        "line": 338,
+        "end_line": 338,
+        "signature": "function _idleAssets() internal view virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_canForceDeallocate",
+        "line": 342,
+        "end_line": 344,
+        "signature": "function _canForceDeallocate() internal view virtual returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/PerpetualGauge.sol",
+    "sha256": "fd7914b6622015396cc5fae1e4167ca7ef2a61ea732bb4e5ca9f620de6525cbf",
+    "line_count": 176,
+    "functions": [
+      {
+        "name": "allocate",
+        "line": 9,
+        "end_line": 9,
+        "signature": "function allocate(uint256 strategyId, uint256 amount) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 39,
+        "end_line": 44,
+        "signature": "constructor(address _stratClassifier, address _allocatorProxy, address _votingToken)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "vote",
+        "line": 46,
+        "end_line": 92,
+        "signature": "function vote(uint256 ytId, uint256[] calldata strategyIds, uint256[] calldata weights) external nonReentrant",
+        "visibility": "external",
+        "patterns": {
+          "loops": [
+            68,
+            79
+          ],
+          "branching": [
+            53,
+            55,
+            67,
+            86
+          ]
+        }
+      },
+      {
+        "name": "clearVote",
+        "line": 94,
+        "end_line": 108,
+        "signature": "function clearVote(uint256 ytId) external nonReentrant",
+        "visibility": "external",
+        "patterns": {
+          "loops": [
+            100
+          ]
+        }
+      },
+      {
+        "name": "registerNewStrategy",
+        "line": 110,
+        "end_line": 113,
+        "signature": "function registerNewStrategy(uint256 ytId, uint256 strategyId) external nonReentrant",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getCurrentAllocations",
+        "line": 115,
+        "end_line": 136,
+        "signature": "function getCurrentAllocations(uint256 ytId) public view returns (uint256[] memory strategyIds, uint256[] memory normalizedWeights)",
+        "visibility": "public",
+        "patterns": {
+          "loops": [
+            123,
+            131
+          ]
+        }
+      },
+      {
+        "name": "executeAllocation",
+        "line": 138,
+        "end_line": 172,
+        "signature": "function executeAllocation(uint256 ytId, uint256 totalIdleAssets) external nonReentrant",
+        "visibility": "external",
+        "patterns": {
+          "loops": [
+            145
+          ],
+          "branching": [
+            154,
+            157,
+            159,
+            163
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "file": "src/Transmuter.sol",
+    "sha256": "cb1255db76cb6a406a3476df80a5fff2c65159dffcdb610a84e184a4d7e1d427",
+    "line_count": 362,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 82,
+        "end_line": 95,
+        "signature": "constructor(ITransmuter.TransmuterInitializationParams memory params) ERC721(\"Alchemix V3 Transmuter\", \"TRNSMTR\")",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "setPendingAdmin",
+        "line": 98,
+        "end_line": 102,
+        "signature": "function setPendingAdmin(address value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "acceptAdmin",
+        "line": 105,
+        "end_line": 117,
+        "signature": "function acceptAdmin() external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setAlchemist",
+        "line": 120,
+        "end_line": 124,
+        "signature": "function setAlchemist(address value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setDepositCap",
+        "line": 127,
+        "end_line": 132,
+        "signature": "function setDepositCap(uint256 cap) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setTransmutationFee",
+        "line": 135,
+        "end_line": 140,
+        "signature": "function setTransmutationFee(uint256 fee) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setExitFee",
+        "line": 143,
+        "end_line": 148,
+        "signature": "function setExitFee(uint256 fee) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setTransmutationTime",
+        "line": 151,
+        "end_line": 157,
+        "signature": "function setTransmutationTime(uint256 time) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setProtocolFeeReceiver",
+        "line": 160,
+        "end_line": 164,
+        "signature": "function setProtocolFeeReceiver(address value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "tokenURI",
+        "line": 166,
+        "end_line": 168,
+        "signature": "function tokenURI(uint256 id) public view override returns (string memory)",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "getPosition",
+        "line": 171,
+        "end_line": 173,
+        "signature": "function getPosition(uint256 id) external view returns (StakingPosition memory)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "createRedemption",
+        "line": 176,
+        "end_line": 206,
+        "signature": "function createRedemption(uint256 syntheticDepositAmount, address recipient) external",
+        "visibility": "external",
+        "patterns": {
+          "branching": [
+            177,
+            183,
+            187
+          ]
+        }
+      },
+      {
+        "name": "claimRedemption",
+        "line": 209,
+        "end_line": 309,
+        "signature": "function claimRedemption(uint256 id) external returns (uint256 claimYield, uint256 feeYield, uint256 syntheticReturned, uint256 syntheticFee)",
+        "visibility": "external",
+        "patterns": {
+          "mulDiv": [
+            222,
+            243
+          ],
+          "symbolic_exponent": [
+            243
+          ],
+          "branching": [
+            212,
+            216,
+            225,
+            247,
+            256,
+            269,
+            283,
+            291,
+            299
+          ]
+        }
+      },
+      {
+        "name": "queryGraph",
+        "line": 312,
+        "end_line": 319,
+        "signature": "function queryGraph(uint256 startBlock, uint256 endBlock) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {
+          "mulDiv": [
+            318
+          ]
+        }
+      },
+      {
+        "name": "pokeMatured",
+        "line": 322,
+        "end_line": 338,
+        "signature": "function pokeMatured(uint256 id) external",
+        "visibility": "external",
+        "patterns": {
+          "branching": [
+            325,
+            328,
+            332
+          ]
+        }
+      },
+      {
+        "name": "_updateStakingGraph",
+        "line": 341,
+        "end_line": 343,
+        "signature": "function _updateStakingGraph(int256 amount, uint256 blocks) private",
+        "visibility": "private",
+        "patterns": {}
+      },
+      {
+        "name": "_checkArgument",
+        "line": 348,
+        "end_line": 352,
+        "signature": "function _checkArgument(bool expression) internal pure",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_checkState",
+        "line": 357,
+        "end_line": 361,
+        "signature": "function _checkState(bool expression) internal pure",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/adapters/AbstractFeeVault.sol",
+    "sha256": "4a1b1499d04b73153c63ff670e29823e90a23908f90eab3f7d8a7aa9e988172c",
+    "line_count": 91,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 43,
+        "end_line": 50,
+        "signature": "constructor(address _token, address _alchemist, address _owner) Ownable(_owner)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "setAuthorization",
+        "line": 57,
+        "end_line": 61,
+        "signature": "function setAuthorization(address account, bool status) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_checkNonZeroAddress",
+        "line": 67,
+        "end_line": 69,
+        "signature": "function _checkNonZeroAddress(address account) internal pure",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_checkNonZeroAmount",
+        "line": 75,
+        "end_line": 77,
+        "signature": "function _checkNonZeroAmount(uint256 amount) internal pure",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "withdraw",
+        "line": 84,
+        "end_line": 84,
+        "signature": "function withdraw(address recipient, uint256 amount) external virtual override",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "totalDeposits",
+        "line": 90,
+        "end_line": 90,
+        "signature": "function totalDeposits() external view virtual override returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/adapters/EulerUSDCAdapter.sol",
+    "sha256": "9915c030047f26ee2ce5fdc431768ff73e4b36ce9165105898f19f0b7e1f5b2c",
+    "line_count": 25,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 17,
+        "end_line": 20,
+        "signature": "constructor(address _token, address _underlyingToken)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "price",
+        "line": 22,
+        "end_line": 24,
+        "signature": "function price() external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {
+          "symbolic_exponent": [
+            23
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "file": "src/base/ErrorMessages.sol",
+    "sha256": "e945d4cdbe797842ad7526d22b1718aa211dab3f1065f529f3fe5157a07b9155",
+    "line_count": 23,
+    "functions": []
+  },
+  {
+    "file": "src/base/Errors.sol",
+    "sha256": "0841657c812cfaf4a02df36a485efe5ef039ff0ab75718e4898b43d5b7a009fe",
+    "line_count": 26,
+    "functions": []
+  },
+  {
+    "file": "src/base/TransmuterErrors.sol",
+    "sha256": "9c1160ad2f6968b482e0d2b8e247768b40ce61a20f1dd22b7c2eac4ad0e0fe98",
+    "line_count": 22,
+    "functions": []
+  },
+  {
+    "file": "src/external/AlEth.sol",
+    "sha256": "ada16f309e250e4fbba91ebea999115e74aada36e602f528f53c754d1d6c98d6",
+    "line_count": 123,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 41,
+        "end_line": 41,
+        "signature": "constructor()",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "mint",
+        "line": 55,
+        "end_line": 59,
+        "signature": "function mint(address _recipient, uint256 _amount) external onlyWhitelisted",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setWhitelist",
+        "line": 65,
+        "end_line": 67,
+        "signature": "function setWhitelist(address _toWhitelist, bool _state) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "pauseAlchemist",
+        "line": 73,
+        "end_line": 75,
+        "signature": "function pauseAlchemist(address _toPause, bool _state) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setCeiling",
+        "line": 81,
+        "end_line": 83,
+        "signature": "function setCeiling(address _toSetCeiling, uint256 _ceiling) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "burn",
+        "line": 90,
+        "end_line": 92,
+        "signature": "function burn(uint256 amount) public virtual",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "burnFrom",
+        "line": 105,
+        "end_line": 110,
+        "signature": "function burnFrom(address account, uint256 amount) public virtual",
+        "visibility": "public",
+        "patterns": {}
+      },
+      {
+        "name": "lowerHasMinted",
+        "line": 116,
+        "end_line": 122,
+        "signature": "function lowerHasMinted(uint256 amount) public onlyWhitelisted",
+        "visibility": "public",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/libraries/FixedPointMath.sol",
+    "sha256": "2e621546f63ceeba02b64a41c6d54d2d58e5ba374b7edc7ee0b9146d0a1bef71",
+    "line_count": 287,
+    "functions": [
+      {
+        "name": "encode",
+        "line": 30,
+        "end_line": 32,
+        "signature": "function encode(uint256 value) internal pure returns (Number memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "encodeRaw",
+        "line": 41,
+        "end_line": 43,
+        "signature": "function encodeRaw(uint256 value) internal pure returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "max",
+        "line": 51,
+        "end_line": 53,
+        "signature": "function max() internal pure returns (Number memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "rational",
+        "line": 62,
+        "end_line": 65,
+        "signature": "function rational(uint256 n, uint256 d) internal pure returns (Number memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "add",
+        "line": 74,
+        "end_line": 76,
+        "signature": "function add(Number memory self, Number memory value) internal pure returns (Number memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "add",
+        "line": 85,
+        "end_line": 87,
+        "signature": "function add(Number memory self, uint256 value) internal pure returns (Number memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "sub",
+        "line": 96,
+        "end_line": 98,
+        "signature": "function sub(Number memory self, Number memory value) internal pure returns (Number memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "sub",
+        "line": 107,
+        "end_line": 109,
+        "signature": "function sub(Number memory self, uint256 value) internal pure returns (Number memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "mul",
+        "line": 118,
+        "end_line": 120,
+        "signature": "function mul(Number memory self, Number memory number) internal pure returns (Number memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "mul",
+        "line": 129,
+        "end_line": 131,
+        "signature": "function mul(Number memory self, uint256 value) internal pure returns (Number memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "div",
+        "line": 140,
+        "end_line": 142,
+        "signature": "function div(Number memory self, uint256 value) internal pure returns (Number memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "mulDiv",
+        "line": 145,
+        "end_line": 198,
+        "signature": "function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result)",
+        "visibility": "internal",
+        "patterns": {
+          "assembly": [
+            152,
+            168,
+            176
+          ],
+          "branching": [
+            147,
+            159,
+            164
+          ]
+        }
+      },
+      {
+        "name": "mulDivUp",
+        "line": 201,
+        "end_line": 209,
+        "signature": "function mulDivUp(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            202
+          ]
+        }
+      },
+      {
+        "name": "cmp",
+        "line": 220,
+        "end_line": 230,
+        "signature": "function cmp(Number memory self, Number memory value) internal pure returns (int256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "equals",
+        "line": 240,
+        "end_line": 242,
+        "signature": "function equals(Number memory self, Number memory value) internal pure returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "truncate",
+        "line": 249,
+        "end_line": 251,
+        "signature": "function truncate(Number memory self) internal pure returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "mulQ128",
+        "line": 254,
+        "end_line": 272,
+        "signature": "function mulQ128(uint256 aQ, uint256 bQ) internal pure returns (uint256 z)",
+        "visibility": "internal",
+        "patterns": {
+          "assembly": [
+            258
+          ]
+        }
+      },
+      {
+        "name": "divQ128",
+        "line": 274,
+        "end_line": 286,
+        "signature": "function divQ128(uint256 numerQ128, uint256 denomQ128) internal pure returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/libraries/NFTMetadataGenerator.sol",
+    "sha256": "628e7c1248803cc94117999f07b5faa9720317b05e40e63b20e4fe0ecec2a58f",
+    "line_count": 153,
+    "functions": [
+      {
+        "name": "generateSVG",
+        "line": 22,
+        "end_line": 39,
+        "signature": "function generateSVG(uint256 tokenId, string memory title) internal pure returns (string memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_generateTokenIdText",
+        "line": 41,
+        "end_line": 76,
+        "signature": "function _generateTokenIdText(uint256 tokenId) private pure returns (string memory)",
+        "visibility": "private",
+        "patterns": {
+          "loops": [
+            55,
+            63
+          ]
+        }
+      },
+      {
+        "name": "_generateLogo",
+        "line": 78,
+        "end_line": 87,
+        "signature": "function _generateLogo() private pure returns (string memory)",
+        "visibility": "private",
+        "patterns": {}
+      },
+      {
+        "name": "_generateLogoWordmark",
+        "line": 89,
+        "end_line": 104,
+        "signature": "function _generateLogoWordmark() private pure returns (string memory)",
+        "visibility": "private",
+        "patterns": {}
+      },
+      {
+        "name": "_generateLogoMark",
+        "line": 106,
+        "end_line": 119,
+        "signature": "function _generateLogoMark() private pure returns (string memory)",
+        "visibility": "private",
+        "patterns": {}
+      },
+      {
+        "name": "generateJSONString",
+        "line": 127,
+        "end_line": 140,
+        "signature": "function generateJSONString(uint256 tokenId, string memory svg) internal pure returns (string memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "generateTokenURI",
+        "line": 148,
+        "end_line": 152,
+        "signature": "function generateTokenURI(uint256 tokenId, string memory title) internal pure returns (string memory)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/libraries/SafeCast.sol",
+    "sha256": "27da2e2d2ad473924eaaed88d21fe9b58d1557a15b2a74989c13fae0d145353a",
+    "line_count": 46,
+    "functions": [
+      {
+        "name": "toInt256",
+        "line": 12,
+        "end_line": 17,
+        "signature": "function toInt256(uint256 y) internal pure returns (int256 z)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "toUint256",
+        "line": 22,
+        "end_line": 27,
+        "signature": "function toUint256(int256 y) internal pure returns (uint256 z)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "uint256ToUint128",
+        "line": 32,
+        "end_line": 37,
+        "signature": "function uint256ToUint128(uint256 y) internal pure returns (uint128 z)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "uint128ToUint256",
+        "line": 42,
+        "end_line": 45,
+        "signature": "function uint128ToUint256(uint128 y) internal pure returns (uint256 z)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/libraries/SafeERC20.sol",
+    "sha256": "c83655b15b04f9457b7a6eaa45477f7c068bce155bf3bd82a4e8a68fda324e1f",
+    "line_count": 84,
+    "functions": [
+      {
+        "name": "expectDecimals",
+        "line": 26,
+        "end_line": 34,
+        "signature": "function expectDecimals(address token) internal view returns (uint8)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "safeTransfer",
+        "line": 44,
+        "end_line": 50,
+        "signature": "function safeTransfer(address token, address recipient, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "safeApprove",
+        "line": 60,
+        "end_line": 66,
+        "signature": "function safeApprove(address token, address spender, uint256 value) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "safeTransferFrom",
+        "line": 77,
+        "end_line": 83,
+        "signature": "function safeTransferFrom(address token, address owner, address recipient, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/libraries/Sets.sol",
+    "sha256": "d0d8cd69ead873a489d8f9550486c9f75949ed5ed596756abe39811391ab3f9d",
+    "line_count": 68,
+    "functions": [
+      {
+        "name": "add",
+        "line": 20,
+        "end_line": 27,
+        "signature": "function add(AddressSet storage self, address value) internal returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "remove",
+        "line": 35,
+        "end_line": 57,
+        "signature": "function remove(AddressSet storage self, address value) internal returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "contains",
+        "line": 65,
+        "end_line": 67,
+        "signature": "function contains(AddressSet storage self, address value) internal view returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/libraries/StakingGraph.sol",
+    "sha256": "ad2aaa02072030e87e59ccc6a60a720c5a331ce69bfc0612c233df47e1c6d8ba",
+    "line_count": 208,
+    "functions": [
+      {
+        "name": "addStake",
+        "line": 53,
+        "end_line": 101,
+        "signature": "function addStake(Graph storage g, int256 amount, uint256 start, uint256 duration) internal",
+        "visibility": "internal",
+        "patterns": {
+          "loops": [
+            88
+          ],
+          "branching": [
+            66,
+            73,
+            85
+          ]
+        }
+      },
+      {
+        "name": "queryStake",
+        "line": 111,
+        "end_line": 136,
+        "signature": "function queryStake(Graph storage g, uint256 start, uint256 end) internal view returns (int256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "update",
+        "line": 144,
+        "end_line": 174,
+        "signature": "function update(mapping(uint256 => uint256) storage graph, uint256 index, uint256 treeSize, int256 delta, int256 deltaProd) private",
+        "visibility": "private",
+        "patterns": {
+          "assembly": [
+            169
+          ],
+          "loops": [
+            147
+          ]
+        }
+      },
+      {
+        "name": "query",
+        "line": 182,
+        "end_line": 207,
+        "signature": "function query(mapping(uint256 => uint256) storage graph, uint256 index) private view returns (int256 sum, int256 sumProd)",
+        "visibility": "private",
+        "patterns": {
+          "assembly": [
+            202
+          ],
+          "symbolic_exponent": [
+            192
+          ],
+          "loops": [
+            185
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "file": "src/libraries/TokenUtils.sol",
+    "sha256": "a385802d2a334d9644038695cdfd718042db6b6caedbc3b3d98fd480158cba11",
+    "line_count": 143,
+    "functions": [
+      {
+        "name": "expectDecimals",
+        "line": 26,
+        "end_line": 34,
+        "signature": "function expectDecimals(address token) internal view returns (uint8)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "safeBalanceOf",
+        "line": 44,
+        "end_line": 52,
+        "signature": "function safeBalanceOf(address token, address account) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "safeTransfer",
+        "line": 61,
+        "end_line": 67,
+        "signature": "function safeTransfer(address token, address recipient, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "safeApprove",
+        "line": 76,
+        "end_line": 82,
+        "signature": "function safeApprove(address token, address spender, uint256 value) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "safeTransferFrom",
+        "line": 92,
+        "end_line": 98,
+        "signature": "function safeTransferFrom(address token, address owner, address recipient, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "safeMint",
+        "line": 107,
+        "end_line": 113,
+        "signature": "function safeMint(address token, address recipient, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "safeBurn",
+        "line": 121,
+        "end_line": 127,
+        "signature": "function safeBurn(address token, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "safeBurnFrom",
+        "line": 136,
+        "end_line": 142,
+        "signature": "function safeBurnFrom(address token, address owner, uint256 amount) internal",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/router/AlchemistRouter.sol",
+    "sha256": "9d293920f84623ae5ee0e82dd23c2553c2aab559db389d8694410c6c499e93cc",
+    "line_count": 485,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 26,
+        "end_line": 30,
+        "signature": "constructor(address _alchemist)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "depositUnderlying",
+        "line": 44,
+        "end_line": 66,
+        "signature": "function depositUnderlying( uint256 tokenId, uint256 amount, uint256 borrowAmount, uint256 minSharesOut, uint256 deadline ) external nonReentrant returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "depositETH",
+        "line": 79,
+        "end_line": 100,
+        "signature": "function depositETH( uint256 tokenId, uint256 borrowAmount, uint256 minSharesOut, uint256 deadline ) external payable nonReentrant returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "depositMYT",
+        "line": 113,
+        "end_line": 127,
+        "signature": "function depositMYT( uint256 tokenId, uint256 shares, uint256 borrowAmount, uint256 deadline ) external nonReentrant returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "depositETHToVaultOnly",
+        "line": 135,
+        "end_line": 153,
+        "signature": "function depositETHToVaultOnly( uint256 minSharesOut, uint256 deadline ) external payable nonReentrant returns (uint256 shares)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "repayUnderlying",
+        "line": 164,
+        "end_line": 185,
+        "signature": "function repayUnderlying( uint256 recipientTokenId, uint256 amount, uint256 minSharesOut, uint256 deadline ) external nonReentrant",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "repayETH",
+        "line": 195,
+        "end_line": 215,
+        "signature": "function repayETH( uint256 recipientTokenId, uint256 minSharesOut, uint256 deadline ) external payable nonReentrant",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "withdrawUnderlying",
+        "line": 227,
+        "end_line": 238,
+        "signature": "function withdrawUnderlying( uint256 tokenId, uint256 shares, uint256 minAmountOut, uint256 deadline ) external nonReentrant",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "withdrawETH",
+        "line": 248,
+        "end_line": 259,
+        "signature": "function withdrawETH( uint256 tokenId, uint256 shares, uint256 minAmountOut, uint256 deadline ) external nonReentrant",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "selfLiquidateToUnderlying",
+        "line": 268,
+        "end_line": 277,
+        "signature": "function selfLiquidateToUnderlying( uint256 tokenId, uint256 minAmountOut, uint256 deadline ) external nonReentrant",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "selfLiquidateToETH",
+        "line": 286,
+        "end_line": 295,
+        "signature": "function selfLiquidateToETH( uint256 tokenId, uint256 minAmountOut, uint256 deadline ) external nonReentrant",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "claimRedemption",
+        "line": 308,
+        "end_line": 316,
+        "signature": "function claimRedemption( uint256 positionId, uint256 minAmountOut, uint256 deadline, bool unwrapETH ) external nonReentrant",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_depositAndBorrow",
+        "line": 324,
+        "end_line": 356,
+        "signature": "function _depositAndBorrow( address mytVault, uint256 shares, uint256 tokenId, uint256 borrowAmount ) internal returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            334,
+            338,
+            350
+          ]
+        }
+      },
+      {
+        "name": "_withdraw",
+        "line": 362,
+        "end_line": 379,
+        "signature": "function _withdraw(uint256 tokenId, uint256 shares, uint256 minAmountOut, bool unwrapETH) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_repayAndRefund",
+        "line": 383,
+        "end_line": 401,
+        "signature": "function _repayAndRefund( address mytVault, uint256 shares, uint256 recipientTokenId ) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_claimRedemption",
+        "line": 406,
+        "end_line": 428,
+        "signature": "function _claimRedemption( uint256 positionId, uint256 minAmountOut, bool unwrapETH ) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_selfLiquidate",
+        "line": 434,
+        "end_line": 458,
+        "signature": "function _selfLiquidate(uint256 tokenId, uint256 minAmountOut, bool unwrapETH) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_redeemAndDeliver",
+        "line": 463,
+        "end_line": 479,
+        "signature": "function _redeemAndDeliver(address mytVault, uint256 mytShares, uint256 minAmountOut, bool unwrapETH) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "receive",
+        "line": 482,
+        "end_line": 484,
+        "signature": "receive() external payable",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/AaveStrategy.sol",
+    "sha256": "3645630ef91134d7932dbbb4f1d57508ce1699b5a54ae11fffeeaf737c96030c",
+    "line_count": 132,
+    "functions": [
+      {
+        "name": "supply",
+        "line": 9,
+        "end_line": 9,
+        "signature": "function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "withdraw",
+        "line": 10,
+        "end_line": 10,
+        "signature": "function withdraw(address asset, uint256 amount, address to) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getPool",
+        "line": 14,
+        "end_line": 14,
+        "signature": "function getPool() external view returns (address)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "balanceOf",
+        "line": 18,
+        "end_line": 18,
+        "signature": "function balanceOf(address) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "claimAllRewardsToSelf",
+        "line": 22,
+        "end_line": 24,
+        "signature": "function claimAllRewardsToSelf(address[] calldata assets) external returns (address[] memory rewardsList, uint256[] memory claimedAmounts)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 38,
+        "end_line": 52,
+        "signature": "constructor( address _myt, StrategyParams memory _params, address _mytAsset, address _aToken, address _poolProvider, address _rewardsController, address _rewardToken ) MYTStrategy(_myt, _params)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 54,
+        "end_line": 61,
+        "signature": "function _allocate(uint256 amount) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 63,
+        "end_line": 80,
+        "signature": "function _deallocate(uint256 amount) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            68,
+            74,
+            75
+          ]
+        }
+      },
+      {
+        "name": "_previewAdjustedWithdraw",
+        "line": 82,
+        "end_line": 85,
+        "signature": "function _previewAdjustedWithdraw(uint256 amount) internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_totalValue",
+        "line": 87,
+        "end_line": 90,
+        "signature": "function _totalValue() internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_idleAssets",
+        "line": 92,
+        "end_line": 94,
+        "signature": "function _idleAssets() internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_claimRewards",
+        "line": 96,
+        "end_line": 110,
+        "signature": "function _claimRewards(address token, bytes memory quote, uint256 minAmountOut) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_isProtectedToken",
+        "line": 112,
+        "end_line": 114,
+        "signature": "function _isProtectedToken(address token) internal view virtual override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "adminDexSwap",
+        "line": 123,
+        "end_line": 131,
+        "signature": "function adminDexSwap( address to, address from, uint256 amount, uint256 minAmountOut, bytes calldata callData ) external onlyOwner returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/ERC4626Strategy.sol",
+    "sha256": "f81d82bd97fef89a17e6a65b0f785143439df67d9aa70fb133f29a3fe916dda6",
+    "line_count": 79,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 19,
+        "end_line": 25,
+        "signature": "constructor(address _myt, StrategyParams memory _params, address _vault) MYTStrategy(_myt, _params)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "setCanForceDeallocate",
+        "line": 27,
+        "end_line": 30,
+        "signature": "function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 32,
+        "end_line": 38,
+        "signature": "function _allocate(uint256 amount) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 40,
+        "end_line": 51,
+        "signature": "function _deallocate(uint256 amount) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_totalValue",
+        "line": 53,
+        "end_line": 57,
+        "signature": "function _totalValue() internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_idleAssets",
+        "line": 59,
+        "end_line": 61,
+        "signature": "function _idleAssets() internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_previewAdjustedWithdraw",
+        "line": 63,
+        "end_line": 70,
+        "signature": "function _previewAdjustedWithdraw(uint256 amount) internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_isProtectedToken",
+        "line": 72,
+        "end_line": 74,
+        "signature": "function _isProtectedToken(address token) internal view virtual override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_canForceDeallocate",
+        "line": 76,
+        "end_line": 78,
+        "signature": "function _canForceDeallocate() internal view virtual override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/EtherfiEETHStrategy.sol",
+    "sha256": "0aa5ee3628b543a64fcdabda8196b9278870a04371ab70f64b63fc028bbd9eee",
+    "line_count": 196,
+    "functions": [
+      {
+        "name": "depositWETHForWeETH",
+        "line": 11,
+        "end_line": 11,
+        "signature": "function depositWETHForWeETH(uint256 amount, address referral) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "canRedeem",
+        "line": 22,
+        "end_line": 22,
+        "signature": "function canRedeem(uint256 amount, address token) external view returns (bool)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "liquidityPool",
+        "line": 23,
+        "end_line": 23,
+        "signature": "function liquidityPool() external view returns (address)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "previewRedeem",
+        "line": 24,
+        "end_line": 24,
+        "signature": "function previewRedeem(uint256 shares, address token) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "tokenToRedemptionInfo",
+        "line": 25,
+        "end_line": 28,
+        "signature": "function tokenToRedemptionInfo(address token) external view returns (RedemptionLimit memory limit, uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "redeemWeEth",
+        "line": 29,
+        "end_line": 29,
+        "signature": "function redeemWeEth(uint256 amount, address receiver, address outputToken) external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "amountForShare",
+        "line": 33,
+        "end_line": 33,
+        "signature": "function amountForShare(uint256 shares) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "sharesForAmount",
+        "line": 34,
+        "end_line": 34,
+        "signature": "function sharesForAmount(uint256 amount) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "sharesForWithdrawalAmount",
+        "line": 35,
+        "end_line": 35,
+        "signature": "function sharesForWithdrawalAmount(uint256 amount) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "balanceOf",
+        "line": 39,
+        "end_line": 39,
+        "signature": "function balanceOf(address account) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getEETHByWeETH",
+        "line": 40,
+        "end_line": 40,
+        "signature": "function getEETHByWeETH(uint256 weETHAmount) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "getWeETHByeETH",
+        "line": 41,
+        "end_line": 41,
+        "signature": "function getWeETHByeETH(uint256 eETHAmount) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 69,
+        "end_line": 88,
+        "signature": "constructor( address _myt, StrategyParams memory _params, address _eETH, address _weETH, address _depositAdapter, address _redemptionManager, address _weEthEthOracle, uint256 _maxOracleStaleness ) OraclePricedSwapStrategy(_myt, _params, _weEthEthOracle, _maxOracleStaleness)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 90,
+        "end_line": 96,
+        "signature": "function _allocate(uint256 amount) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 101,
+        "end_line": 134,
+        "signature": "function _deallocate(uint256 amount) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_redemptionInfo",
+        "line": 136,
+        "end_line": 138,
+        "signature": "function _redemptionInfo() internal view returns (uint16 exitFeeSplitToTreasuryInBps, uint16 exitFeeInBps, uint16 lowWatermarkInBpsOfTvl)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_weETHForGrossRedeem",
+        "line": 140,
+        "end_line": 146,
+        "signature": "function _weETHForGrossRedeem(uint256 grossRedeemAmount, uint256 weETHBalance) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_weETHForNetShortfall",
+        "line": 148,
+        "end_line": 159,
+        "signature": "function _weETHForNetShortfall(uint256 shortfall, uint256 exitFeeInBps, uint256 weETHBalance) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            151
+          ]
+        }
+      },
+      {
+        "name": "_previewNetEthFromWeETH",
+        "line": 161,
+        "end_line": 165,
+        "signature": "function _previewNetEthFromWeETH(uint256 weETHAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_oracleToken",
+        "line": 167,
+        "end_line": 169,
+        "signature": "function _oracleToken() internal view override returns (address)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_positionBalance",
+        "line": 171,
+        "end_line": 173,
+        "signature": "function _positionBalance() internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_prepareOracleTokenForSwap",
+        "line": 175,
+        "end_line": 178,
+        "signature": "function _prepareOracleTokenForSwap(uint256 maxOracleTokenIn) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_canForceDeallocate",
+        "line": 180,
+        "end_line": 182,
+        "signature": "function _canForceDeallocate() internal view override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "setCanForceDeallocate",
+        "line": 184,
+        "end_line": 187,
+        "signature": "function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setGrossRedeemAmountBuffer",
+        "line": 189,
+        "end_line": 193,
+        "signature": "function setGrossRedeemAmountBuffer(uint256 grossRedeemAmountBuffer_) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "receive",
+        "line": 195,
+        "end_line": 195,
+        "signature": "receive() external payable",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/MoonwellStrategy.sol",
+    "sha256": "05e0b645a9dcc20cc558949142e852b3d9481a1bb20183f038155e9fdd445232",
+    "line_count": 138,
+    "functions": [
+      {
+        "name": "mint",
+        "line": 10,
+        "end_line": 10,
+        "signature": "function mint(uint256 mintAmount) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "redeem",
+        "line": 11,
+        "end_line": 11,
+        "signature": "function redeem(uint256 redeemTokens) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "balanceOf",
+        "line": 12,
+        "end_line": 12,
+        "signature": "function balanceOf(address owner) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "exchangeRateStored",
+        "line": 13,
+        "end_line": 13,
+        "signature": "function exchangeRateStored() external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "accrueInterest",
+        "line": 14,
+        "end_line": 14,
+        "signature": "function accrueInterest() external returns (uint)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "claimReward",
+        "line": 18,
+        "end_line": 18,
+        "signature": "function claimReward() external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "deposit",
+        "line": 22,
+        "end_line": 22,
+        "signature": "function deposit() external payable",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 41,
+        "end_line": 55,
+        "signature": "constructor( address _myt, StrategyParams memory _params, address _mytAsset, address _mToken, address _comptroller, address _rewardToken, bool _usePostRedeemETHWrap ) MYTStrategy(_myt, _params)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 57,
+        "end_line": 67,
+        "signature": "function _allocate(uint256 amount) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 69,
+        "end_line": 84,
+        "signature": "function _deallocate(uint256 amount) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_afterRedeem",
+        "line": 86,
+        "end_line": 91,
+        "signature": "function _afterRedeem() internal virtual",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_rate",
+        "line": 93,
+        "end_line": 95,
+        "signature": "function _rate() internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_totalValue",
+        "line": 97,
+        "end_line": 102,
+        "signature": "function _totalValue() internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_idleAssets",
+        "line": 104,
+        "end_line": 106,
+        "signature": "function _idleAssets() internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_previewAdjustedWithdraw",
+        "line": 108,
+        "end_line": 119,
+        "signature": "function _previewAdjustedWithdraw(uint256 amount) internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_claimRewards",
+        "line": 121,
+        "end_line": 131,
+        "signature": "function _claimRewards(address token, bytes memory quote, uint256 minAmountOut) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_isProtectedToken",
+        "line": 133,
+        "end_line": 135,
+        "signature": "function _isProtectedToken(address token) internal view virtual override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "receive",
+        "line": 137,
+        "end_line": 137,
+        "signature": "receive() external payable",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/OraclePricedSwapStrategy.sol",
+    "sha256": "a0d9dbb16683fa0c034063d8ed9bc439e04ab09f4b499e01824bdbe98bd6d597",
+    "line_count": 221,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 18,
+        "end_line": 26,
+        "signature": "constructor( address _myt, StrategyParams memory _params, address _pricedTokenOracle, uint256 _maxOracleStaleness ) MYTStrategy(_myt, _params)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 28,
+        "end_line": 38,
+        "signature": "function _allocate(uint256 amount, bytes memory callData) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 40,
+        "end_line": 42,
+        "signature": "function _deallocate(uint256 amount, bytes memory callData) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 44,
+        "end_line": 51,
+        "signature": "function _deallocate(uint256 amount, bytes memory callData, uint256 minIntermediateOutAmount) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocateViaOracleTokenSwap",
+        "line": 53,
+        "end_line": 73,
+        "signature": "function _deallocateViaOracleTokenSwap(uint256 amount, bytes memory callData) internal returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            55,
+            63,
+            70
+          ]
+        }
+      },
+      {
+        "name": "_deallocateViaUnwrapAndSwap",
+        "line": 75,
+        "end_line": 99,
+        "signature": "function _deallocateViaUnwrapAndSwap(uint256 amount, bytes memory callData, uint256 minIntermediateOutAmount) internal returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            80,
+            88,
+            96
+          ]
+        }
+      },
+      {
+        "name": "_totalValue",
+        "line": 101,
+        "end_line": 103,
+        "signature": "function _totalValue() internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_idleAssets",
+        "line": 105,
+        "end_line": 107,
+        "signature": "function _idleAssets() internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_previewAdjustedWithdraw",
+        "line": 109,
+        "end_line": 120,
+        "signature": "function _previewAdjustedWithdraw(uint256 amount) internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_oracleTokenToAsset",
+        "line": 122,
+        "end_line": 125,
+        "signature": "function _oracleTokenToAsset(uint256 oracleTokenAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "symbolic_exponent": [
+            123,
+            124,
+            124
+          ]
+        }
+      },
+      {
+        "name": "_assetToOracleTokenDown",
+        "line": 127,
+        "end_line": 130,
+        "signature": "function _assetToOracleTokenDown(uint256 assetAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "symbolic_exponent": [
+            128,
+            128,
+            129
+          ]
+        }
+      },
+      {
+        "name": "_assetToOracleTokenUp",
+        "line": 132,
+        "end_line": 137,
+        "signature": "function _assetToOracleTokenUp(uint256 assetAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "symbolic_exponent": [
+            134,
+            134,
+            135
+          ]
+        }
+      },
+      {
+        "name": "_oracleAnswer",
+        "line": 139,
+        "end_line": 144,
+        "signature": "function _oracleAnswer() internal view returns (uint256 answer)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_roundUpMulDiv",
+        "line": 146,
+        "end_line": 148,
+        "signature": "function _roundUpMulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "setPricedTokenOracle",
+        "line": 150,
+        "end_line": 152,
+        "signature": "function setPricedTokenOracle(address _pricedTokenOracle) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setMaxOracleStaleness",
+        "line": 154,
+        "end_line": 156,
+        "signature": "function setMaxOracleStaleness(uint256 maxOracleStaleness) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_setPricedTokenOracle",
+        "line": 158,
+        "end_line": 167,
+        "signature": "function _setPricedTokenOracle(address _pricedTokenOracle) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_setMaxOracleStaleness",
+        "line": 169,
+        "end_line": 173,
+        "signature": "function _setMaxOracleStaleness(uint256 maxOracleStaleness) internal",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_asset",
+        "line": 176,
+        "end_line": 178,
+        "signature": "function _asset() internal view returns (address)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_allocationSwapGuard",
+        "line": 185,
+        "end_line": 189,
+        "signature": "function _allocationSwapGuard(uint256 assetAmountIn, uint256 minOracleTokenOut, uint256 oracleTokenReceived) internal view virtual",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_afterAllocationSwap",
+        "line": 193,
+        "end_line": 193,
+        "signature": "function _afterAllocationSwap(uint256 oracleTokenReceived) internal virtual",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_oracleToken",
+        "line": 198,
+        "end_line": 198,
+        "signature": "function _oracleToken() internal view virtual returns (address)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_positionBalance",
+        "line": 202,
+        "end_line": 202,
+        "signature": "function _positionBalance() internal view virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_prepareOracleTokenForSwap",
+        "line": 206,
+        "end_line": 206,
+        "signature": "function _prepareOracleTokenForSwap(uint256 maxOracleTokenIn) internal virtual returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_prepareIntermediateForSwap",
+        "line": 214,
+        "end_line": 220,
+        "signature": "function _prepareIntermediateForSwap(uint256 maxOracleTokenIn, uint256 minIntermediateOutAmount) internal virtual returns (address sellToken, uint256 sellAmount)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/SFraxETHStrategy.sol",
+    "sha256": "72c6ded900ad1f4daffadb6ba068bff557d6c96368bbd5ab6897616603d34928",
+    "line_count": 123,
+    "functions": [
+      {
+        "name": "submitAndDeposit",
+        "line": 10,
+        "end_line": 10,
+        "signature": "function submitAndDeposit(address recipient) external payable returns (uint256 shares)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "balanceOf",
+        "line": 14,
+        "end_line": 14,
+        "signature": "function balanceOf(address account) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "convertToAssets",
+        "line": 15,
+        "end_line": 15,
+        "signature": "function convertToAssets(uint256 shares) external view returns (uint256 assets)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "deposit",
+        "line": 16,
+        "end_line": 16,
+        "signature": "function deposit(uint256 assets, address receiver) external returns (uint256 shares)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "previewWithdraw",
+        "line": 17,
+        "end_line": 17,
+        "signature": "function previewWithdraw(uint256 assets) external view returns (uint256 shares)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "withdraw",
+        "line": 18,
+        "end_line": 18,
+        "signature": "function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 29,
+        "end_line": 48,
+        "signature": "constructor( address _myt, StrategyParams memory _params, address _minter, address _frxETH, address _sfrxETH, address _pricedTokenOracle, uint256 _minFrxEthOutBps, uint256 _maxOracleStaleness ) OraclePricedSwapStrategy(_myt, _params, _pricedTokenOracle, _maxOracleStaleness)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 50,
+        "end_line": 57,
+        "signature": "function _allocate(uint256 amount) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_afterAllocationSwap",
+        "line": 59,
+        "end_line": 64,
+        "signature": "function _afterAllocationSwap(uint256 oracleTokenReceived) internal override",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "setMinFrxEthOutBps",
+        "line": 68,
+        "end_line": 72,
+        "signature": "function setMinFrxEthOutBps(uint256 newMinFrxEthOutBps) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 74,
+        "end_line": 76,
+        "signature": "function _deallocate(uint256, bytes memory) internal pure override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_isProtectedToken",
+        "line": 78,
+        "end_line": 80,
+        "signature": "function _isProtectedToken(address token) internal view override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_oracleToken",
+        "line": 82,
+        "end_line": 84,
+        "signature": "function _oracleToken() internal view override returns (address)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_positionBalance",
+        "line": 86,
+        "end_line": 88,
+        "signature": "function _positionBalance() internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_allocationSwapGuard",
+        "line": 90,
+        "end_line": 95,
+        "signature": "function _allocationSwapGuard(uint256 assetAmountIn, uint256, uint256 oracleTokenReceived) internal view override",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_prepareOracleTokenForSwap",
+        "line": 97,
+        "end_line": 99,
+        "signature": "function _prepareOracleTokenForSwap(uint256) internal pure override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_prepareIntermediateForSwap",
+        "line": 101,
+        "end_line": 120,
+        "signature": "function _prepareIntermediateForSwap(uint256 maxOracleTokenIn, uint256 minIntermediateOutAmount) internal override returns (address sellToken, uint256 sellAmount)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "receive",
+        "line": 122,
+        "end_line": 122,
+        "signature": "receive() external payable",
+        "visibility": "external",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/SiUSDStrategy.sol",
+    "sha256": "452032269acc40bd7568b71bf41a984e6ec05f77c2d2681e0c4d87c2a412d46d",
+    "line_count": 205,
+    "functions": [
+      {
+        "name": "assetToReceipt",
+        "line": 9,
+        "end_line": 9,
+        "signature": "function assetToReceipt(uint256 assetAmount) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "balanceOf",
+        "line": 13,
+        "end_line": 13,
+        "signature": "function balanceOf(address account) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "convertToAssets",
+        "line": 14,
+        "end_line": 14,
+        "signature": "function convertToAssets(uint256 shares) external view returns (uint256 assets)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "previewWithdraw",
+        "line": 15,
+        "end_line": 15,
+        "signature": "function previewWithdraw(uint256 assets) external view returns (uint256 shares)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "receiptToAsset",
+        "line": 19,
+        "end_line": 19,
+        "signature": "function receiptToAsset(uint256 receiptAmount) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "mintAndStake",
+        "line": 23,
+        "end_line": 23,
+        "signature": "function mintAndStake(address to, uint256 amount) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "unstake",
+        "line": 24,
+        "end_line": 24,
+        "signature": "function unstake(address to, uint256 stakedTokens) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "redeem",
+        "line": 25,
+        "end_line": 25,
+        "signature": "function redeem(address to, uint256 amount, uint256 minAssetsOut) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 44,
+        "end_line": 70,
+        "signature": "constructor( address _myt, StrategyParams memory _params, address _usdc, address _iUSD, address _siUSD, address _gateway, address _mintController, address _redeemController, address _pricedTokenOracle, uint256 _maxOracleStaleness ) OraclePricedSwapStrategy(_myt, _params, _pricedTokenOracle, _maxOracleStaleness)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 72,
+        "end_line": 81,
+        "signature": "function _allocate(uint256 amount) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 83,
+        "end_line": 85,
+        "signature": "function _allocate(uint256, bytes memory) internal pure override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 87,
+        "end_line": 118,
+        "signature": "function _deallocate(uint256 amount) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            89,
+            95,
+            113
+          ]
+        }
+      },
+      {
+        "name": "_deallocate",
+        "line": 121,
+        "end_line": 123,
+        "signature": "function _deallocate(uint256, bytes memory) internal pure override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_oracleToken",
+        "line": 125,
+        "end_line": 127,
+        "signature": "function _oracleToken() internal view override returns (address)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_positionBalance",
+        "line": 129,
+        "end_line": 131,
+        "signature": "function _positionBalance() internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_totalValue",
+        "line": 133,
+        "end_line": 138,
+        "signature": "function _totalValue() internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_previewAdjustedWithdraw",
+        "line": 140,
+        "end_line": 156,
+        "signature": "function _previewAdjustedWithdraw(uint256 amount) internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            142,
+            145,
+            150
+          ]
+        }
+      },
+      {
+        "name": "_applyDirectPreviewDiscount",
+        "line": 158,
+        "end_line": 162,
+        "signature": "function _applyDirectPreviewDiscount(uint256 assetAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_prepareOracleTokenForSwap",
+        "line": 164,
+        "end_line": 166,
+        "signature": "function _prepareOracleTokenForSwap(uint256) internal pure override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_prepareIntermediateForSwap",
+        "line": 168,
+        "end_line": 200,
+        "signature": "function _prepareIntermediateForSwap(uint256 maxOracleTokenIn, uint256 minIntermediateOutAmount) internal override returns (address sellToken, uint256 sellAmount)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_isProtectedToken",
+        "line": 202,
+        "end_line": 204,
+        "signature": "function _isProtectedToken(address token) internal view override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/StakeDAOWETHStrategy.sol",
+    "sha256": "70edff0683c73e5af5b642984d14e7e50449a6b8c2ddad071167fa08795c9396",
+    "line_count": 344,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 42,
+        "end_line": 71,
+        "signature": "constructor( address _myt, StrategyParams memory _params, address _rewardVault, address _curvePool, address _ensoRouter, uint256 _withdrawBufferBps, uint256 _minWethPerCurveLp, uint256 _minCurveLpPerWeth ) MYTStrategy(_myt, _params)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "setWithdrawBufferBps",
+        "line": 73,
+        "end_line": 77,
+        "signature": "function setWithdrawBufferBps(uint256 newWithdrawBufferBps) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setMinWethPerCurveLp",
+        "line": 79,
+        "end_line": 83,
+        "signature": "function setMinWethPerCurveLp(uint256 newMinWethPerCurveLp) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setMinCurveLpPerWeth",
+        "line": 85,
+        "end_line": 89,
+        "signature": "function setMinCurveLpPerWeth(uint256 newMinCurveLpPerWeth) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setCanForceDeallocate",
+        "line": 91,
+        "end_line": 94,
+        "signature": "function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setEnsoRouter",
+        "line": 96,
+        "end_line": 100,
+        "signature": "function setEnsoRouter(address newEnsoRouter) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 102,
+        "end_line": 122,
+        "signature": "function _allocate(uint256 amount) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 124,
+        "end_line": 142,
+        "signature": "function _allocate(uint256 amount, bytes memory ensoCalldata) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 144,
+        "end_line": 174,
+        "signature": "function _deallocate(uint256 amount) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            146,
+            158,
+            169
+          ]
+        }
+      },
+      {
+        "name": "_deallocate",
+        "line": 176,
+        "end_line": 203,
+        "signature": "function _deallocate(uint256 amount, bytes memory ensoCalldata) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            188,
+            196
+          ],
+          "branching": [
+            178,
+            190,
+            198
+          ]
+        }
+      },
+      {
+        "name": "_totalValue",
+        "line": 205,
+        "end_line": 209,
+        "signature": "function _totalValue() internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            207
+          ]
+        }
+      },
+      {
+        "name": "_idleAssets",
+        "line": 211,
+        "end_line": 213,
+        "signature": "function _idleAssets() internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_previewAdjustedWithdraw",
+        "line": 216,
+        "end_line": 228,
+        "signature": "function _previewAdjustedWithdraw(uint256 amount) internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            225
+          ]
+        }
+      },
+      {
+        "name": "_claimRewards",
+        "line": 230,
+        "end_line": 261,
+        "signature": "function _claimRewards(address token, bytes memory quote, uint256 minAmountOut) internal override returns (uint256 rewardsClaimed)",
+        "visibility": "internal",
+        "patterns": {
+          "assembly": [
+            243
+          ],
+          "branching": [
+            234,
+            242,
+            248,
+            256
+          ]
+        }
+      },
+      {
+        "name": "_isProtectedToken",
+        "line": 263,
+        "end_line": 265,
+        "signature": "function _isProtectedToken(address token) internal view override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_canForceDeallocate",
+        "line": 267,
+        "end_line": 269,
+        "signature": "function _canForceDeallocate() internal view override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_minAmountAfterSlippage",
+        "line": 271,
+        "end_line": 274,
+        "signature": "function _minAmountAfterSlippage(uint256 amount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_minSharesForWethIn",
+        "line": 277,
+        "end_line": 282,
+        "signature": "function _minSharesForWethIn(uint256 wethAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_lpRequiredForWeth",
+        "line": 285,
+        "end_line": 296,
+        "signature": "function _lpRequiredForWeth(uint256 wethOut, uint256 maxShares) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            286,
+            290,
+            294
+          ]
+        }
+      },
+      {
+        "name": "_effectiveMinLpForWeth",
+        "line": 299,
+        "end_line": 303,
+        "signature": "function _effectiveMinLpForWeth(uint256 wethAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_effectiveMaxLpForWeth",
+        "line": 306,
+        "end_line": 310,
+        "signature": "function _effectiveMaxLpForWeth(uint256 wethAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_maxLpForWeth",
+        "line": 312,
+        "end_line": 314,
+        "signature": "function _maxLpForWeth(uint256 wethAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            313
+          ]
+        }
+      },
+      {
+        "name": "_minLpForWeth",
+        "line": 316,
+        "end_line": 318,
+        "signature": "function _minLpForWeth(uint256 wethAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            317
+          ]
+        }
+      },
+      {
+        "name": "_minLpForWethVP",
+        "line": 321,
+        "end_line": 325,
+        "signature": "function _minLpForWethVP(uint256 wethAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            324
+          ]
+        }
+      },
+      {
+        "name": "_maxLpForWethVP",
+        "line": 328,
+        "end_line": 332,
+        "signature": "function _maxLpForWethVP(uint256 wethAmount) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "mulDiv": [
+            331
+          ]
+        }
+      },
+      {
+        "name": "_ensoRoute",
+        "line": 334,
+        "end_line": 343,
+        "signature": "function _ensoRoute(address outputToken, uint256 minOut, bytes memory ensoCalldata) internal returns (uint256 received)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/TokeAutoStrategy.sol",
+    "sha256": "b7e8dce19ea5adaf6a9eb49d43015c501b32e1df176dd0f7f925a630859c196f",
+    "line_count": 344,
+    "functions": [
+      {
+        "name": "convertToShares",
+        "line": 12,
+        "end_line": 15,
+        "signature": "function convertToShares(uint256 assets, uint256 totalAssetsForPurpose, uint256 supply, Rounding rounding) external view returns (uint256 shares)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "convertToAssets",
+        "line": 17,
+        "end_line": 20,
+        "signature": "function convertToAssets(uint256 shares, uint256 totalAssetsForPurpose, uint256 supply, Rounding rounding) external view returns (uint256 assets)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "totalAssets",
+        "line": 22,
+        "end_line": 22,
+        "signature": "function totalAssets(TotalAssetPurpose purpose) external view returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "redeem",
+        "line": 50,
+        "end_line": 55,
+        "signature": "function redeem( IERC4626 vault, address to, uint256 shares, uint256 minAmountOut ) external payable returns (uint256 amountOut)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "redeemWithRoutes",
+        "line": 57,
+        "end_line": 63,
+        "signature": "function redeemWithRoutes( IERC4626 vault, address to, uint256 shares, uint256 minAmountOut, TokeSwapRoute[] calldata customRoutes ) external payable returns (uint256 amountOut)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 102,
+        "end_line": 123,
+        "signature": "constructor( address _myt, StrategyParams memory _params, address _asset, address _autoVault, address _rewarder, address _tokeRewardsToken, address _autopilotRouter, uint256 _execToleranceBps ) MYTStrategy(_myt, _params)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "setExecToleranceBps",
+        "line": 126,
+        "end_line": 130,
+        "signature": "function setExecToleranceBps(uint256 newExecToleranceBps) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setCanForceDeallocate",
+        "line": 132,
+        "end_line": 135,
+        "signature": "function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 137,
+        "end_line": 154,
+        "signature": "function _allocate(uint256 amount) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 156,
+        "end_line": 207,
+        "signature": "function _deallocate(uint256 amount) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            158,
+            181,
+            191
+          ]
+        }
+      },
+      {
+        "name": "_deallocate",
+        "line": 209,
+        "end_line": 264,
+        "signature": "function _deallocate(uint256 amount, bytes memory data) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            211,
+            234,
+            242
+          ]
+        }
+      },
+      {
+        "name": "_totalValue",
+        "line": 266,
+        "end_line": 277,
+        "signature": "function _totalValue() internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_idleAssets",
+        "line": 279,
+        "end_line": 281,
+        "signature": "function _idleAssets() internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_redeemableAssets",
+        "line": 287,
+        "end_line": 294,
+        "signature": "function _redeemableAssets(uint256 shares) internal view returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_previewAdjustedWithdraw",
+        "line": 296,
+        "end_line": 313,
+        "signature": "function _previewAdjustedWithdraw(uint256 amount) internal view virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_claimRewards",
+        "line": 315,
+        "end_line": 335,
+        "signature": "function _claimRewards(address token, bytes memory quote, uint256 minAmountOut) internal virtual override returns (uint256 rewardsClaimed)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_isProtectedToken",
+        "line": 337,
+        "end_line": 339,
+        "signature": "function _isProtectedToken(address token) internal view virtual override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_canForceDeallocate",
+        "line": 341,
+        "end_line": 343,
+        "signature": "function _canForceDeallocate() internal view virtual override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/WstETHEthereumStrategy.sol",
+    "sha256": "29c25c8cc4724e4bcfd3e47246bf72c21c13fc54be7179373094263db27cc38d",
+    "line_count": 76,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 12,
+        "end_line": 21,
+        "signature": "constructor( address _myt, StrategyParams memory _params, address _wstETH, address _stEthEthOracle, uint256 _maxOracleStaleness ) OraclePricedSwapStrategy(_myt, _params, _stEthEthOracle, _maxOracleStaleness)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 23,
+        "end_line": 36,
+        "signature": "function _allocate(uint256 amount) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 38,
+        "end_line": 47,
+        "signature": "function _allocate(uint256 amount, bytes memory callData) internal override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "receive",
+        "line": 49,
+        "end_line": 49,
+        "signature": "receive() external payable",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_isProtectedToken",
+        "line": 51,
+        "end_line": 53,
+        "signature": "function _isProtectedToken(address token) internal view override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_oracleToken",
+        "line": 55,
+        "end_line": 57,
+        "signature": "function _oracleToken() internal view override returns (address)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_positionBalance",
+        "line": 59,
+        "end_line": 62,
+        "signature": "function _positionBalance() internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_prepareOracleTokenForSwap",
+        "line": 64,
+        "end_line": 68,
+        "signature": "function _prepareOracleTokenForSwap(uint256 maxOracleTokenIn) internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_wstEthFromStEthUp",
+        "line": 70,
+        "end_line": 75,
+        "signature": "function _wstEthFromStEthUp(uint256 stETHAmount) internal view returns (uint256 wstETHAmount)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/WstETHL2Strategy.sol",
+    "sha256": "6a63cc7769406413e7a98e6df5be08eedfdcfd2926663346377ac11929b8dc1d",
+    "line_count": 42,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 11,
+        "end_line": 20,
+        "signature": "constructor( address _myt, StrategyParams memory _params, address _wstETH, address _wstEthEthOracle, uint256 _maxOracleStaleness ) OraclePricedSwapStrategy(_myt, _params, _wstEthEthOracle, _maxOracleStaleness)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "_allocate",
+        "line": 22,
+        "end_line": 24,
+        "signature": "function _allocate(uint256) internal pure override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_isProtectedToken",
+        "line": 26,
+        "end_line": 28,
+        "signature": "function _isProtectedToken(address token) internal view override returns (bool)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_oracleToken",
+        "line": 30,
+        "end_line": 32,
+        "signature": "function _oracleToken() internal view override returns (address)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_positionBalance",
+        "line": 34,
+        "end_line": 36,
+        "signature": "function _positionBalance() internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_prepareOracleTokenForSwap",
+        "line": 38,
+        "end_line": 41,
+        "signature": "function _prepareOracleTokenForSwap(uint256 maxOracleTokenIn) internal view override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/strategies/YearnV3Strategy.sol",
+    "sha256": "b9a3f8779388b97f814b25063af611ad344dbe1e83f1e2943ab34a56377c5e1c",
+    "line_count": 38,
+    "functions": [
+      {
+        "name": "withdraw",
+        "line": 8,
+        "end_line": 8,
+        "signature": "function withdraw(uint256 assets, address receiver, address owner, uint256 maxLoss) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "redeem",
+        "line": 9,
+        "end_line": 9,
+        "signature": "function redeem(uint256 shares, address receiver, address owner, uint256 maxLoss) external returns (uint256)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "constructor",
+        "line": 18,
+        "end_line": 18,
+        "signature": "constructor(address _myt, StrategyParams memory _params, address _vault) ERC4626Strategy(_myt, _params, _vault)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "_deallocate",
+        "line": 20,
+        "end_line": 37,
+        "signature": "function _deallocate(uint256 amount) internal virtual override returns (uint256)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/utils/PermissionedProxy.sol",
+    "sha256": "dda05647efa26f067269621eccaf840da0739a2c960d8ac15fc869e2baa31071",
+    "line_count": 73,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 11,
+        "end_line": 16,
+        "signature": "constructor(address _admin, address _operator)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "_onlyAdmin",
+        "line": 23,
+        "end_line": 25,
+        "signature": "function _onlyAdmin() internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_onlyOperator",
+        "line": 32,
+        "end_line": 34,
+        "signature": "function _onlyOperator() internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "transferAdminOwnerShip",
+        "line": 40,
+        "end_line": 42,
+        "signature": "function transferAdminOwnerShip(address _newAdmin) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "acceptAdminOwnership",
+        "line": 44,
+        "end_line": 49,
+        "signature": "function acceptAdminOwnership() external",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setOperator",
+        "line": 51,
+        "end_line": 55,
+        "signature": "function setOperator(address _operator, bool value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "setPermissionedCall",
+        "line": 57,
+        "end_line": 60,
+        "signature": "function setPermissionedCall(bytes4 sig, bool value) external onlyAdmin",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "proxy",
+        "line": 62,
+        "end_line": 72,
+        "signature": "function proxy(address vault, bytes memory data) external payable onlyOperator",
+        "visibility": "external",
+        "patterns": {
+          "assembly": [
+            65
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "file": "src/utils/Whitelist.sol",
+    "sha256": "3cfa75783f85cc4207fad35469ddf97938e357cb6acbb1a46feb4392fe4ab0d3",
+    "line_count": 64,
+    "functions": [
+      {
+        "name": "constructor",
+        "line": 18,
+        "end_line": 18,
+        "signature": "constructor() Ownable(msg.sender)",
+        "visibility": "implicit",
+        "patterns": {}
+      },
+      {
+        "name": "getAddresses",
+        "line": 21,
+        "end_line": 23,
+        "signature": "function getAddresses() external view returns (address[] memory)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "add",
+        "line": 26,
+        "end_line": 33,
+        "signature": "function add(address caller) external override",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "remove",
+        "line": 36,
+        "end_line": 43,
+        "signature": "function remove(address caller) external override",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "disable",
+        "line": 46,
+        "end_line": 51,
+        "signature": "function disable() external override",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "isWhitelisted",
+        "line": 54,
+        "end_line": 56,
+        "signature": "function isWhitelisted(address account) external view override returns (bool)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_onlyAdmin",
+        "line": 59,
+        "end_line": 63,
+        "signature": "function _onlyAdmin() internal view",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  },
+  {
+    "file": "src/utils/ZeroXSwapVerifier.sol",
+    "sha256": "59a779e0f0220ee86900f4eeb231b84954b969d9cc6cb4c756a1805c93eab76c",
+    "line_count": 301,
+    "functions": [
+      {
+        "name": "_slice",
+        "line": 51,
+        "end_line": 57,
+        "signature": "function _slice(bytes memory data, uint256 start, uint256 length) internal pure returns (bytes memory)",
+        "visibility": "internal",
+        "patterns": {
+          "loops": [
+            53
+          ]
+        }
+      },
+      {
+        "name": "_slice",
+        "line": 65,
+        "end_line": 67,
+        "signature": "function _slice(bytes memory data, uint256 start) internal pure returns (bytes memory)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "decodeAndVerifyActions",
+        "line": 76,
+        "end_line": 88,
+        "signature": "function decodeAndVerifyActions(bytes calldata calldata_, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "verifySwapCalldata",
+        "line": 99,
+        "end_line": 115,
+        "signature": "function verifySwapCalldata(bytes calldata calldata_, address owner, address targetToken, uint256 maxSlippageBps) external view returns (bool verified)",
+        "visibility": "external",
+        "patterns": {}
+      },
+      {
+        "name": "_verifyExecuteCalldata",
+        "line": 125,
+        "end_line": 130,
+        "signature": "function _verifyExecuteCalldata(bytes calldata data, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_verifyExecuteMetaTxnCalldata",
+        "line": 138,
+        "end_line": 143,
+        "signature": "function _verifyExecuteMetaTxnCalldata(bytes calldata data, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_verifyActions",
+        "line": 151,
+        "end_line": 155,
+        "signature": "function _verifyActions(bytes[] memory actions, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+        "visibility": "internal",
+        "patterns": {
+          "loops": [
+            152
+          ]
+        }
+      },
+      {
+        "name": "_verifyAction",
+        "line": 163,
+        "end_line": 189,
+        "signature": "function _verifyAction(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+        "visibility": "internal",
+        "patterns": {
+          "branching": [
+            164,
+            171,
+            173,
+            175,
+            177,
+            179,
+            181,
+            183
+          ]
+        }
+      },
+      {
+        "name": "_verifyBasicSellToPool",
+        "line": 195,
+        "end_line": 203,
+        "signature": "function _verifyBasicSellToPool(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_verifyUniswapV3VIP",
+        "line": 209,
+        "end_line": 219,
+        "signature": "function _verifyUniswapV3VIP(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_verifyRFQVIP",
+        "line": 225,
+        "end_line": 232,
+        "signature": "function _verifyRFQVIP(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_verifyTransferFrom",
+        "line": 238,
+        "end_line": 246,
+        "signature": "function _verifyTransferFrom(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_verifySellToLiquidityProvider",
+        "line": 251,
+        "end_line": 259,
+        "signature": "function _verifySellToLiquidityProvider(bytes memory action, address owner, address targetToken, uint256 targetAmount) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_verifyVelodromeV2VIP",
+        "line": 264,
+        "end_line": 273,
+        "signature": "function _verifyVelodromeV2VIP(bytes memory action, address owner, address targetToken, uint256 maxSlippageBps) internal view",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_extractTokenFromUniswapFills",
+        "line": 281,
+        "end_line": 287,
+        "signature": "function _extractTokenFromUniswapFills(bytes memory fills) internal pure returns (address)",
+        "visibility": "internal",
+        "patterns": {}
+      },
+      {
+        "name": "_extractTokenAndAmountFromRFQ",
+        "line": 293,
+        "end_line": 299,
+        "signature": "function _extractTokenAndAmountFromRFQ(bytes memory fillData) internal pure returns (address token, uint256 amount)",
+        "visibility": "internal",
+        "patterns": {}
+      }
+    ]
+  }
+]

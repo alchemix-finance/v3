@@ -1,0 +1,382 @@
+[
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "mytSharesDepositedLeBalance",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistAccountingSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "storedCollateralLeGlobalShares",
+    "action": "REASSESS",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistAccountingSymbolic.t.sol",
+    "notes": "Local account storage can lag global redemption. Distinguish stored, projected and synchronized state before asserting bounds."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "pendingCoverBoundedByTransmuterBalance",
+    "action": "REASSESS_CHANGED_CODE",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistCoverSymbolic.t.sol",
+    "notes": "Current setTransmuterTokenBalance records positive inflow deltas and no longer clamps cover after outflows. Replace the old balance invariant with a justified sequence property."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "syntheticsLeDebtTokenSupply",
+    "action": "REASSESS_EXTERNAL_SUPPLY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistAccountingSymbolic.t.sol",
+    "notes": "Actual debt token includes bridging and public burn behavior. Tie this relation to a stated supply model and test the real token surface."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "syntheticsGeqLocked",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistAccountingSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "storedDebtLeTotalDebt",
+    "action": "REASSESS",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistAccountingSymbolic.t.sol",
+    "notes": "Local account storage can lag global redemption. Distinguish stored, projected and synchronized state before asserting bounds."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "cumulativeEarmarkedLeTotalDebt",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistAccountingSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "storedEarmarkedLeStoredDebt",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistAccountingSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "earmarkWeightPositive",
+    "action": "REASSESS",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistWeightLemmas.t.sol",
+    "notes": "Check packed weight normalization, zero index and epoch rollover. Positivity of packed values must follow actual reachable paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "redemptionWeightPositive",
+    "action": "REASSESS",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistWeightLemmas.t.sol",
+    "notes": "Check packed weight normalization, zero index and epoch rollover. Positivity of packed values must follow actual reachable paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "protocolFeeLeBps",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistAdminSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "liquidatorFeeLeBps",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistAdminSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "invariant",
+    "name": "repaymentFeeLeBps",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistAdminSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "rule",
+    "name": "cvSoundMint",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistBorrowSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "rule",
+    "name": "cvSoundWithdraw",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistDepositSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "rule",
+    "name": "debtToBurn_le_debt",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistLiquidationLemmas.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "rule",
+    "name": "grossCollateralToSeize_le_collateral",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistLiquidationLemmas.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "rule",
+    "name": "surplus_branch_decomposition",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistLiquidationLemmas.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "rule",
+    "name": "roundTrip_underlying_exact",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistConversionSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/alchemist.spec",
+    "kind": "rule",
+    "name": "roundTrip_debt_nonExpanding",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "AlchemistConversionSymbolic.t.sol",
+    "notes": "Port the existing property to current bytecode with reachable setup and explicit success paths."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "invariant",
+    "name": "performanceFeeBounded",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 source is unchanged. Reuse the existing two-adapter harness assumptions and retain dependency claims separately from v3 strategy claims."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "invariant",
+    "name": "managementFeeBounded",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 source is unchanged. Reuse the existing two-adapter harness assumptions and retain dependency claims separately from v3 strategy claims."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "invariant",
+    "name": "performanceFeeRecipientSet",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 source is unchanged. Reuse the existing two-adapter harness assumptions and retain dependency claims separately from v3 strategy claims."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "invariant",
+    "name": "managementFeeRecipientSet",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 source is unchanged. Reuse the existing two-adapter harness assumptions and retain dependency claims separately from v3 strategy claims."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "invariant",
+    "name": "maxRateBounded",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 source is unchanged. Reuse the existing two-adapter harness assumptions and retain dependency claims separately from v3 strategy claims."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "invariant",
+    "name": "forceDeallocPenaltyBounded0",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 source is unchanged. Reuse the existing two-adapter harness assumptions and retain dependency claims separately from v3 strategy claims."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "invariant",
+    "name": "forceDeallocPenaltyBounded1",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 source is unchanged. Reuse the existing two-adapter harness assumptions and retain dependency claims separately from v3 strategy claims."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "invariant",
+    "name": "relativeCapBounded0",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 source is unchanged. Reuse the existing two-adapter harness assumptions and retain dependency claims separately from v3 strategy claims."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "invariant",
+    "name": "relativeCapBounded1",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 source is unchanged. Reuse the existing two-adapter harness assumptions and retain dependency claims separately from v3 strategy claims."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "rule",
+    "name": "sharePricePositiveWhenSupplyPositive",
+    "action": "REASSESS",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "Integer conversion may round a chosen share amount to zero even when assets and supply are positive. Check this specification before reuse."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "rule",
+    "name": "convertRoundTripNonExpanding",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 source is unchanged. Reuse the existing two-adapter harness assumptions and retain dependency claims separately from v3 strategy claims."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/myt.spec",
+    "kind": "rule",
+    "name": "totalAssetsBoundedByReal",
+    "action": "QUALIFY_TRANSACTION_BOUNDARY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "VaultV2IntegrationSymbolic.t.sol",
+    "notes": "VaultV2 returns cached assets after firstTotalAssets is set within a transaction. Require a fresh transaction or state the cache condition before comparing to current strategy assets."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/transmuter.spec",
+    "kind": "invariant",
+    "name": "transmutationFeeLeBps",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "TransmuterSymbolic.t.sol",
+    "notes": "Transmuter source is unchanged from the Certora branch. Reuse the property and mock setup, then validate composition with real Alchemist."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/transmuter.spec",
+    "kind": "invariant",
+    "name": "exitFeeLeBps",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "TransmuterSymbolic.t.sol",
+    "notes": "Transmuter source is unchanged from the Certora branch. Reuse the property and mock setup, then validate composition with real Alchemist."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/transmuter.spec",
+    "kind": "invariant",
+    "name": "timeToTransmutePositive",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "TransmuterSymbolic.t.sol",
+    "notes": "Transmuter source is unchanged from the Certora branch. Reuse the property and mock setup, then validate composition with real Alchemist."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/transmuter.spec",
+    "kind": "invariant",
+    "name": "totalLockedLeSyntheticsIssued",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "TransmuterSymbolic.t.sol",
+    "notes": "Transmuter source is unchanged from the Certora branch. Reuse the property and mock setup, then validate composition with real Alchemist."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/transmuter.spec",
+    "kind": "invariant",
+    "name": "activeLockedLeTotalLocked",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "TransmuterSymbolic.t.sol",
+    "notes": "Transmuter source is unchanged from the Certora branch. Reuse the property and mock setup, then validate composition with real Alchemist."
+  },
+  {
+    "source_ref": "46c54a8f508f62fe4f0c82d65979655ac431b50e",
+    "source_file": "certora/specs/transmuter.spec",
+    "kind": "invariant",
+    "name": "syntheticBalanceCoversLocked",
+    "action": "REUSE_PROPERTY",
+    "execution_evidence": "No committed proof outcome found yet; source declarations are not proof results.",
+    "planned_suite": "TransmuterSymbolic.t.sol",
+    "notes": "Transmuter source is unchanged from the Certora branch. Reuse the property and mock setup, then validate composition with real Alchemist."
+  }
+]
