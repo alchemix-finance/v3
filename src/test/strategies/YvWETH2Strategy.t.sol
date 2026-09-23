@@ -3,6 +3,9 @@ pragma solidity 0.8.28;
 
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20 as OZIERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 import {console} from "forge-std/console.sol";
@@ -31,6 +34,25 @@ interface ITokenizedStrategy {
     function isShutdown() external view returns (bool);
 }
 
+interface IYearnV3VaultAdmin {
+    function role_manager() external view returns (address);
+    function set_role(address account, uint256 role) external;
+    function set_default_queue(address[] memory newQueue) external;
+}
+
+/// @dev Minimal ERC4626 leg for yvWETH-2 whose underlying can be made lossy on
+///      demand, simulating a nested strategy taking a real unrealized loss that
+///      Yearn has not reported into its books yet.
+contract LossyYearnLeg is ERC4626 {
+    constructor(address weth) ERC4626(OZIERC20(weth)) ERC20("Lossy Yearn Leg", "LYL") {}
+
+    /// @notice Irreversibly destroys `assets` of underlying, creating an
+    ///         unrealized loss vs yvWETH-2's recorded debt for this leg.
+    function sufferLoss(uint256 assets) external {
+        OZIERC20(asset()).transfer(address(0xdead), assets);
+    }
+}
+
 contract YvWETH2StrategyTest is ERC4626StrategyUnitTestBase {
     address internal constant YV_WETH_1_VAULT = 0xc56413869c6CDf96496f2b1eF801fEDBdFA7dDB0;
     address internal constant YEARN_DEBT_ALLOCATOR = 0x1e9eB053228B1156831759401dE0E115356b8671;
@@ -40,6 +62,16 @@ contract YvWETH2StrategyTest is ERC4626StrategyUnitTestBase {
     address internal constant SPARK_WSTETH_YVUSD_LOOPER = 0x13f6Cb609959a43c3bE29407766A683b42e26D28;
     address internal constant MORPHO_Y_WETH_COMPOUNDER = 0xd9BA99D93ea94a65b5BC838a0106cA3AbC82Ec4F;
     uint256 internal constant YEARN_QUEUED_MAX_DEBT = 10_000e18;
+    address internal constant YEARN_ROLE_MANAGER = 0xb3bd6B2E61753C311EFbCF0111f75D29706D9a41;
+    /// @dev Vyper enum Roles: ADD=1, REVOKE=2, FORCE_REVOKE=4, ACCOUNTANT=8, QUEUE=16.
+    uint256 internal constant YEARN_QUEUE_MANAGER_ROLE = 16;
+    /// @dev 10k-class position. yvWETH-2's deposit_limit is 10_000e18 with ~655e18 of live
+    ///      TVL at the fork block, so 9_000e18 is the largest round seedable size.
+    uint256 internal constant FRONT_RUN_POSITION = 9_000e18;
+
+    LossyYearnLeg internal lossyLegByTest;
+    address internal frontRunnerByTest;
+    address internal slowHolderByTest;
     // TokenizedStrategy 3.0.4: keccak256("yearn.base.strategy.storage") - 1, then +12 to the packed
     // `emergencyAdmin` / `entered` / `shutdown` slot.
     bytes32 internal constant MORPHO_SHUTDOWN_SLOT = 0xd2841a5d2692465040bd5e06a6f3b37483952c866e0f304dc0e03f76a1f8a0bc;
@@ -233,6 +265,150 @@ contract YvWETH2StrategyTest is ERC4626StrategyUnitTestBase {
         assertEq(IERC20(candidate.asset).balanceOf(depositor), userWethBefore + withdrawAmount, "depositor should receive WETH");
         assertLt(IMYTStrategy(strategy).realAssets(), realAssetsBeforeWithdraw, "withdraw should deallocate from yvWETH-2");
         assertEq(IVaultV2(vault).liquidityAdapter(), strategy, "liquidity adapter should remain yvWETH-2");
+    }
+
+    /// @dev Front-run scenario scaffolding: a 9k ETH MYT position (two equal holders),
+    ///      yvWETH-2 as the liquidity adapter, and the entire position routed through a
+    ///      dedicated lossy leg so loss realization is deterministic.
+    function _seedFrontRunScenario()
+        internal
+        returns (uint256 legDebt, uint256 ppsBook, uint256 frontShares, uint256 holderShares)
+    {
+        ERC4626Candidate memory candidate = _candidate();
+        IYearnV3VaultDebt yearnWeth2 = IYearnV3VaultDebt(candidate.targetVault);
+        address frontRunner = makeAddr("frontRunner");
+        address slowHolder = makeAddr("slowHolder");
+
+        uint256 each = FRONT_RUN_POSITION / 2;
+        require(yearnWeth2.totalIdle() == 0, "expected no stray yvWETH-2 idle at fork");
+        require(IERC4626(candidate.targetVault).maxDeposit(strategy) >= FRONT_RUN_POSITION, "yvWETH-2 cannot absorb the position");
+
+        vm.prank(admin);
+        IAllocator(allocator).setLiquidityAdapter(strategy, getVaultParams());
+
+        // Deposits route straight into the strategy through the liquidity adapter.
+        _magicDepositToVault(vault, frontRunner, each);
+        _magicDepositToVault(vault, slowHolder, each);
+        assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), FRONT_RUN_POSITION, 1e15, "strategy should hold the position");
+
+        // Add our own lossy leg and route all strategy withdrawals through it,
+        // regardless of the live withdrawal queue's contents.
+        LossyYearnLeg lossyLeg = new LossyYearnLeg(candidate.asset);
+        vm.startPrank(YEARN_STRATEGY_TIMELOCK);
+        yearnWeth2.add_strategy(address(lossyLeg), false);
+        yearnWeth2.update_max_debt_for_strategy(address(lossyLeg), type(uint256).max);
+        vm.stopPrank();
+
+        vm.startPrank(YEARN_ROLE_MANAGER);
+        IYearnV3VaultAdmin(candidate.targetVault).set_role(address(this), YEARN_QUEUE_MANAGER_ROLE);
+        vm.stopPrank();
+        address[] memory queue = new address[](1);
+        queue[0] = address(lossyLeg);
+        IYearnV3VaultAdmin(candidate.targetVault).set_default_queue(queue);
+
+        // Park every WETH the strategy deposited in the lossy leg (debt == position value).
+        uint256 idleToDeploy = yearnWeth2.totalIdle();
+        vm.prank(YEARN_DEBT_ALLOCATOR);
+        yearnWeth2.update_debt(address(lossyLeg), idleToDeploy);
+        assertLt(yearnWeth2.totalIdle(), 1e15, "idle should now sit in the lossy leg");
+
+        (,, legDebt,) = yearnWeth2.strategies(address(lossyLeg));
+        ppsBook = IERC4626(vault).convertToAssets(1e18);
+        frontShares = IERC20(vault).balanceOf(frontRunner);
+        holderShares = IERC20(vault).balanceOf(slowHolder);
+        lossyLegByTest = lossyLeg;
+        frontRunnerByTest = frontRunner;
+        slowHolderByTest = slowHolder;
+
+        console.log("front-run position (WETH)", FRONT_RUN_POSITION);
+        console.log("lossy leg debt", legDebt);
+        console.log("MYT pps at book", ppsBook);
+    }
+
+    /// @notice A REAL sub-gate unrealized loss (40 bps < slippageBPS = 50 bps) appears in
+    ///         yvWETH-2's nested position before Yearn reports it. A user tries to front-run
+    ///         it by redeeming at the still-optimistic MYT book price.
+    ///
+    ///         Expected: the attempt REVERTS. Yearn attributes the withdrawing chunk's share
+    ///         of the unrealized loss to the withdrawer, so the strategy's two-stage exit
+    ///         cannot deliver the exact requested amount and fails loudly at
+    ///         `_ensureIdleBalance`. No value is extracted from remaining holders. Only the
+    ///         vault's physical idle stays drainable at the stale price — the bounded,
+    ///         vault-generic first-mover window.
+    function test_yearnWeth2_frontRunUnrealizedLoss_revertsAtDelivery() public {
+        (uint256 legDebt, uint256 ppsBook, uint256 frontShares,) = _seedFrontRunScenario();
+
+        // The lossy leg takes a real 40 bps loss that Yearn has not yet reported.
+        uint256 loss = legDebt * 40 / 10_000;
+        lossyLegByTest.sufferLoss(loss);
+
+        // Books stay optimistic: MYT price has not moved and loss-free capacity is hidden.
+        assertEq(IERC4626(vault).convertToAssets(1e18), ppsBook, "MYT books must not have moved yet");
+        assertLt(
+            IERC4626(_candidate().targetVault).maxWithdraw(strategy),
+            IMYTStrategy(strategy).realAssets(),
+            "lossy leg must hide loss-free capacity"
+        );
+
+        // Front-run attempt: redeem the full claim at the stale book price. Yearn
+        // attributes the chunk's share of the unrealized loss to the withdrawer, so
+        // the strategy's two-stage exit cannot deliver the exact amount and the exit
+        // fails loudly at the delivery invariant — no value is extracted from the pool.
+        uint256 vaultIdle = IERC20(_candidate().asset).balanceOf(vault);
+        vm.prank(frontRunnerByTest);
+        try IVaultV2(vault).redeem(frontShares, frontRunnerByTest, frontRunnerByTest) {
+            fail("front-run redemption must revert");
+        } catch (bytes memory reason) {
+            assertEq(bytes4(reason), IMYTStrategy.InsufficientBalance.selector, "must fail at the delivery invariant");
+            // InsufficientBalance(uint256 required, uint256 available) = selector + two 32-byte words.
+            uint256 required;
+            uint256 available;
+            assembly {
+                required := mload(add(reason, 36))
+                available := mload(add(reason, 68))
+            }
+            assertEq(required, IERC4626(vault).previewRedeem(frontShares) - vaultIdle, "required should be the claim beyond idle");
+            assertGt(required - available, 1e15, "shortfall must be a real loss share, not rounding");
+            console.log("front-run delivery shortfall (WETH)", required - available);
+        }
+
+        // Only the vault's physical idle is drainable at the stale price; one wei past
+        // idle needs the lossy leg and reverts again — the door is closed, not discounted.
+        assertGt(vaultIdle, 0, "expected leftover vault idle");
+        vm.prank(slowHolderByTest);
+        IVaultV2(vault).withdraw(vaultIdle, slowHolderByTest, slowHolderByTest);
+
+        vm.prank(slowHolderByTest);
+        try IVaultV2(vault).withdraw(1e18, slowHolderByTest, slowHolderByTest) {
+            fail("withdraw past idle must revert");
+        } catch (bytes memory reason) {
+            assertEq(bytes4(reason), IMYTStrategy.InsufficientBalance.selector, "past-idle exit must fail at the delivery invariant");
+        }
+    }
+
+    /// @notice The case the two-stage exit was built for: a DUST-sized unrealized loss.
+    ///         Both holders still exit at (within wei of) the pre-loss book price and the
+    ///         pool absorbs only dust.
+    function test_yearnWeth2_dustUnrealizedLoss_exitsAtBookPrice() public {
+        (,, uint256 frontShares, uint256 holderShares) = _seedFrontRunScenario();
+
+        lossyLegByTest.sufferLoss(5);
+
+        uint256 frontBook = IERC4626(vault).previewRedeem(frontShares);
+        vm.prank(frontRunnerByTest);
+        IVaultV2(vault).redeem(frontShares, frontRunnerByTest, frontRunnerByTest);
+        assertApproxEqAbs(
+            IERC20(_candidate().asset).balanceOf(frontRunnerByTest), frontBook, 3, "front-runner exits at book"
+        );
+
+        uint256 holderBook = IERC4626(vault).previewRedeem(holderShares);
+        vm.prank(slowHolderByTest);
+        IVaultV2(vault).redeem(holderShares, slowHolderByTest, slowHolderByTest);
+        assertGe(
+            IERC20(_candidate().asset).balanceOf(slowHolderByTest),
+            holderBook - 10,
+            "slow holder absorbs at most dust"
+        );
     }
 
     /// @notice Deposit the live yvWETH-1 production size into yvWETH-2, then impersonate Yearn:
