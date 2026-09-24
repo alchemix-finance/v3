@@ -1,0 +1,162 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.28;
+
+import {IMYTStrategy} from "../../../interfaces/IMYTStrategy.sol";
+import {ERC4626Candidate} from "./ERC4626StrategyTestBase.sol";
+
+library ERC4626Candidates {
+    address internal constant BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address internal constant MAINNET_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    string internal constant BASE_RPC_FALLBACK = "https://base.gateway.tenderly.co";
+    string internal constant MAINNET_RPC_FALLBACK = "https://mainnet.gateway.tenderly.co";
+
+    function steakhouseUSDC() internal pure returns (ERC4626Candidate memory) {
+        return ERC4626Candidate({
+            targetVault: 0xbeeff7aE5E00Aae3Db302e4B0d8C883810a58100,
+            asset: BASE_USDC,
+            rpcEnv: "BASE_RPC_URL",
+            fallbackRpcUrl: BASE_RPC_FALLBACK,
+            name: "Steakhouse High Yield USDC",
+            protocol: "Steakhouse",
+            riskClass: IMYTStrategy.RiskClass.LOW,
+            forkBlock: 50_765_525,
+            assetDecimals: 6,
+            shareDecimals: 18,
+            initialDeposit: 1000e6,
+            absoluteCap: 10_000e6,
+            relativeCap: 1e18,
+            strategyCap: 10_000e6,
+            globalCap: 1e18,
+            estimatedYield: 100e6,
+            slippageBPS: 1,
+            additionalIncentives: false,
+            maxWithdrawIsAuthoritative: true,
+            zeroMaxWithdrawIsUnbounded: false
+        });
+    }
+
+    function yearnOGUSDCV2() internal pure returns (ERC4626Candidate memory) {
+        return ERC4626Candidate({
+            targetVault: 0xe7D0DBE3493830e2Ab62619211A2BfF0Fc60dB42,
+            asset: BASE_USDC,
+            rpcEnv: "BASE_RPC_URL",
+            fallbackRpcUrl: BASE_RPC_FALLBACK,
+            name: "Yearn OG USDC V2",
+            protocol: "Morpho V2",
+            riskClass: IMYTStrategy.RiskClass.MEDIUM,
+            forkBlock: 50_768_896,
+            assetDecimals: 6,
+            shareDecimals: 18,
+            initialDeposit: 10_000e6,
+            absoluteCap: 10_000e6,
+            relativeCap: 0.25e18,
+            strategyCap: 10_000e6,
+            globalCap: 0.25e18,
+            estimatedYield: 531,
+            slippageBPS: 50,
+            additionalIncentives: false,
+            maxWithdrawIsAuthoritative: true,
+            zeroMaxWithdrawIsUnbounded: true
+        });
+    }
+
+    function yearnUSDCHorizon() internal pure returns (ERC4626Candidate memory) {
+        return ERC4626Candidate({
+            targetVault: 0xc3BD0A2193c8F027B82ddE3611D18589ef3f62a9,
+            asset: BASE_USDC,
+            rpcEnv: "BASE_RPC_URL",
+            fallbackRpcUrl: BASE_RPC_FALLBACK,
+            name: "USDC Horizon yVault",
+            protocol: "Yearn V3",
+            riskClass: IMYTStrategy.RiskClass.HIGH,
+            forkBlock: 50_742_730,
+            assetDecimals: 6,
+            shareDecimals: 6,
+            initialDeposit: 10_000e6,
+            absoluteCap: 10_000e6,
+            relativeCap: 0.1e18,
+            strategyCap: 10_000e6,
+            globalCap: 0.1e18,
+            estimatedYield: 454,
+            slippageBPS: 100,
+            additionalIncentives: false,
+            maxWithdrawIsAuthoritative: true,
+            zeroMaxWithdrawIsUnbounded: false
+        });
+    }
+
+    function gauntletUSDCFrontier() internal pure returns (ERC4626Candidate memory) {
+        return ERC4626Candidate({
+            targetVault: 0x1deEfABEe758AAbdC29a542B24ca3b75aFD56765,
+            asset: BASE_USDC,
+            rpcEnv: "BASE_RPC_URL",
+            fallbackRpcUrl: BASE_RPC_FALLBACK,
+            name: "Gauntlet USDC Frontier",
+            protocol: "Morpho V2",
+            riskClass: IMYTStrategy.RiskClass.HIGH,
+            forkBlock: 50_828_803,
+            assetDecimals: 6,
+            shareDecimals: 18,
+            initialDeposit: 10_000e6,
+            absoluteCap: 10_000e6,
+            relativeCap: 0.1e18,
+            strategyCap: 10_000e6,
+            globalCap: 0.1e18,
+            estimatedYield: 483,
+            slippageBPS: 100,
+            additionalIncentives: false,
+            maxWithdrawIsAuthoritative: true,
+            zeroMaxWithdrawIsUnbounded: true
+        });
+    }
+
+    /// @notice Yearn V3 WETH-2 multi-strategy vault. Higher-risk sibling of WETH-1.
+    function yearnWETH2() internal pure returns (ERC4626Candidate memory) {
+        return ERC4626Candidate({
+            targetVault: 0xAc37729B76db6438CE62042AE1270ee574CA7571,
+            asset: MAINNET_WETH,
+            rpcEnv: "MAINNET_RPC_URL",
+            fallbackRpcUrl: MAINNET_RPC_FALLBACK,
+            name: "Yearn Mainnet WETH-2",
+            protocol: "Yearn",
+            riskClass: IMYTStrategy.RiskClass.LOW,
+            forkBlock: 25_970_000,
+            assetDecimals: 18,
+            shareDecimals: 18,
+            initialDeposit: 1000e18,
+            absoluteCap: 10_000e18,
+            relativeCap: 1e18,
+            strategyCap: 10_000e18,
+            globalCap: 1e18,
+            estimatedYield: 700,
+            slippageBPS: 50,
+            additionalIncentives: false,
+            maxWithdrawIsAuthoritative: true,
+            zeroMaxWithdrawIsUnbounded: false
+        });
+    }
+    function fluidUSDCBase() internal pure returns (ERC4626Candidate memory) {
+        return ERC4626Candidate({
+            targetVault: 0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169,
+            asset: BASE_USDC,
+            rpcEnv: "BASE_RPC_URL",
+            fallbackRpcUrl: BASE_RPC_FALLBACK,
+            name: "Fluid USDC Base",
+            protocol: "Fluid",
+            riskClass: IMYTStrategy.RiskClass.MEDIUM,
+            forkBlock: 51_051_016,
+            assetDecimals: 6,
+            shareDecimals: 6,
+            initialDeposit: 10_000e6,
+            absoluteCap: 10_000e6,
+            relativeCap: 0.25e18,
+            strategyCap: 10_000e6,
+            globalCap: 0.25e18,
+            estimatedYield: 489,
+            slippageBPS: 50,
+            additionalIncentives: false,
+            maxWithdrawIsAuthoritative: true,
+            zeroMaxWithdrawIsUnbounded: false
+        });
+    }
+}

@@ -409,6 +409,50 @@ contract StakeDAOWETHStrategyEnsoTest is Test {
         assertGt(TokenUtils.safeBalanceOf(WETH, vault), 0);
     }
 
+    function test_setEnsoRouter_onlyOwner_updatesValue() public {
+        address newRouter = makeAddr("newEnsoRouter");
+        address oldRouter = address(ensoRouter);
+
+        vm.expectEmit(true, true, false, true, strategy);
+        emit StakeDAOWETHStrategy.EnsoRouterUpdated(oldRouter, newRouter);
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setEnsoRouter(newRouter);
+
+        assertEq(StakeDAOWETHStrategy(strategy).ensoRouter(), newRouter, "enso router should update");
+    }
+
+    function test_setEnsoRouter_reverts_for_non_owner() public {
+        vm.expectRevert(abi.encodeWithSelector(bytes4(keccak256("OwnableUnauthorizedAccount(address)")), curator));
+        vm.prank(curator);
+        StakeDAOWETHStrategy(strategy).setEnsoRouter(makeAddr("newEnsoRouter"));
+    }
+
+    function test_setEnsoRouter_reverts_for_zero_address() public {
+        vm.expectRevert(bytes("Zero enso router"));
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setEnsoRouter(address(0));
+    }
+
+    function test_allocateWithSwap_uses_updated_enso_router() public {
+        MockEnsoBidirectional newRouter = new MockEnsoBidirectional(WETH, address(rewardVault));
+        rewardVault.mint(address(newRouter), 1_000_000e18);
+        deal(WETH, address(newRouter), 1_000_000e18);
+
+        uint256 oldRouterWethBefore = IERC20(WETH).balanceOf(address(ensoRouter));
+        uint256 newRouterWethBefore = IERC20(WETH).balanceOf(address(newRouter));
+
+        vm.prank(admin);
+        StakeDAOWETHStrategy(strategy).setEnsoRouter(address(newRouter));
+
+        uint256 amount = 2e18;
+        vm.prank(admin);
+        IAllocator(allocator).allocateWithSwap(strategy, amount, hex"01");
+
+        assertEq(IERC20(WETH).balanceOf(address(ensoRouter)), oldRouterWethBefore, "old router should not receive WETH");
+        assertEq(IERC20(WETH).balanceOf(address(newRouter)), newRouterWethBefore + amount, "new router should receive allocated WETH");
+        assertEq(IERC20(address(rewardVault)).balanceOf(strategy), amount, "strategy should receive shares from new router");
+    }
+
     function test_force_deallocate_swap_reverts() public {
         vm.startPrank(vault);
         vm.expectRevert(IMYTStrategy.ForceDeallocateSwapNotAllowed.selector);

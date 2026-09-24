@@ -25,7 +25,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     IStakeDAOAccountant public immutable accountant;
     address public immutable mainRewardToken;
     address public immutable gauge;
-    address public immutable ensoRouter;
+    address public ensoRouter;
     uint256 public withdrawBufferBps;
     uint256 public minWethPerCurveLp;
     uint256 public minCurveLpPerWeth;
@@ -35,6 +35,7 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     event MinWethPerCurveLpUpdated(uint256 newMinWethPerCurveLp);
     event MinCurveLpPerWethUpdated(uint256 newMinCurveLpPerWeth);
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
+    event EnsoRouterUpdated(address oldEnsoRouter, address newEnsoRouter);
     error CurveLpPriceBelowFloor(uint256 lpAmount, uint256 maxLpAmount);
     error CurveLpOutputBelowFloor(uint256 lpReceived, uint256 minLpReceived);
 
@@ -90,6 +91,12 @@ contract StakeDAOWETHStrategy is MYTStrategy {
     function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
         canForceDeallocate = canForceDeallocate_;
         emit CanForceDeallocateUpdated(canForceDeallocate_);
+    }
+
+    function setEnsoRouter(address newEnsoRouter) external onlyOwner {
+        require(newEnsoRouter != address(0), "Zero enso router");
+        emit EnsoRouterUpdated(ensoRouter, newEnsoRouter);
+        ensoRouter = newEnsoRouter;
     }
 
     function _allocate(uint256 amount) internal override returns (uint256) {
