@@ -299,6 +299,23 @@ Every production strategy deployment script should include:
 
 The deployer is not expected to be the MYT curator, so deployment scripts should not attempt curator registration, cap updates, or vault penalty configuration. Those steps happen after deployment from the curator-controlled address or proxy.
 
+### TokeAutoStrategy (AutoETH / AutoUSD)
+
+Deploy sequence is already in the scripts: `new` → `snapshotSharePrice()` → `setKillSwitch(true)` → `transferOwnership`.
+`snapshotSharePrice()` reverts if Tokemak's report is unusable. Do not skip it or deploy through a stale/wide-spread window.
+
+After broadcast, confirm before enabling allocation:
+
+- `lastGoodSharePrice() > 0`
+- `lastSnapshotAt() == deploy timestamp`
+- `maxNavSpreadBps() == 100`
+
+If valuation later freezes (`reportUsable() == false`) and the loss is real:
+
+- Keeper outage / stale cache: owner calls `forceMarkDown(newPrice)` (decrease only). A snapshot cannot invent a fresh NAV.
+- Persistent wide Deposit/Withdraw spread: widen `maxNavSpreadBps`, `snapshotSharePrice()`, then re tighten.
+- Realize cash: `killSwitch` + deallocate. Live redeem proceeds are the source of truth.
+
 ### Minimal Script Template
 
 ```solidity
