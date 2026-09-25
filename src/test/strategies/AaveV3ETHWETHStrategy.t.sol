@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import "../BaseStrategyTest.sol";
+import {E2EInvariantStrategyTest} from "../base/E2EInvariantStrategyTest.sol";
 import {AaveStrategy} from "../../strategies/AaveStrategy.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
@@ -237,5 +238,53 @@ contract AaveV3ETHWETHStrategyTest is BaseStrategyTest {
         assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), 0, initialRealAssets / 100, "All real assets should be deallocated");
 
         vm.stopPrank();
+    }
+}
+
+contract AaveV3ETHWETHInvariantTest is E2EInvariantStrategyTest {
+    address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address constant AAVE_V3_ETH_WETH_ATOKEN = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
+    address constant AAVE_V3_ETH_POOL_ADDRESS_PROVIDER = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
+    address constant AAVE_REWARDS_CONTROLLER = 0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb;
+    address constant AAVE_REWARD_TOKEN = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+
+    function getRpcUrl() internal override returns (string memory) {
+        return vm.envString("MAINNET_RPC_URL");
+    }
+
+    function getForkBlockNumber() internal pure override returns (uint256) {
+        return 0;
+    }
+
+    function getAsset() internal pure override returns (address) {
+        return WETH;
+    }
+
+    function getRealStrategyParams() internal pure override returns (IMYTStrategy.StrategyParams memory) {
+        return IMYTStrategy.StrategyParams({
+            owner: address(0),
+            name: "AaveV3ETHWETH",
+            protocol: "AaveV3ETHWETH",
+            riskClass: IMYTStrategy.RiskClass.LOW,
+            cap: 10_000e18,
+            globalCap: 1e18,
+            estimatedYield: 100e18,
+            additionalIncentives: false,
+            slippageBPS: 1
+        });
+    }
+
+    function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
+        return address(
+            new AaveStrategy(vault_, params, WETH, AAVE_V3_ETH_WETH_ATOKEN, AAVE_V3_ETH_POOL_ADDRESS_PROVIDER, AAVE_REWARDS_CONTROLLER, AAVE_REWARD_TOKEN)
+        );
+    }
+
+    function onSimulateValueLoss(address strategy, uint256 amount) external override {
+        uint256 bal = IERC20(AAVE_V3_ETH_WETH_ATOKEN).balanceOf(strategy);
+        uint256 loss = amount > bal ? bal : amount;
+        if (loss == 0) return;
+        vm.prank(strategy);
+        IERC20(AAVE_V3_ETH_WETH_ATOKEN).transfer(address(0xdead), loss);
     }
 }

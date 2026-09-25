@@ -2,7 +2,9 @@
 pragma solidity 0.8.28;
 
 import "../BaseStrategyTest.sol";
+import {E2EInvariantStrategyTest} from "../base/E2EInvariantStrategyTest.sol";
 import {ERC4626Strategy} from "../../strategies/ERC4626Strategy.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
@@ -265,5 +267,53 @@ contract EulerUSDCStrategyTest is BaseStrategyTest {
         assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), 0, initialRealAssets / 100, "All real assets should be deallocated");
         
         vm.stopPrank();
+    }
+}
+
+contract EulerUSDCInvariantTest is E2EInvariantStrategyTest {
+    address constant EULER_USDC_VAULT = 0xe0a80d35bB6618CBA260120b279d357978c42BCE;
+    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+
+    function getRpcUrl() internal override returns (string memory) {
+        return vm.envString("MAINNET_RPC_URL");
+    }
+
+    function getForkBlockNumber() internal pure override returns (uint256) {
+        return 22_089_302;
+    }
+
+    function getAsset() internal pure override returns (address) {
+        return USDC;
+    }
+
+    function getRealStrategyParams() internal pure override returns (IMYTStrategy.StrategyParams memory) {
+        return IMYTStrategy.StrategyParams({
+            owner: address(0),
+            name: "EulerUSDC",
+            protocol: "EulerUSDC",
+            riskClass: IMYTStrategy.RiskClass.LOW,
+            cap: 10_000e6,
+            globalCap: 1e18,
+            estimatedYield: 100e6,
+            additionalIncentives: false,
+            slippageBPS: 1
+        });
+    }
+
+    function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal override returns (address) {
+        return address(new MockEulerUSDCStrategy(vault_, params, EULER_USDC_VAULT));
+    }
+
+    function _enableForceDeallocate(address strategy) internal override {
+        ERC4626Strategy(strategy).setCanForceDeallocate(true);
+    }
+
+    function onSimulateValueLoss(address strategy, uint256 amount) external override {
+        uint256 shares = IERC4626(EULER_USDC_VAULT).convertToShares(amount);
+        uint256 bal = IERC20(EULER_USDC_VAULT).balanceOf(strategy);
+        shares = shares > bal ? bal : shares;
+        if (shares == 0) return;
+        vm.prank(strategy);
+        IERC20(EULER_USDC_VAULT).transfer(address(0xdead), shares);
     }
 }

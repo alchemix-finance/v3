@@ -43,7 +43,10 @@ solc = "0.8.28"
 verbosity = 2
 ffi = true
 exclude = ["lib/vault-v2/test/**"]
-fs_permissions = [{ access = "read", path = "src/test/strategies/utils/offchain/quotes/" }]
+fs_permissions = [
+  { access = "read", path = "src/test/strategies/utils/offchain/quotes/" },
+  { access = "write", path = "src/test/strategies/utils/offchain/quotes/" }
+]
 
 [profile.default.optimizer_details]
 yul = false

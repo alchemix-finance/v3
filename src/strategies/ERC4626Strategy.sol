@@ -13,6 +13,8 @@ import {TokenUtils} from "../libraries/TokenUtils.sol";
 contract ERC4626Strategy is MYTStrategy {
     IERC20 public immutable mytAsset;
     IERC4626 public immutable vault;
+    bool public canForceDeallocate;
+    event CanForceDeallocateUpdated(bool newCanForceDeallocate);
 
     constructor(address _myt, StrategyParams memory _params, address _vault)
         MYTStrategy(_myt, _params)
@@ -20,6 +22,11 @@ contract ERC4626Strategy is MYTStrategy {
         mytAsset = IERC20(MYT.asset());
         vault = IERC4626(_vault);
         require(vault.asset() == MYT.asset(), "Vault asset != MYT asset");
+    }
+
+    function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
+        canForceDeallocate = canForceDeallocate_;
+        emit CanForceDeallocateUpdated(canForceDeallocate_);
     }
 
     function _allocate(uint256 amount) internal virtual override returns (uint256) {
@@ -64,5 +71,9 @@ contract ERC4626Strategy is MYTStrategy {
 
     function _isProtectedToken(address token) internal view virtual override returns (bool) {
         return token == MYT.asset() || token == address(vault);
+    }
+
+    function _canForceDeallocate() internal view virtual override returns (bool) {
+        return canForceDeallocate;
     }
 }

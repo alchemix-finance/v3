@@ -124,10 +124,10 @@ abstract contract BaseStrategyMulti is StrategyOps {
         assertApproxEqAbs(
             IMYTStrategy(strategy).realAssets(),
             0,
-            2 * testConfig.vaultInitialDeposit / 100,
+            _fullDeallocationTolerance(),
             "All real assets should be deallocated"
         );
-        assertApproxEqAbs(IVaultV2(vault).allocation(allocationId), 0, 2 * 10 ** testConfig.decimals);
+        assertApproxEqAbs(IVaultV2(vault).allocation(allocationId), 0, _fullDeallocationTolerance());
         vm.stopPrank();
     }
 
@@ -632,5 +632,9 @@ abstract contract BaseStrategyMulti is StrategyOps {
         );
 
         vm.stopPrank();
+    }
+
+    function _fullDeallocationTolerance() internal view virtual returns (uint256) {
+        return 2 * testConfig.vaultInitialDeposit / 100;
     }
 }
