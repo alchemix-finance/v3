@@ -5,9 +5,11 @@ import {Test} from "forge-std/Test.sol";
 import {DeployTokeAutoETHStrategyScript} from "../../script/DeployTokeAutoETHStrategy.s.sol";
 import {IMYTStrategy} from "../interfaces/IMYTStrategy.sol";
 import {AlchemistCurator} from "../AlchemistCurator.sol";
-import {TokeAutoStrategy} from "../strategies/TokeAutoStrategy.sol";
+import {IERC4626Like, TokeAutoStrategy} from "../strategies/TokeAutoStrategy.sol";
+import {MYTStrategy} from "../MYTStrategy.sol";
 import {TestERC20} from "./mocks/TestERC20.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
+import {IERC20} from "forge-std/interfaces/IERC20.sol";
 
 contract MockMYTForTokeAutoETHDeployTest {
     address public asset;
@@ -57,6 +59,7 @@ contract DeployTokeAutoETHStrategyScriptTest is Test {
         rewarder = makeAddr("rewarder");
         tokeRewardsToken = makeAddr("tokeRewardsToken");
         autopilotRouter = makeAddr("autopilotRouter");
+        _mockUsableAutoVault(autoVault, rewarder);
     }
 
     function test_deployTokeAutoETHStrategy_setsCoreAddressesAndDefaults() public {
@@ -83,6 +86,9 @@ contract DeployTokeAutoETHStrategyScriptTest is Test {
         assertEq(address(strategy.autopilotRouter()), autopilotRouter, "unexpected autopilot router");
         assertEq(strategy.execToleranceBps(), DEFAULT_EXEC_TOLERANCE_BPS, "unexpected exec tolerance");
         assertFalse(strategy.canForceDeallocate(), "force deallocate should default disabled");
+        assertEq(strategy.maxNavSpreadBps(), strategy.DEFAULT_MAX_NAV_SPREAD_BPS(), "unexpected nav spread default");
+        assertEq(strategy.lastGoodSharePrice(), MYTStrategy(strategyAddr).FIXED_POINT_SCALAR(), "deploy must seed 1:1 PPS");
+        assertEq(strategy.lastSnapshotAt(), block.timestamp, "deploy must stamp lastSnapshotAt");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
         assertEq(curator.adapterToMYT(strategyAddr), address(0), "deploy script should not register with curator");
@@ -134,6 +140,10 @@ contract DeployTokeAutoETHStrategyScriptTest is Test {
         assertEq(address(strategy.autopilotRouter()), MAINNET_AUTOPILOT_ROUTER, "unexpected autopilot router");
         assertEq(strategy.execToleranceBps(), forkDeployScript.DEFAULT_EXEC_TOLERANCE_BPS(), "unexpected exec tolerance");
         assertFalse(strategy.canForceDeallocate(), "force deallocate should default disabled");
+        assertEq(strategy.maxNavSpreadBps(), strategy.DEFAULT_MAX_NAV_SPREAD_BPS(), "unexpected nav spread default");
+        assertTrue(strategy.reportUsable(), "fork deploy requires a usable Tokemak report");
+        assertGt(strategy.lastGoodSharePrice(), 0, "fork deploy must seed lastGoodSharePrice");
+        assertEq(strategy.lastSnapshotAt(), block.timestamp, "fork deploy must stamp lastSnapshotAt");
         assertEq(strategy.owner(), MAINNET_NEW_OWNER, "unexpected strategy owner");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled after deploy");
         assertFalse(vault.isAdapter(strategyAddr), "deploy script should not register strategy");
@@ -161,6 +171,52 @@ contract DeployTokeAutoETHStrategyScriptTest is Test {
         assertEq(params.estimatedYield, 800, "unexpected estimated yield");
         assertFalse(params.additionalIncentives, "unexpected incentives flag");
         assertEq(params.slippageBPS, 600, "unexpected slippage");
+    }
+
+    function test_deployTokeAutoETHStrategy_revertsWhenReportUnusable() public {
+        address staleVault = makeAddr("staleAutoVault");
+        vm.mockCall(
+            staleVault,
+            abi.encodeWithSelector(IERC4626Like.oldestDebtReporting.selector),
+            abi.encode(type(uint256).max)
+        );
+        vm.mockCall(rewarder, abi.encodeWithSelector(IERC20.balanceOf.selector), abi.encode(0));
+        vm.mockCall(staleVault, abi.encodeWithSelector(IERC20.balanceOf.selector), abi.encode(0));
+        vm.mockCall(staleVault, abi.encodeWithSelector(IERC20.totalSupply.selector), abi.encode(1e18));
+
+        DeployTokeAutoETHStrategyScript.TokeAutoETHDeployConfig memory config =
+            DeployTokeAutoETHStrategyScript.TokeAutoETHDeployConfig({
+                myt: address(myt),
+                asset: address(assetToken),
+                autoVault: staleVault,
+                rewarder: rewarder,
+                tokeRewardsToken: tokeRewardsToken,
+                autopilotRouter: autopilotRouter,
+                execToleranceBps: DEFAULT_EXEC_TOLERANCE_BPS,
+                params: _buildParams("TokeAutoEth Mainnet", "TokeAuto")
+            });
+
+        vm.expectRevert(bytes("Report not usable"));
+        deployScript.deployTokeAutoETHStrategy(curator, newOwner, config);
+    }
+
+    function _mockUsableAutoVault(address vault_, address rewarder_) internal {
+        uint256 nav = 1e18;
+        vm.mockCall(vault_, abi.encodeWithSelector(IERC4626Like.oldestDebtReporting.selector), abi.encode(block.timestamp));
+        vm.mockCall(
+            vault_,
+            abi.encodeWithSelector(IERC4626Like.totalAssets.selector, IERC4626Like.TotalAssetPurpose.Deposit),
+            abi.encode(nav)
+        );
+        vm.mockCall(
+            vault_,
+            abi.encodeWithSelector(IERC4626Like.totalAssets.selector, IERC4626Like.TotalAssetPurpose.Withdraw),
+            abi.encode(nav)
+        );
+        vm.mockCall(vault_, abi.encodeWithSelector(IERC20.totalSupply.selector), abi.encode(1e18));
+        vm.mockCall(vault_, abi.encodeWithSelector(IERC20.balanceOf.selector), abi.encode(0));
+        vm.mockCall(rewarder_, abi.encodeWithSelector(IERC20.balanceOf.selector), abi.encode(0));
+        vm.mockCall(vault_, abi.encodeWithSelector(IERC4626Like.convertToAssets.selector), abi.encode(1e18));
     }
 
     function _buildParams(string memory name, string memory protocol)
