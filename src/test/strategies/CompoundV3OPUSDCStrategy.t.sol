@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
+import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {CompoundV3Strategy, IComet} from "../../strategies/CompoundV3Strategy.sol";
 import {BaseStrategyTest} from "../BaseStrategyTest.sol";
@@ -47,16 +48,6 @@ contract CompoundV3OPUSDCStrategyTest is BaseStrategyTest {
         return vm.envString("OPTIMISM_RPC_URL");
     }
 
-    function _effectiveDeallocateAmount(uint256 requestedAssets) internal view override returns (uint256) {
-        uint256 maxWithdrawable = IMYTStrategy(strategy).realAssets();
-        uint256 minMeaningfulDeallocate = 1 * 10 ** testConfig.decimals;
-        if (maxWithdrawable < minMeaningfulDeallocate || requestedAssets < minMeaningfulDeallocate) {
-            return 0;
-        }
-
-        return requestedAssets < maxWithdrawable ? requestedAssets : maxWithdrawable;
-    }
-
     function test_compound_market_assets_match_strategy() public view {
         CompoundV3Strategy compoundStrategy = CompoundV3Strategy(strategy);
         (address configuredRewardToken,,,) = ICometRewardsConfig(COMET_REWARDS).rewardConfig(COMET);
@@ -68,5 +59,42 @@ contract CompoundV3OPUSDCStrategyTest is BaseStrategyTest {
         assertEq(address(compoundStrategy.rewards()), COMET_REWARDS, "Comet rewards mismatch");
         assertEq(address(compoundStrategy.rewardToken()), COMP, "strategy reward asset mismatch");
         assertEq(configuredRewardToken, COMP, "Comet reward asset mismatch");
+    }
+
+    function test_preview_caps_requested_assets_to_real_assets() public {
+        uint256 amount = 1e6;
+        vm.startPrank(admin);
+        IAllocator(allocator).allocate(strategy, amount);
+
+        uint256 realAssets = IMYTStrategy(strategy).realAssets();
+        uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(type(uint256).max);
+        assertLt(preview, realAssets, "preview must preserve the rounding reserve");
+
+        IAllocator(allocator).deallocate(strategy, preview);
+        vm.stopPrank();
+
+        assertEq(IComet(COMET).borrowBalanceOf(strategy), 0, "strategy must not borrow");
+    }
+
+    function test_deallocate_reverts_instead_of_borrowing() public {
+        uint256 amount = 1e6;
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, amount);
+
+        uint256 supplied = IComet(COMET).balanceOf(strategy);
+        vm.expectRevert(abi.encodeWithSelector(CompoundV3Strategy.CompoundV3BorrowNotAllowed.selector, supplied + 1, supplied));
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), supplied + 1, bytes4(0), admin);
+    }
+
+    function test_real_assets_reverts_if_compound_debt_exists() public {
+        vm.mockCall(COMET, abi.encodeCall(IComet.borrowBalanceOf, (strategy)), abi.encode(1));
+        vm.expectRevert(abi.encodeWithSelector(CompoundV3Strategy.CompoundV3DebtDetected.selector, 1));
+        IMYTStrategy(strategy).realAssets();
+    }
+
+    function test_constructor_reverts_for_mismatched_reward_token() public {
+        vm.expectRevert(abi.encodeWithSelector(CompoundV3Strategy.CompoundV3RewardTokenMismatch.selector, USDC, COMP));
+        new CompoundV3Strategy(vault, getStrategyConfig(), COMET, COMET_REWARDS, USDC);
     }
 }
