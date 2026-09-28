@@ -129,7 +129,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     /// This intentionally excludes any unrelated MYT balance the contract may temporarily hold.
     uint256 private _mytSharesDeposited;
 
-    /// @dev Transmuter MYT balance increases not yet applied as cover in `_earmark()`.
+    /// @dev Physical, unspent Transmuter MYT not yet applied as cover in `_earmark()`.
     uint256 private _pendingCoverShares;
 
     /// @dev User accounts
@@ -140,7 +140,10 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
     /// @dev Survival accumulator snapshot at the start of each earmark epoch.
     mapping(uint256 => uint256) private _earmarkEpochStartSurvivalAccumulator;
-    
+
+    /// @dev Fixed debt credit for cover which was spent before being applied in `_earmark()`.
+    uint256 private _settledCoverDebt;
+
     uint256 private constant _REDEMPTION_INDEX_BITS = 129;
     uint256 private constant _REDEMPTION_INDEX_MASK = (uint256(1) << _REDEMPTION_INDEX_BITS) - 1;
 
@@ -371,7 +374,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     function getMaxWithdrawable(uint256 tokenId) external view returns (uint256) {
         (uint256 debt,, uint256 collateral) = _calculateUnrealizedDebt(tokenId);
 
-        uint256 lockedCollateral = 0;
+        uint256 lockedCollateral;
         if (debt != 0) {
             uint256 debtShares = convertDebtTokensToYield(debt);
             lockedCollateral = FixedPointMath.mulDivUp(debtShares, minimumCollateralization, FIXED_POINT_SCALAR);
@@ -625,8 +628,8 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             revert MissingInputData();
         }
 
-        bool anyProgress = false;
-        for (uint256 i = 0; i < accountIds.length; i++) {
+        bool anyProgress;
+        for (uint256 i; i < accountIds.length; i++) {
             uint256 accountId = accountIds[i];
             if (accountId == 0 || !_tokenExists(alchemistPositionNFT, accountId)) {
                 continue;
@@ -658,7 +661,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         uint256 liveEarmarked = cumulativeEarmarked;
         if (amount > liveEarmarked) amount = liveEarmarked;
 
-        uint256 effectiveRedeemed = 0;
+        uint256 effectiveRedeemed;
 
         if (liveEarmarked != 0 && amount != 0) {
             // ratioWanted = (liveEarmarked - amount) / liveEarmarked in Q128.128
@@ -711,14 +714,14 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         lastRedemptionBlock = block.number;
 
         // Use the effective redeemed amount everywhere downstream
-        uint256 collRedeemed  = convertDebtTokensToYield(effectiveRedeemed);
-        uint256 feeCollateral = collRedeemed * protocolFee / BPS;
+        sharesSent = convertDebtTokensToYield(effectiveRedeemed);
+        uint256 feeCollateral = sharesSent * protocolFee / BPS;
 
         _totalRedeemedDebt += effectiveRedeemed;
-        _totalRedeemedSharesOut += collRedeemed;
+        _totalRedeemedSharesOut += sharesSent;
 
-        TokenUtils.safeTransfer(myt, transmuter, collRedeemed);
-        _mytSharesDeposited -= collRedeemed;
+        TokenUtils.safeTransfer(myt, transmuter, sharesSent);
+        _mytSharesDeposited -= sharesSent;
 
         // If the remaining tracked MYT cannot fully cover the protocol fee, skip the fee entirely.
         if (feeCollateral <= _mytSharesDeposited) {
@@ -728,7 +731,6 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         }
 
         emit Redemption(effectiveRedeemed);
-        return collRedeemed;
     }
 
     /// @inheritdoc IAlchemistV3Actions
@@ -826,8 +828,15 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
     ///@inheritdoc IAlchemistV3Actions
     function setTransmuterTokenBalance(uint256 amount) external onlyTransmuter {
-        if (amount > lastTransmuterTokenBalance) {
-            _pendingCoverShares += amount - lastTransmuterTokenBalance;
+        uint256 last = lastTransmuterTokenBalance;
+        if (amount < last) {
+            uint256 liveCover = _pendingCoverShares;
+            uint256 spentShares = last - amount;
+            if (spentShares > liveCover) spentShares = liveCover;
+            _pendingCoverShares = liveCover - spentShares;
+            _settledCoverDebt += convertYieldTokensToDebt(spentShares);
+        } else {
+            _pendingCoverShares += amount - last;
         }
 
         lastTransmuterTokenBalance = amount;
@@ -1048,7 +1057,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         }
 
         // First try to clear earmarked debt from the account's own collateral.
-        uint256 repaidAmountInYield = 0;
+        uint256 repaidAmountInYield;
         if (account.earmarked > 0) {
             repaidAmountInYield = _forceRepay(accountId, account.earmarked, false);
             feeInYield = _calculateRepaymentFee(repaidAmountInYield);
@@ -1583,16 +1592,27 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         // how to earmark this window
         uint256 amount = ITransmuter(transmuter).queryGraph(lastEarmarkBlock + 1, block.number);
 
-        // apply cover
-        uint256 coverInDebt = convertYieldTokensToDebt(_pendingCoverShares);
-        if (amount != 0 && coverInDebt != 0) {
-            uint256 usedDebt = amount > coverInDebt ? coverInDebt : amount;
-            amount -= usedDebt;
+        // Apply settled cover at its fixed debt value before live cover at the current MYT rate.
+        uint256 settledCover = _settledCoverDebt;
+        if (amount > settledCover) {
+            amount -= settledCover;
+            _settledCoverDebt = 0;
+        } else {
+            _settledCoverDebt = settledCover - amount;
+            amount = 0;
+        }
 
-            // consume the corresponding portion of pending cover shares so we can't reuse it
-            uint256 sharesUsed = FixedPointMath.mulDivUp(_pendingCoverShares, usedDebt, coverInDebt);
-            if (sharesUsed > _pendingCoverShares) sharesUsed = _pendingCoverShares;
-            _pendingCoverShares -= sharesUsed;
+        if (amount != 0) {
+            uint256 coverInDebt = convertYieldTokensToDebt(_pendingCoverShares);
+            if (coverInDebt != 0) {
+                if (amount >= coverInDebt) {
+                    amount -= coverInDebt;
+                    _pendingCoverShares = 0;
+                } else {
+                    _pendingCoverShares -= FixedPointMath.mulDivUp(_pendingCoverShares, amount, coverInDebt);
+                    amount = 0;
+                }
+            }
         }
 
         uint256 liveUnearmarked = totalDebt - cumulativeEarmarked;
@@ -1791,12 +1811,9 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         // simulate earmark amount for this window
         uint256 amount = ITransmuter(transmuter).queryGraph(lastEarmarkBlock + 1, block.number);
 
-        // apply cover the same way
-        uint256 coverInDebt = convertYieldTokensToDebt(pendingCover);
-        if (amount != 0 && coverInDebt != 0) {
-            uint256 usedDebt = amount > coverInDebt ? coverInDebt : amount;
-            amount -= usedDebt;
-        }
+        // apply fixed settled credit plus live cover at the current MYT rate
+        uint256 coverInDebt = _settledCoverDebt + convertYieldTokensToDebt(pendingCover);
+        amount = amount > coverInDebt ? amount - coverInDebt : 0;
 
         uint256 liveUnearmarked = totalDebt - cumulativeEarmarked;
         if (amount > liveUnearmarked) amount = liveUnearmarked;

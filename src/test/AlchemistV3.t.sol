@@ -1859,6 +1859,56 @@ contract AlchemistV3Test is Test {
         assertEq(syncedAccountEarmarked, 0, "account should not receive phantom earmark after same-block claim");
     }
 
+    function testRegression_SpentCoverKeepsSettlementDebtValueAfterRateIncrease() external {
+        uint256 debtAmount = 100e18;
+        uint256 coverShares = 10e18;
+
+        vm.startPrank(address(0xbeef));
+        SafeERC20.safeApprove(address(vault), address(alchemist), type(uint256).max);
+        alchemist.deposit(200e18, address(0xbeef), 0);
+        uint256 tokenId = AlchemistNFTHelper.getFirstTokenId(address(0xbeef), address(alchemistNFT));
+        alchemist.mint(tokenId, debtAmount, address(0xbeef));
+        IERC20(address(vault)).transfer(address(transmuterLogic), coverShares);
+        vm.stopPrank();
+
+        assertEq(vault.balanceOf(address(transmuterLogic)), coverShares, "unexpected initial transmuter balance");
+
+        vm.prank(address(transmuterLogic));
+        alchemist.setTransmuterTokenBalance(coverShares);
+
+        uint256 settledCoverDebt = alchemist.convertYieldTokensToDebt(coverShares);
+        uint256 settlementAssets = vault.convertToAssets(coverShares);
+
+        vm.prank(address(transmuterLogic));
+        IERC20(address(vault)).transfer(externalUser, coverShares);
+        vm.prank(address(transmuterLogic));
+        alchemist.setTransmuterTokenBalance(0);
+
+        // A spent lot must retain its debt value at settlement, even if the same shares later appreciate.
+        vm.mockCall(
+            address(vault),
+            abi.encodeWithSelector(bytes4(keccak256("convertToAssets(uint256)")), coverShares),
+            abi.encode(settlementAssets * 2)
+        );
+
+        uint256 uncoveredDemand = 5e18;
+        vm.mockCall(
+            address(transmuterLogic),
+            abi.encodeWithSelector(ITransmuter.queryGraph.selector),
+            abi.encode(settledCoverDebt + uncoveredDemand)
+        );
+
+        vm.roll(block.number + 1);
+        alchemist.poke(tokenId);
+
+        assertApproxEqAbs(
+            alchemist.cumulativeEarmarked(),
+            uncoveredDemand,
+            1,
+            "spent cover must not revalue after settlement"
+        );
+    }
+
     function testRepayZeroAmount() external {
         uint256 amount = 100e18;
 
