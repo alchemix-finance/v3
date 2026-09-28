@@ -217,6 +217,7 @@ contract TokeAutoStrategy is MYTStrategy {
     }
 
     function _deallocateFromVault(uint256 amount, uint256 assetBalance) internal returns (uint256) {
+        _requireMarkBackedByLive();
         uint256 shortfall = amount - assetBalance;
         uint256 sharesNeeded;
         uint256 minOut;
@@ -276,6 +277,7 @@ contract TokeAutoStrategy is MYTStrategy {
         }
 
         require(address(autopilotRouter) != address(0), "Zero autopilot router");
+        _requireMarkBackedByLive();
         TokeRedeemParams memory redeemParams = abi.decode(data, (TokeRedeemParams));
 
         uint256 shortfall = amount - assetBalance;
@@ -362,6 +364,19 @@ contract TokeAutoStrategy is MYTStrategy {
         if (withdrawNAV == 0) return false;
         uint256 diff = depositNAV > withdrawNAV ? depositNAV - withdrawNAV : withdrawNAV - depositNAV;
         return diff * BASIS_POINTS / withdrawNAV <= maxNavSpreadBps;
+    }
+
+    /// @notice Revert deallocations that would pay live value for frozen-mark claims while the
+    /// report is unusable; withdrawers must not front-run {forceMarkDown}.
+    function _requireMarkBackedByLive() internal view {
+        if (_reportUsable()) return;
+        uint256 unit = _snapshotUnit();
+        if (unit == 0) return;
+        uint256 livePPS = _shareValue(unit).mulDiv(FIXED_POINT_SCALAR, unit);
+        require(
+            lastGoodSharePrice <= livePPS.mulDiv(BASIS_POINTS + params.slippageBPS, BASIS_POINTS),
+            "Frozen mark above live"
+        );
     }
 
     function _idleAssets() internal view virtual override returns (uint256) {

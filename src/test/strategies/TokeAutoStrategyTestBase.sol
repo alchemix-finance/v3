@@ -401,6 +401,28 @@ abstract contract TokeAutoStrategyTestBase is BaseStrategyTest {
         assertLt(livePreview, frozenPreview, "live Withdraw preview would have sized the unwind lower");
     }
 
+    /// @notice While a wide purpose spread depresses live Withdraw NAV below the frozen mark,
+    /// deallocations must revert — withdrawers may not front-run forceMarkDown and extract
+    /// nominal value at the stale mark. After the owner marks down to (within the slippage
+    /// haircut of) live value, deallocations flow again.
+    function test_widePurposeSpread_deallocate_revertsUntilMarkedDown() public {
+        _allocateDirect(_navAllocAmount());
+
+        (uint256 lowWithdraw,) = _applyWidePurposeSpread();
+
+        vm.prank(vault);
+        vm.expectRevert(bytes("Frozen mark above live"));
+        IMYTStrategy(strategy).deallocate(getVaultParams(), _navAllocAmount() / 10, "", address(vault));
+
+        uint256 livePPS =
+            Math.mulDiv(lowWithdraw, MYTStrategy(strategy).FIXED_POINT_SCALAR(), IERC4626Like(_autoVault()).totalSupply());
+        vm.prank(admin);
+        _toke().forceMarkDown(livePPS);
+
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), _navAllocAmount() / 10, "", address(vault));
+    }
+
     function test_forceDeallocate_direct_disabled_by_default_and_owner_can_enable() public {
         assertFalse(_toke().canForceDeallocate(), "force deallocate should default disabled");
 
