@@ -49,6 +49,10 @@ interface IERC20Lite {
  *
  *         Per grant, small and worth it:
  *         - maxClip: the largest single move, so one bad quote cannot spend the grant;
+ *         - maxLossBps: how far realAssets may diverge from `assets`, in basis points.
+ *           A deallocate may shrink the position by at most assets × (1 + maxLossBps);
+ *           an allocate must grow it by at least assets × (1 − maxLossBps). 10_000
+ *           is the maximum (100%). This bound does not depend on priceToken;
  *         - minIntervalBlocks: spacing between clips from the same grant;
  *         - a PRICE FLOOR, not a slippage bound: `priceToken` is the ERC20 whose
  *           balance at the adapter measures the position (the LST a swap
@@ -67,7 +71,7 @@ interface IERC20Lite {
  *         Caps: the allocator proxy applies the risk-class global cap and, for
  *         operators, the class local cap to every allocate clip; this contract
  *         cannot lift them. The proxy's deallocate has no cap check, which is why
- *         grants and maxClip are the only ceiling on the way out.
+ *         the grant, maxClip, and maxLossBps are the ceiling on the way out.
  *
  *         Authority: one owner. The deployer starts as owner, grants the first
  *         budgets, then hands ownership to the allocator admin (the Safe) with the
@@ -87,7 +91,10 @@ contract ClipAllocator {
         uint64 lastClipBlock;
         address priceToken;        // ERC20 whose balance at the adapter measures the position (0 = unguarded)
         uint256 limitRate;         // underlying per token, WAD on raw units: floor (deallocate) / ceiling (allocate)
+        uint16 maxLossBps;         // realAssets may diverge from assets by this many basis points (max 10_000)
     }
+
+    uint256 internal constant BPS = 10_000;
 
     address public owner;                                         // the deployer, then the Safe
     address public pendingOwner;
@@ -98,7 +105,7 @@ contract ClipAllocator {
 
     event GrantUpdated(address indexed bot, address indexed adapter, bool isAllocate,
                        uint256 remaining, uint256 maxClip, uint32 minIntervalBlocks,
-                       address priceToken, uint256 limitRate);
+                       address priceToken, uint256 limitRate, uint16 maxLossBps);
     event ClipExecuted(address indexed bot, address indexed adapter, bool isAllocate,
                        uint256 assets, int256 realAssetsDelta, int256 bookedAllocationDelta,
                        int256 priceTokenDelta, uint256 rate, uint256 remaining);
@@ -119,6 +126,7 @@ contract ClipAllocator {
     error RateOutsideLimit(uint256 rate, uint256 limitRate, bool isAllocate);
     error PositionDidNotMove(address priceToken, int256 priceTokenDelta);
     error RealAssetsDidNotMove(uint256 assets, int256 realAssetsDelta);
+    error LossExceedsLimit(uint256 valueMoved, uint256 limit, bool isAllocate);
     error ZeroAmount();
 
     modifier onlyOwner() {
@@ -144,40 +152,42 @@ contract ClipAllocator {
     /// @notice Add `amount` to the bot's deallocate budget on `adapter` and set
     ///         its limits. Amounts add, so a top-up is the same call again.
     function grantDeallocate(address bot, address adapter, uint256 amount, uint256 maxClip,
-                             uint32 minIntervalBlocks, address priceToken, uint256 limitRate) external onlyOwner {
-        _grant(deallocateGrants[bot][adapter], bot, adapter, false, amount, maxClip, minIntervalBlocks, priceToken, limitRate);
+                             uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps) external onlyOwner {
+        _grant(deallocateGrants[bot][adapter], bot, adapter, false, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
     }
 
     function grantAllocate(address bot, address adapter, uint256 amount, uint256 maxClip,
-                           uint32 minIntervalBlocks, address priceToken, uint256 limitRate) external onlyOwner {
-        _grant(allocateGrants[bot][adapter], bot, adapter, true, amount, maxClip, minIntervalBlocks, priceToken, limitRate);
+                           uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps) external onlyOwner {
+        _grant(allocateGrants[bot][adapter], bot, adapter, true, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
     }
 
     /// @notice Zero a budget. The limits stay for the next grant.
     function revokeDeallocate(address bot, address adapter) external onlyOwner {
         Grant storage g = deallocateGrants[bot][adapter];
         g.remaining = 0;
-        emit GrantUpdated(bot, adapter, false, 0, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate);
+        emit GrantUpdated(bot, adapter, false, 0, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps);
     }
 
     function revokeAllocate(address bot, address adapter) external onlyOwner {
         Grant storage g = allocateGrants[bot][adapter];
         g.remaining = 0;
-        emit GrantUpdated(bot, adapter, true, 0, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate);
+        emit GrantUpdated(bot, adapter, true, 0, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps);
     }
 
     function _grant(Grant storage g, address bot, address adapter, bool isAllocate, uint256 amount,
-                    uint256 maxClip, uint32 minIntervalBlocks, address priceToken, uint256 limitRate) internal {
+                    uint256 maxClip, uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps) internal {
         require(bot != address(0) && maxClip > 0, "grant");
         require(priceToken == address(0) || limitRate > 0, "rate");   // a guarded grant needs a real limit
+        require(maxLossBps <= BPS, "loss");
         if (!vault.isAdapter(adapter)) revert NotAdapter(adapter);
         g.remaining += amount;
         g.maxClip = maxClip;
         g.minIntervalBlocks = minIntervalBlocks;
         g.priceToken = priceToken;
         g.limitRate = limitRate;
+        g.maxLossBps = maxLossBps;
         bots[bot] = true;
-        emit GrantUpdated(bot, adapter, isAllocate, g.remaining, maxClip, minIntervalBlocks, priceToken, limitRate);
+        emit GrantUpdated(bot, adapter, isAllocate, g.remaining, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
     }
 
     /// @notice Emergency stop: any bot may pause, only the owner may unpause.
@@ -260,6 +270,7 @@ contract ClipAllocator {
         else allocator.deallocateWithUnwrapAndSwap(adapter, assets, txData, minIntermediateOut);
         (int256 dReal, int256 dBooked, int256 dTokens) = _deltas(adapter, g.priceToken, b);
         if (dReal >= 0) revert RealAssetsDidNotMove(assets, dReal);
+        _checkRealLoss(g.maxLossBps, assets, dReal, false);
         // price floor: the vault received `assets` for |dTokens| of the position
         uint256 rate = _rate(g, assets, dTokens, false);
         emit ClipExecuted(msg.sender, adapter, false, assets, dReal, dBooked, dTokens, rate, g.remaining);
@@ -272,9 +283,22 @@ contract ClipAllocator {
         else allocator.allocate(adapter, assets);
         (int256 dReal, int256 dBooked, int256 dTokens) = _deltas(adapter, g.priceToken, b);
         if (dReal <= 0) revert RealAssetsDidNotMove(assets, dReal);
+        _checkRealLoss(g.maxLossBps, assets, dReal, true);
         // price ceiling: the vault paid `assets` for dTokens of the position
         uint256 rate = _rate(g, assets, dTokens, true);
         emit ClipExecuted(msg.sender, adapter, true, assets, dReal, dBooked, dTokens, rate, g.remaining);
+    }
+
+    /// @dev Deallocate: the position may shrink by at most assets × (1 + maxLossBps).
+    ///      Allocate: it must grow by at least assets × (1 − maxLossBps).
+    function _checkRealLoss(uint16 maxLossBps, uint256 assets, int256 dReal, bool isAllocate) internal pure {
+        if (isAllocate) {
+            uint256 minReal = assets * (BPS - maxLossBps) / BPS;
+            if (uint256(dReal) < minReal) revert LossExceedsLimit(uint256(dReal), minReal, true);
+        } else {
+            uint256 maxDrop = assets * (BPS + maxLossBps) / BPS;
+            if (uint256(-dReal) > maxDrop) revert LossExceedsLimit(uint256(-dReal), maxDrop, false);
+        }
     }
 
     /// @dev rate = underlying per position token, WAD on raw units. Deallocate:
