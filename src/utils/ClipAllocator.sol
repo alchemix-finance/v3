@@ -65,8 +65,10 @@ interface IERC20Lite {
  *
  *         Idle cash: an allocate clip needs the vault to hold `assets`. When it is
  *         short, the clip raises the shortfall from the liquidity adapter, and that
- *         raise consumes the bot's DEALLOCATE grant on the liquidity adapter. No
- *         grant there means IdleUnavailable: nothing moves outside a grant.
+ *         raise consumes the bot's DEALLOCATE grant on the liquidity adapter. The
+ *         raise is spacing-exempt (it is part of this clip) but it is still bound
+ *         by that grant's maxClip, maxLossBps, and price floor. No grant there
+ *         means IdleUnavailable: nothing moves outside a grant.
  *
  *         Caps: the allocator proxy applies the risk-class global cap and, for
  *         operators, the class local cap to every allocate clip; this contract
@@ -331,7 +333,7 @@ contract ClipAllocator {
 
     /// @dev An allocate clip needs the vault to hold `needed`. The shortfall comes
     ///      out of the liquidity adapter, drawn from the caller's deallocate grant
-    ///      there. Raising is a vault-internal move (never a borrow).
+    ///      there. Spacing (minIntervalBlocks) does not apply. maxClip, maxLossBps, and the price floor do.
     function _raiseIdle(uint256 needed, address target) internal {
         uint256 idle = asset.balanceOf(address(vault));
         if (idle >= needed) return;
@@ -340,9 +342,14 @@ contract ClipAllocator {
         if (liq == address(0) || liq == target) revert IdleUnavailable(needed, idle, liq);
         Grant storage g = deallocateGrants[msg.sender][liq];
         if (g.maxClip == 0 || shortfall > g.remaining) revert IdleUnavailable(needed, idle, liq);
-        // the raise is spacing-exempt (it is part of this clip) but budget-bound
+        if (shortfall > g.maxClip) revert ClipTooLarge(g.maxClip, shortfall);
         g.remaining -= shortfall;
+        Snap memory b = _snapshot(liq, g.priceToken);
         allocator.deallocate(liq, shortfall);
+        (int256 dReal,, int256 dTokens) = _deltas(liq, g.priceToken, b);
+        if (dReal >= 0) revert RealAssetsDidNotMove(shortfall, dReal);
+        _checkRealLoss(g.maxLossBps, shortfall, dReal, false);
+        _rate(g, shortfall, dTokens, false);
         emit IdleRaised(msg.sender, liq, shortfall, g.remaining);
     }
 }

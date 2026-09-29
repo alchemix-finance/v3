@@ -452,24 +452,66 @@ contract ClipAllocatorGuardsTest is Test {
         clip.allocateClip(address(strategy), CLIP);
     }
 
-    /// @dev The raise is budget-bound. maxClip on the liquidity grant is 1 wei and is not applied.
+    /// @dev The raise pulls exactly the shortfall and charges the liquidity grant for it.
     function test_allocate_raisesShortfallAndConsumesLiquidityGrant() public {
         uint256 idle = 40 ether;
         uint256 shortfall = CLIP - idle;
         asset.set(address(vault), idle);
         vault.setLiquidityAdapter(address(liquidity));
+        liquidity.setMove(shortfall, 0, 0, 0);
         strategy.setMove(0, CLIP, 0, 0);
 
         clip.grantAllocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
-        clip.grantDeallocate(bot, address(liquidity), shortfall, 1, 0, address(0), 0, 0);
+        clip.grantDeallocate(bot, address(liquidity), shortfall, shortfall, 0, address(0), 0, 0);
 
         vm.prank(bot);
         clip.allocateClip(address(strategy), CLIP);
 
         assertEq(strategy.realAssets(), CLIP);
+        assertEq(liquidity.realAssets(), 0);
         (uint256 liquidityLeft,,,,,,) = clip.deallocateGrants(bot, address(liquidity));
         assertEq(liquidityLeft, 0);
         (uint256 allocateLeft,,,,,,) = clip.allocateGrants(bot, address(strategy));
         assertEq(allocateLeft, 0);
+    }
+
+    /// @dev For any clip the vault cannot fully fund: a shortfall above maxClip reverts, and a
+    ///      liquidity-position drop past maxLossBps reverts without spending the grant.
+    function testFuzz_raise_enforcesLiquidityMaxClipAndMaxLoss(
+        uint256 clipAmount,
+        uint256 idle,
+        uint256 maxClip,
+        uint256 lossBps,
+        uint256 extraDrop
+    ) public {
+        clipAmount = bound(clipAmount, 2, 1_000 ether);
+        idle = bound(idle, 0, clipAmount - 2);
+        uint256 shortfall = clipAmount - idle;
+        maxClip = bound(maxClip, 1, shortfall - 1);
+        lossBps = bound(lossBps, 0, 10_000);
+        uint256 maxDrop = shortfall * (10_000 + lossBps) / 10_000;
+        extraDrop = bound(extraDrop, 1, 1_000 ether);
+        uint256 drop = maxDrop + extraDrop;
+
+        asset.set(address(vault), idle);
+        vault.setLiquidityAdapter(address(liquidity));
+        liquidity.setMove(drop, 0, 0, 0);
+        strategy.setMove(0, clipAmount, 0, 0);
+        clip.grantAllocate(bot, address(strategy), clipAmount, clipAmount, 0, address(0), 0, 0);
+
+        clip.grantDeallocate(bot, address(liquidity), shortfall, maxClip, 0, address(0), 0, uint16(lossBps));
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.ClipTooLarge.selector, maxClip, shortfall));
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), clipAmount);
+
+        clip.revokeDeallocate(bot, address(liquidity));
+        clip.grantDeallocate(bot, address(liquidity), shortfall, shortfall, 0, address(0), 0, uint16(lossBps));
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.LossExceedsLimit.selector, drop, maxDrop, false));
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), clipAmount);
+
+        assertEq(liquidity.realAssets(), drop);
+        (uint256 liquidityLeft,,,,,,) = clip.deallocateGrants(bot, address(liquidity));
+        assertEq(liquidityLeft, shortfall);
     }
 }
