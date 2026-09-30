@@ -145,6 +145,47 @@ contract ClipAllocatorLossBoundTest is Test {
 
         assertEq(strategy.realAssets(), MIN_GAIN);
     }
+
+    /// @dev The bound is assets × (10_000 ± maxLossBps) / 10_000. A clip at that
+    ///      product passes; one wei past it reverts. Division can round the
+    ///      allocate minimum down to 0 or 1, and a flat position then fails the
+    ///      sign check before the loss bound.
+    function testFuzz_lossBound(uint256 assets, uint256 lossBps) public {
+        assets = bound(assets, 1, 1_000 ether);
+        lossBps = bound(lossBps, 0, 10_000);
+        uint256 maxDrop = assets * (10_000 + lossBps) / 10_000;
+        uint256 minGain = assets * (10_000 - lossBps) / 10_000;
+
+        clip.grantDeallocate(bot, address(strategy), assets, assets, 0, address(0), 0, uint16(lossBps));
+        strategy.setRealAssets(maxDrop + 1, 0);
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.LossExceedsLimit.selector, maxDrop + 1, maxDrop, false));
+        vm.prank(bot);
+        clip.deallocateClip(address(strategy), assets);
+
+        strategy.setRealAssets(maxDrop, 0);
+        vm.prank(bot);
+        clip.deallocateClip(address(strategy), assets);
+        assertEq(strategy.realAssets(), 0);
+
+        clip.grantAllocate(bot, address(strategy), assets, assets, 0, address(0), 0, uint16(lossBps));
+        // A gain of 0 fails the sign check before the loss bound, so the one-wei
+        // shortfall is only a loss revert once the minimum itself is at least 2.
+        if (minGain < 2) {
+            strategy.setRealAssets(0, 0);
+            vm.expectRevert(abi.encodeWithSelector(ClipAllocator.RealAssetsDidNotMove.selector, assets, int256(0)));
+        } else {
+            strategy.setRealAssets(0, minGain - 1);
+            vm.expectRevert(abi.encodeWithSelector(ClipAllocator.LossExceedsLimit.selector, minGain - 1, minGain, true));
+        }
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), assets);
+
+        uint256 acceptedGain = minGain == 0 ? 1 : minGain;
+        strategy.setRealAssets(0, acceptedGain);
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), assets);
+        assertEq(strategy.realAssets(), acceptedGain);
+    }
 }
 
 /// @dev Balance the test can set per holder. Used both as the vault asset (idle)
@@ -513,5 +554,159 @@ contract ClipAllocatorGuardsTest is Test {
         assertEq(liquidity.realAssets(), drop);
         (uint256 liquidityLeft,,,,,,) = clip.deallocateGrants(bot, address(liquidity));
         assertEq(liquidityLeft, shortfall);
+    }
+
+    /// @dev A raise is part of the allocate clip, so the liquidity grant's spacing
+    ///      does not apply and the raise does not move lastClipBlock.
+    function test_raise_ignoresMinIntervalAndDoesNotStampLastClip() public {
+        uint256 idle = 40 ether;
+        uint256 shortfall = CLIP - idle;
+        clip.grantDeallocate(bot, address(liquidity), 2 * CLIP + shortfall, CLIP, 5, address(0), 0, 0);
+        liquidity.setMove(1_000 ether, 1_000 ether - CLIP, 0, 0);
+
+        vm.prank(bot);
+        clip.deallocateClip(address(liquidity), CLIP);
+        uint64 stamped = uint64(block.number);
+
+        asset.set(address(vault), idle);
+        vault.setLiquidityAdapter(address(liquidity));
+        liquidity.setMove(1_000 ether - CLIP, 1_000 ether - CLIP - shortfall, 0, 0);
+        strategy.setMove(0, CLIP, 0, 0);
+        clip.grantAllocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
+
+        vm.roll(block.number + 1);
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), CLIP);
+
+        assertEq(strategy.realAssets(), CLIP);
+        (,,, uint64 lastClipBlock,,,) = clip.deallocateGrants(bot, address(liquidity));
+        assertEq(lastClipBlock, stamped);
+
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.TooSoon.selector, stamped + 5));
+        vm.prank(bot);
+        clip.deallocateClip(address(liquidity), CLIP);
+    }
+
+    /// @dev 60 ether of idle is raised for 120 ether of the position token.
+    ///      rate = 0.5e18, under a 1e18 floor.
+    function test_raise_revertsWhenRateBelowFloor() public {
+        uint256 idle = 40 ether;
+        uint256 shortfall = CLIP - idle;
+        asset.set(address(vault), idle);
+        vault.setLiquidityAdapter(address(liquidity));
+        liquidity.setPriceToken(priceToken);
+        liquidity.setMove(1_000 ether, 1_000 ether - shortfall, 120 ether, 0);
+        strategy.setMove(0, CLIP, 0, 0);
+        clip.grantAllocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
+        clip.grantDeallocate(bot, address(liquidity), shortfall, shortfall, 0, address(priceToken), 1e18, 0);
+
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.RateOutsideLimit.selector, 0.5e18, 1e18, false));
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), CLIP);
+    }
+
+    function test_raise_revertsWhenPriceTokenDoesNotMove() public {
+        uint256 idle = 40 ether;
+        uint256 shortfall = CLIP - idle;
+        asset.set(address(vault), idle);
+        vault.setLiquidityAdapter(address(liquidity));
+        liquidity.setPriceToken(priceToken);
+        liquidity.setMove(1_000 ether, 1_000 ether - shortfall, 100 ether, 100 ether);
+        strategy.setMove(0, CLIP, 0, 0);
+        clip.grantAllocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
+        clip.grantDeallocate(bot, address(liquidity), shortfall, shortfall, 0, address(priceToken), 1e18, 0);
+
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.PositionDidNotMove.selector, address(priceToken), int256(0)));
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), CLIP);
+    }
+
+    function test_raise_revertsWhenRealAssetsDoNotShrink() public {
+        uint256 idle = 40 ether;
+        uint256 shortfall = CLIP - idle;
+        asset.set(address(vault), idle);
+        vault.setLiquidityAdapter(address(liquidity));
+        liquidity.setMove(1_000 ether, 1_000 ether, 0, 0);
+        strategy.setMove(0, CLIP, 0, 0);
+        clip.grantAllocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
+        clip.grantDeallocate(bot, address(liquidity), shortfall, shortfall, 0, address(0), 0, 0);
+
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.RealAssetsDidNotMove.selector, shortfall, int256(0)));
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), CLIP);
+    }
+
+    function test_raise_revertsWhenShortfallExceedsRemaining() public {
+        uint256 idle = 40 ether;
+        uint256 shortfall = CLIP - idle;
+        asset.set(address(vault), idle);
+        vault.setLiquidityAdapter(address(liquidity));
+        strategy.setMove(0, CLIP, 0, 0);
+        clip.grantAllocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
+        clip.grantDeallocate(bot, address(liquidity), shortfall - 1, shortfall, 0, address(0), 0, 0);
+
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.IdleUnavailable.selector, CLIP, idle, address(liquidity)));
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), CLIP);
+    }
+
+    function test_grant_revertsOnBadParameters() public {
+        vm.expectRevert(bytes("grant"));
+        clip.grantDeallocate(address(0), address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
+
+        vm.expectRevert(bytes("grant"));
+        clip.grantDeallocate(bot, address(strategy), CLIP, 0, 0, address(0), 0, 0);
+
+        vm.expectRevert(bytes("rate"));
+        clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 0, address(priceToken), 0, 0);
+
+        vm.expectRevert(bytes("loss"));
+        clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 10_001);
+    }
+
+    /// @dev A second grant adds budget and overwrites the limits, including a tighter cap.
+    function test_grant_topUpAddsRemainingAndReplacesLimits() public {
+        clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 5, address(0), 0, 100);
+        clip.grantDeallocate(bot, address(strategy), CLIP, 1 ether, 0, address(priceToken), 1e18, 0);
+
+        (
+            uint256 remaining,
+            uint256 maxClip,
+            uint32 interval,
+            ,
+            address price,
+            uint256 limitRate,
+            uint16 maxLossBps
+        ) = clip.deallocateGrants(bot, address(strategy));
+        assertEq(remaining, 2 * CLIP);
+        assertEq(maxClip, 1 ether);
+        assertEq(interval, 0);
+        assertEq(price, address(priceToken));
+        assertEq(limitRate, 1e18);
+        assertEq(maxLossBps, 0);
+    }
+
+    function test_ownership_twoStepAndRejectsWrongAcceptor() public {
+        address safe = makeAddr("safe");
+
+        vm.expectRevert(ClipAllocator.NotOwner.selector);
+        vm.prank(bot);
+        clip.transferOwnership(safe);
+
+        clip.transferOwnership(safe);
+        assertEq(clip.pendingOwner(), safe);
+        assertEq(clip.owner(), address(this));
+
+        vm.expectRevert(ClipAllocator.NotOwner.selector);
+        vm.prank(bot);
+        clip.acceptOwnership();
+
+        vm.prank(safe);
+        clip.acceptOwnership();
+        assertEq(clip.owner(), safe);
+        assertEq(clip.pendingOwner(), address(0));
+
+        vm.expectRevert(ClipAllocator.NotOwner.selector);
+        clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
     }
 }
