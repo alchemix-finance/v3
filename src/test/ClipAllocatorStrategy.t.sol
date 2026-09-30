@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, Vm} from "forge-std/Test.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {IERC4626} from "forge-std/interfaces/IERC4626.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 import {AlchemistAllocator} from "../AlchemistAllocator.sol";
 import {AlchemistStrategyClassifier} from "../AlchemistStrategyClassifier.sol";
@@ -52,6 +53,30 @@ abstract contract ClipAllocatorStrategyTest is Test {
     function _deployLiquidityStrategy(address) internal virtual returns (IMYTStrategy) {
         return IMYTStrategy(address(0));
     }
+
+    /// @dev ERC20 whose balance at the strategy measures the position (aToken, 4626 share).
+    ///      address(0) skips the price-guard tests.
+    function _priceToken() internal view virtual returns (address) {
+        return address(0);
+    }
+
+    /// @dev Underlying per position token at the fork block, WAD on raw units.
+    function _expectedRate() internal view virtual returns (uint256) {
+        return 1e18;
+    }
+
+    function _liquidityPriceToken() internal view virtual returns (address) {
+        return address(0);
+    }
+
+    function _expectedLiquidityRate() internal view virtual returns (uint256) {
+        return 1e18;
+    }
+
+    /// @dev 0.1%: the market rate read from the position token against the expected one.
+    uint256 internal constant RATE_TOLERANCE = 1e15;
+    bytes32 internal constant CLIP_EXECUTED =
+        keccak256("ClipExecuted(address,address,bool,uint256,int256,int256,int256,uint256,uint256)");
 
     function setUp() public {
         vm.createSelectFork(_rpc());
@@ -128,19 +153,8 @@ abstract contract ClipAllocatorStrategyTest is Test {
             return;
         }
 
-        _registerAdapter(liquidity);
-        vm.prank(admin);
-        allocator.setLiquidityAdapter(address(liquidity), _directLiquidityData());
-
-        address asset = _asset();
-        uint256 idle = IERC20(asset).balanceOf(address(vault));
-        vm.prank(admin);
-        allocator.allocate(address(liquidity), idle);
-
-        uint256 idleAfterSweep = IERC20(asset).balanceOf(address(vault));
         uint256 clipAmount = _clip();
-        assertLt(idleAfterSweep, clipAmount, "sweep left enough idle to skip the raise");
-        uint256 shortfall = clipAmount - idleAfterSweep;
+        uint256 shortfall = _sweepIntoLiquidity(liquidity, clipAmount);
         uint256 liquidityBefore = liquidity.realAssets();
 
         clip.grantAllocate(bot, address(strategy), clipAmount, clipAmount, 0, address(0), 0, _maxLossBps());
@@ -151,11 +165,110 @@ abstract contract ClipAllocatorStrategyTest is Test {
 
         assertApproxEqAbs(strategy.realAssets(), clipAmount, _dust());
         assertApproxEqAbs(liquidityBefore - liquidity.realAssets(), shortfall, _dust());
-        assertEq(IERC20(asset).balanceOf(address(vault)), 0);
+        assertEq(IERC20(_asset()).balanceOf(address(vault)), 0);
         (uint256 allocateLeft,,,,,,) = clip.allocateGrants(bot, address(strategy));
         assertEq(allocateLeft, 0);
         (uint256 liquidityLeft,,,,,,) = clip.deallocateGrants(bot, address(liquidity));
         assertEq(liquidityLeft, 0);
+    }
+
+    /// @dev The price guard on real tokens. A ceiling at half the market rate rejects the
+    ///      allocate; a floor at double rejects the deallocate. Limits 1% off market pass,
+    ///      and the rate the clip reports is the market rate in raw units.
+    function test_direct_priceGuard_boundsRealRate() public {
+        address token = _priceToken();
+        if (token == address(0)) {
+            vm.skip(true);
+            return;
+        }
+        uint256 clipAmount = _clip();
+        uint256 expected = _expectedRate();
+
+        clip.grantAllocate(bot, address(strategy), clipAmount, clipAmount, 0, token, expected / 2, _maxLossBps());
+        vm.expectPartialRevert(ClipAllocator.RateOutsideLimit.selector);
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), clipAmount);
+
+        clip.grantAllocate(bot, address(strategy), 0, clipAmount, 0, token, expected * 101 / 100, _maxLossBps());
+        vm.recordLogs();
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), clipAmount);
+        assertApproxEqRel(_lastClipRate(), expected, RATE_TOLERANCE, "allocate rate");
+        assertApproxEqAbs(strategy.realAssets(), clipAmount, _dust());
+
+        uint256 held = strategy.realAssets();
+        uint256 pull = held > clipAmount ? clipAmount : held;
+        clip.grantDeallocate(bot, address(strategy), pull, pull, 0, token, expected * 2, _maxLossBps());
+        vm.expectPartialRevert(ClipAllocator.RateOutsideLimit.selector);
+        vm.prank(bot);
+        clip.deallocateClip(address(strategy), pull);
+
+        clip.grantDeallocate(bot, address(strategy), 0, pull, 0, token, expected * 99 / 100, _maxLossBps());
+        vm.recordLogs();
+        vm.prank(bot);
+        clip.deallocateClip(address(strategy), pull);
+        assertApproxEqRel(_lastClipRate(), expected, RATE_TOLERANCE, "deallocate rate");
+        assertApproxEqAbs(strategy.realAssets(), held - pull, _dust());
+    }
+
+    /// @dev The raise applies the liquidity grant's floor to real shares. Double the
+    ///      market rate rejects the raise; 1% under passes and burns shares at market.
+    function test_raise_priceGuard_boundsLiquidityRate() public {
+        IMYTStrategy liquidity = _deployLiquidityStrategy(address(vault));
+        address token = _liquidityPriceToken();
+        if (address(liquidity) == address(0) || token == address(0)) {
+            vm.skip(true);
+            return;
+        }
+        uint256 clipAmount = _clip();
+        uint256 shortfall = _sweepIntoLiquidity(liquidity, clipAmount);
+        uint256 expected = _expectedLiquidityRate();
+        clip.grantAllocate(bot, address(strategy), clipAmount, clipAmount, 0, address(0), 0, _maxLossBps());
+
+        clip.grantDeallocate(bot, address(liquidity), shortfall, shortfall, 0, token, expected * 2, _maxLossBps());
+        vm.expectPartialRevert(ClipAllocator.RateOutsideLimit.selector);
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), clipAmount);
+
+        clip.grantDeallocate(bot, address(liquidity), 0, shortfall, 0, token, expected * 99 / 100, _maxLossBps());
+        uint256 sharesBefore = IERC20(token).balanceOf(address(liquidity));
+        vm.prank(bot);
+        clip.allocateClip(address(strategy), clipAmount);
+
+        uint256 burned = sharesBefore - IERC20(token).balanceOf(address(liquidity));
+        assertGt(burned, 0);
+        assertApproxEqRel(shortfall * 1e18 / burned, expected, RATE_TOLERANCE, "raise rate");
+        assertApproxEqAbs(strategy.realAssets(), clipAmount, _dust());
+    }
+
+    /// @dev Register `liquidity`, make it the liquidity adapter, and move all idle into it.
+    ///      Returns the shortfall a clip of `clipAmount` must raise.
+    function _sweepIntoLiquidity(IMYTStrategy liquidity, uint256 clipAmount) internal returns (uint256 shortfall) {
+        _registerAdapter(liquidity);
+        vm.prank(admin);
+        allocator.setLiquidityAdapter(address(liquidity), _directLiquidityData());
+
+        address asset = _asset();
+        uint256 idle = IERC20(asset).balanceOf(address(vault));
+        vm.prank(admin);
+        allocator.allocate(address(liquidity), idle);
+
+        uint256 idleAfterSweep = IERC20(asset).balanceOf(address(vault));
+        assertLt(idleAfterSweep, clipAmount, "sweep left enough idle to skip the raise");
+        shortfall = clipAmount - idleAfterSweep;
+    }
+
+    /// @dev Rate from the most recent ClipExecuted since vm.recordLogs().
+    function _lastClipRate() internal view returns (uint256 rate) {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = logs.length; i > 0; i--) {
+            Vm.Log memory log = logs[i - 1];
+            if (log.emitter == address(clip) && log.topics[0] == CLIP_EXECUTED) {
+                (,,,,, rate,) = abi.decode(log.data, (bool, uint256, int256, int256, int256, uint256, uint256));
+                return rate;
+            }
+        }
+        revert("no ClipExecuted");
     }
 
     function _registerAdapter(IMYTStrategy adapter) internal {
@@ -213,6 +326,20 @@ contract ClipAllocatorAaveTest is ClipAllocatorStrategyTest {
         return 10 ether;
     }
 
+    /// @dev aToken balances are in underlying, so one aWETH is one WETH.
+    function _priceToken() internal pure override returns (address) {
+        return AAVE_V3_ETH_WETH_ATOKEN;
+    }
+
+    /// @dev The Yearn share is the vault itself. Its rate is the price per share.
+    function _liquidityPriceToken() internal pure override returns (address) {
+        return YV_WETH_VAULT;
+    }
+
+    function _expectedLiquidityRate() internal view override returns (uint256) {
+        return IERC4626(YV_WETH_VAULT).convertToAssets(1e18);
+    }
+
     function _deployLiquidityStrategy(address vault_) internal override returns (IMYTStrategy) {
         return new ERC4626Strategy(
             vault_,
@@ -255,5 +382,94 @@ contract ClipAllocatorAaveTest is ClipAllocatorStrategyTest {
             additionalIncentives: false,
             slippageBPS: 1
         });
+    }
+}
+
+/// @notice Aave v3 USDC on mainnet: the 6-decimal control. Same clip math on raw units,
+///         with the Yearn USDC-1 share as the liquidity adapter's price token.
+contract ClipAllocatorAaveUSDCTest is ClipAllocatorStrategyTest {
+    address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address internal constant AAVE_V3_ETH_USDC_ATOKEN = 0x98C23E9d8f34FEFb1B7BD6a91B7FF122F4e16F5c;
+    address internal constant AAVE_V3_ETH_POOL_ADDRESS_PROVIDER = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
+    address internal constant REWARDS_CONTROLLER = 0x8164Cc65827dcFe994AB23944CBC90e0aa80bFcb;
+    address internal constant REWARD_TOKEN = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+    /// @dev Yearn USDC-1 vault. Used only as the liquidity adapter.
+    address internal constant YV_USDC_VAULT = 0x696d02Db93291651ED510704c9b286841d506987;
+
+    function _rpc() internal view override returns (string memory) {
+        return vm.envOr("MAINNET_RPC_URL", string("https://mainnet.gateway.tenderly.co"));
+    }
+
+    function _asset() internal pure override returns (address) {
+        return USDC;
+    }
+
+    function _deposit() internal pure override returns (uint256) {
+        return 100_000e6;
+    }
+
+    function _clip() internal pure override returns (uint256) {
+        return 10_000e6;
+    }
+
+    /// @dev A few raw units. The 18-decimal default would be a billion USDC.
+    function _dust() internal pure override returns (uint256) {
+        return 10;
+    }
+
+    function _absoluteCap() internal pure override returns (uint256) {
+        return 1_000_000e6;
+    }
+
+    function _priceToken() internal pure override returns (address) {
+        return AAVE_V3_ETH_USDC_ATOKEN;
+    }
+
+    function _liquidityPriceToken() internal pure override returns (address) {
+        return YV_USDC_VAULT;
+    }
+
+    function _expectedLiquidityRate() internal view override returns (uint256) {
+        return IERC4626(YV_USDC_VAULT).convertToAssets(1e18);
+    }
+
+    function _deployLiquidityStrategy(address vault_) internal override returns (IMYTStrategy) {
+        return new ERC4626Strategy(
+            vault_,
+            IMYTStrategy.StrategyParams({
+                owner: admin,
+                name: "Yearn Mainnet USDC-1",
+                protocol: "Yearn",
+                riskClass: _riskClass(),
+                cap: _absoluteCap(),
+                globalCap: 1e18,
+                estimatedYield: 500,
+                additionalIncentives: false,
+                slippageBPS: 1
+            }),
+            YV_USDC_VAULT
+        );
+    }
+
+    function _deployStrategy(address vault_) internal override returns (IMYTStrategy) {
+        return new AaveStrategy(
+            vault_,
+            IMYTStrategy.StrategyParams({
+                owner: admin,
+                name: "AaveV3ETHUSDC",
+                protocol: "AaveV3ETHUSDC",
+                riskClass: _riskClass(),
+                cap: _absoluteCap(),
+                globalCap: 1e18,
+                estimatedYield: 100e18,
+                additionalIncentives: false,
+                slippageBPS: 1
+            }),
+            USDC,
+            AAVE_V3_ETH_USDC_ATOKEN,
+            AAVE_V3_ETH_POOL_ADDRESS_PROVIDER,
+            REWARDS_CONTROLLER,
+            REWARD_TOKEN
+        );
     }
 }
