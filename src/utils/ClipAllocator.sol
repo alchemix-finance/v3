@@ -77,8 +77,8 @@ interface IERC20Lite {
  *
  *         Authority: one owner. The deployer starts as owner, grants the first
  *         budgets, then hands ownership to the allocator admin (the Safe) with the
- *         two-step transfer. Any bot holding a grant may pause (emergency stop);
- *         only the owner unpauses. The Safe keeps the kill switch:
+ *         two-step transfer. Any bot with budget remaining may pause (emergency
+ *         stop); only the owner unpauses. The Safe keeps the kill switch:
  *         `setOperator(mover, false)`.
  */
 contract ClipAllocator {
@@ -101,7 +101,7 @@ contract ClipAllocator {
     address public owner;                                         // the deployer, then the Safe
     address public pendingOwner;
     bool public paused;
-    mapping(address => bool) public bots;                          // any address that ever held a grant
+    mapping(address => uint256) public budget;                     // sum of remaining across this bot's grants
     mapping(address => mapping(address => Grant)) public deallocateGrants;  // bot → adapter → grant
     mapping(address => mapping(address => Grant)) public allocateGrants;    // bot → adapter → grant
 
@@ -166,12 +166,14 @@ contract ClipAllocator {
     /// @notice Zero a budget. The limits stay for the next grant.
     function revokeDeallocate(address bot, address adapter) external onlyOwner {
         Grant storage g = deallocateGrants[bot][adapter];
+        budget[bot] -= g.remaining;
         g.remaining = 0;
         emit GrantUpdated(bot, adapter, false, 0, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps);
     }
 
     function revokeAllocate(address bot, address adapter) external onlyOwner {
         Grant storage g = allocateGrants[bot][adapter];
+        budget[bot] -= g.remaining;
         g.remaining = 0;
         emit GrantUpdated(bot, adapter, true, 0, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps);
     }
@@ -183,18 +185,18 @@ contract ClipAllocator {
         require(maxLossBps <= BPS, "loss");
         if (!vault.isAdapter(adapter)) revert NotAdapter(adapter);
         g.remaining += amount;
+        budget[bot] += amount;
         g.maxClip = maxClip;
         g.minIntervalBlocks = minIntervalBlocks;
         g.priceToken = priceToken;
         g.limitRate = limitRate;
         g.maxLossBps = maxLossBps;
-        bots[bot] = true;
         emit GrantUpdated(bot, adapter, isAllocate, g.remaining, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
     }
 
-    /// @notice Emergency stop: any bot may pause, only the owner may unpause.
+    /// @notice Emergency stop: a bot with budget remaining may pause, only the owner may unpause.
     function setPaused(bool p) external {
-        if (msg.sender != owner && !(p && bots[msg.sender])) revert NotBotOrOwner();
+        if (msg.sender != owner && !(p && budget[msg.sender] > 0)) revert NotBotOrOwner();
         paused = p;
         emit Paused(msg.sender, p);
     }
@@ -258,6 +260,7 @@ contract ClipAllocator {
         uint64 readyAt = g.lastClipBlock + g.minIntervalBlocks;
         if (g.lastClipBlock != 0 && block.number < readyAt) revert TooSoon(readyAt);
         g.remaining -= assets;
+        budget[msg.sender] -= assets;
         g.lastClipBlock = uint64(block.number);
     }
 
@@ -344,6 +347,7 @@ contract ClipAllocator {
         if (g.maxClip == 0 || shortfall > g.remaining) revert IdleUnavailable(needed, idle, liq);
         if (shortfall > g.maxClip) revert ClipTooLarge(g.maxClip, shortfall);
         g.remaining -= shortfall;
+        budget[msg.sender] -= shortfall;
         Snap memory b = _snapshot(liq, g.priceToken);
         allocator.deallocate(liq, shortfall);
         (int256 dReal,, int256 dTokens) = _deltas(liq, g.priceToken, b);

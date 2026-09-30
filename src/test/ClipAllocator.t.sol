@@ -709,4 +709,25 @@ contract ClipAllocatorGuardsTest is Test {
         vm.expectRevert(ClipAllocator.NotOwner.selector);
         clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
     }
+
+    /// @dev Pause follows the sum of remaining. Revoking one grant leaves the
+    ///      other, and revoking the last one removes the emergency stop.
+    function test_revokedBot_cannotPause() public {
+        clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
+        clip.grantAllocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
+
+        clip.revokeDeallocate(bot, address(strategy));
+        assertEq(clip.budget(bot), CLIP);
+        vm.prank(bot);
+        clip.setPaused(true);
+        assertTrue(clip.paused());
+
+        clip.setPaused(false);
+        clip.revokeAllocate(bot, address(strategy));
+        assertEq(clip.budget(bot), 0);
+        vm.expectRevert(ClipAllocator.NotBotOrOwner.selector);
+        vm.prank(bot);
+        clip.setPaused(true);
+        assertFalse(clip.paused());
+    }
 }
