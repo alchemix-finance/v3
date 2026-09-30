@@ -7,11 +7,22 @@ import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 import {IMYTStrategy} from "../../interfaces/IMYTStrategy.sol";
 import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SiUSDStrategy} from "../../strategies/SiUSDStrategy.sol";
 
 interface ISIUSDView {
     function balanceOf(address account) external view returns (uint256);
     function convertToAssets(uint256 shares) external view returns (uint256 assets);
+    function totalAssets() external view returns (uint256);
+    function totalSupply() external view returns (uint256);
+}
+
+interface IInfiniFiGatewayView {
+    function getAddress(string calldata name) external view returns (address);
+}
+
+interface IYieldSharingView {
+    function vested() external view returns (uint256);
 }
 
 interface IRedeemControllerView {
@@ -179,6 +190,24 @@ contract SiUSDStrategyTest is BaseStrategyTest {
         );
     }
 
+    /// @notice realAssets must include this strategy's pro-rata YieldSharing.vested(), which
+    /// convertToAssets omits until a public distributeInterpolationRewards() lands it in siUSD.
+    function test_positionBalance_includesProRataVested() public {
+        vm.prank(admin);
+        IAllocator(allocator).allocate(strategy, 10_000e6);
+
+        address yieldSharing = IInfiniFiGatewayView(GATEWAY).getAddress("yieldSharing");
+        vm.warp(block.timestamp + 1 hours);
+        uint256 vested = IYieldSharingView(yieldSharing).vested();
+        assertGt(vested, 0, "warp should vest escrowed iUSD");
+
+        uint256 shares = ISIUSDView(SIUSD).balanceOf(strategy);
+        uint256 convertOnly = ISIUSDView(SIUSD).convertToAssets(shares);
+        uint256 withVested = _stakedToReceipt(shares);
+        assertGt(withVested, convertOnly, "pro-rata vested iUSD should raise the receipt mark");
+        assertEq(IMYTStrategy(strategy).realAssets(), _expectedTotalValue(), "realAssets should include pro-rata vested iUSD");
+    }
+
     function test_previewAdjustedWithdraw_isPositiveAfterAllocation() public {
         vm.prank(admin);
         IAllocator(allocator).allocate(strategy, 10_000e6);
@@ -232,16 +261,25 @@ contract SiUSDStrategyTest is BaseStrategyTest {
         uint256 shortfall = amount - idleUsdc;
         uint256 desiredIUsd = _assetToOracleToken(shortfall);
         uint256 availableIUsd = IERC20(IUSD).balanceOf(strategy)
-            + ISIUSDView(SIUSD).convertToAssets(ISIUSDView(SIUSD).balanceOf(strategy));
+            + _stakedToReceipt(ISIUSDView(SIUSD).balanceOf(strategy));
         return desiredIUsd > availableIUsd ? availableIUsd : desiredIUsd;
     }
 
     function _expectedTotalValue() internal view returns (uint256) {
         uint256 siUsdShares = ISIUSDView(SIUSD).balanceOf(strategy);
-        uint256 iUsdFromShares = ISIUSDView(SIUSD).convertToAssets(siUsdShares);
+        uint256 iUsdFromShares = _stakedToReceipt(siUsdShares);
         uint256 idleIUsd = IERC20(IUSD).balanceOf(strategy);
         uint256 idleUsdc = IERC20(USDC).balanceOf(strategy);
         return idleUsdc + IRedeemControllerView(REDEEM_CONTROLLER).receiptToAsset(iUsdFromShares + idleIUsd);
+    }
+
+    /// @dev Mirrors SiUSDStrategy._stakedToReceipt / InfiniFi GatewayLib.stakedToReceipt.
+    function _stakedToReceipt(uint256 shares) internal view returns (uint256) {
+        if (shares == 0) return 0;
+        address yieldSharing = IInfiniFiGatewayView(GATEWAY).getAddress("yieldSharing");
+        uint256 vested = yieldSharing == address(0) ? 0 : IYieldSharingView(yieldSharing).vested();
+        uint256 assets = ISIUSDView(SIUSD).totalAssets() + vested;
+        return Math.mulDiv(shares, assets + 1, ISIUSDView(SIUSD).totalSupply() + 1, Math.Rounding.Floor);
     }
 
     function _oracleTokenToAsset(uint256 oracleTokenAmount) internal pure returns (uint256) {

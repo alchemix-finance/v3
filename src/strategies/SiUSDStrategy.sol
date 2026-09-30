@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {OraclePricedSwapStrategy} from "./OraclePricedSwapStrategy.sol";
 import {TokenUtils} from "../libraries/TokenUtils.sol";
 
@@ -13,6 +14,8 @@ interface ISIUSD {
     function balanceOf(address account) external view returns (uint256);
     function convertToAssets(uint256 shares) external view returns (uint256 assets);
     function previewWithdraw(uint256 assets) external view returns (uint256 shares);
+    function totalAssets() external view returns (uint256);
+    function totalSupply() external view returns (uint256);
 }
 
 interface IRedeemController {
@@ -23,6 +26,11 @@ interface IInfiniFiGateway {
     function mintAndStake(address to, uint256 amount) external returns (uint256);
     function unstake(address to, uint256 stakedTokens) external returns (uint256);
     function redeem(address to, uint256 amount, uint256 minAssetsOut) external returns (uint256);
+    function getAddress(string calldata name) external view returns (address);
+}
+
+interface IYieldSharing {
+    function vested() external view returns (uint256);
 }
 
 /**
@@ -32,6 +40,8 @@ interface IInfiniFiGateway {
  *         2. unwrap-and-swap fallback via siUSD -> iUSD -> USDC swap
  */
 contract SiUSDStrategy is OraclePricedSwapStrategy {
+    using Math for uint256;
+
     uint256 internal constant DIRECT_PREVIEW_BUFFER = 100;
 
     IERC20 public immutable usdc;
@@ -127,7 +137,20 @@ contract SiUSDStrategy is OraclePricedSwapStrategy {
     }
 
     function _positionBalance() internal view override returns (uint256) {
-        return TokenUtils.safeBalanceOf(address(iUSD), address(this)) + siUSD.convertToAssets(siUSD.balanceOf(address(this)));
+        return TokenUtils.safeBalanceOf(address(iUSD), address(this)) + _stakedToReceipt(siUSD.balanceOf(address(this)));
+    }
+
+    /// @dev InfiniFi GatewayLib.stakedToReceipt. siUSD.convertToAssets omits iUSD already vested in the
+    /// yield-sharing escrow; unstake distributes that escrow before redeeming, so the position must
+    /// include this strategy's pro-rata share or a depositor can enter against the low mark.
+    /// After distribution vested() is zero and the iUSD sits in siUSD totalAssets, so it is not counted twice.
+    function _stakedToReceipt(uint256 shares) internal view returns (uint256) {
+        if (shares == 0) return 0;
+
+        address yieldSharing = gateway.getAddress("yieldSharing");
+        uint256 vested = yieldSharing == address(0) ? 0 : IYieldSharing(yieldSharing).vested();
+        uint256 assets = siUSD.totalAssets() + vested;
+        return shares.mulDiv(assets + 1, siUSD.totalSupply() + 1, Math.Rounding.Floor);
     }
 
     function _totalValue() internal view override returns (uint256) {
