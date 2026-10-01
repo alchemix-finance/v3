@@ -39,7 +39,6 @@ interface IFraxEtherRedemptionQueue {
  */
 contract SFraxETHStrategy is MYTStrategy {
     uint256 internal constant BPS = 10_000;
-    uint256 public constant MAX_PENDING_HAIRCUT_BPS = 1000;
     uint256 public constant MAX_RATE_DROP_BPS = 5000;
 
     IFraxMinter public immutable minter;
@@ -50,8 +49,6 @@ contract SFraxETHStrategy is MYTStrategy {
 
     /// @notice Authorized caller (besides the owner) for `requestExits`.
     address public keeper;
-    /// @notice Discount applied to unmatured queue tickets in `_totalValue`.
-    uint256 public pendingHaircutBps = 100;
     /// @notice Max share-rate drop before the kill switch trips; zero disables.
     uint256 public maxRateDropBps = 50;
     /// @notice Canonical frxETH-per-sfrxETH rate observed at the last successful allocation.
@@ -65,7 +62,6 @@ contract SFraxETHStrategy is MYTStrategy {
 
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
     event KeeperUpdated(address indexed keeper);
-    event PendingHaircutBpsUpdated(uint256 newPendingHaircutBps);
     event MaxRateDropBpsUpdated(uint256 newMaxRateDropBps);
     event RateGuardTripped(uint256 checkpointRate, uint256 observedRate);
     event ExitRequested(uint256 indexed tokenId, uint256 sfrxEthShares);
@@ -247,7 +243,7 @@ contract SFraxETHStrategy is MYTStrategy {
     }
 
     /// @notice Idle WETH + loose frxETH + sfrxETH at the canonical share rate + pending
-    ///         ticket (matured at claimable amount, otherwise amount minus haircut).
+    ///         ticket at its claimable amount.
     function _totalValue() internal view override returns (uint256) {
         return _idleAssets() + frxETH.balanceOf(address(this)) + sfrxETH.convertToAssets(sfrxETH.balanceOf(address(this))) + _pendingExitValue();
     }
@@ -261,8 +257,7 @@ contract SFraxETHStrategy is MYTStrategy {
         if (tokenId == 0) return 0;
         IFraxEtherRedemptionQueue.RedemptionQueueItem memory item = redemptionQueue.nftInformation(tokenId);
         if (item.hasBeenRedeemed) return 0;
-        if (block.timestamp >= item.maturity) return item.amount;
-        return (uint256(item.amount) * (BPS - pendingHaircutBps)) / BPS;
+        return item.amount;
     }
 
     /// @notice Instant capacity only; pending queue tickets are excluded.
@@ -339,12 +334,6 @@ contract SFraxETHStrategy is MYTStrategy {
     function setKeeper(address newKeeper) external onlyOwner {
         keeper = newKeeper;
         emit KeeperUpdated(newKeeper);
-    }
-
-    function setPendingHaircutBps(uint256 newPendingHaircutBps) external onlyOwner {
-        require(newPendingHaircutBps <= MAX_PENDING_HAIRCUT_BPS, "Haircut too high");
-        pendingHaircutBps = newPendingHaircutBps;
-        emit PendingHaircutBpsUpdated(newPendingHaircutBps);
     }
 
     function setMaxRateDropBps(uint256 newMaxRateDropBps) external onlyOwner {

@@ -443,9 +443,9 @@ contract SFraxETHStrategyTest is BaseStrategyTest {
             MockFraxEtherRedemptionQueue(payable(address(env.redemptionQueue()))).ownerOf(tokenId), address(localStrategy), "ticket should be held by strategy"
         );
 
-        // pending claim valued at amount minus haircut: no phantom loss
+        // pending claim valued at face: value-neutral at the request boundary
         uint256 valuePending = IMYTStrategy(address(localStrategy)).realAssets();
-        assertGe(valuePending + 1, (valueBefore * 99) / 100, "pending accounting should not create a phantom loss");
+        assertApproxEqRel(valuePending, valueBefore, 1e15, "pending accounting should not create a phantom loss");
 
         // Preview excludes pending liquidity.
         uint256 preview = IMYTStrategy(address(localStrategy)).previewAdjustedWithdraw(type(uint256).max);
@@ -576,6 +576,22 @@ contract SFraxETHStrategyTest is BaseStrategyTest {
         assertEq(localStrategy.pendingExitCount(), 0, "pending exit should settle once unpaused");
     }
 
+    function test_async_request_exit_is_value_neutral() public {
+        (SFraxETHStrategy localStrategy, MockFraxEnvironment env) = _deployMockStrategy();
+        _mockAllocate(localStrategy, 20e18);
+
+        uint256 before = IMYTStrategy(address(localStrategy)).realAssets();
+        vm.prank(address(1));
+        uint256 tokenId = localStrategy.requestExits(5e18);
+        uint256 afterRequest = IMYTStrategy(address(localStrategy)).realAssets();
+        assertApproxEqRel(afterRequest, before, 1e15, "requestExits must not move reported value");
+
+        (, uint64 maturity,,) = IRedemptionQueueView(address(env.redemptionQueue())).nftInformation(tokenId);
+        vm.warp(uint256(maturity));
+        uint256 afterMaturity = IMYTStrategy(address(localStrategy)).realAssets();
+        assertApproxEqRel(afterMaturity, before, 1e15, "maturity must not move reported value");
+    }
+
     function test_deallocate_auto_claims_matured_exit() public {
         (SFraxETHStrategy localStrategy, MockFraxEnvironment env) = _deployMockStrategy();
         _mockAllocate(localStrategy, 20e18);
@@ -609,7 +625,7 @@ contract SFraxETHStrategyTest is BaseStrategyTest {
         vm.warp(uint256(maturity));
         uint256 afterMaturity = IMYTStrategy(address(localStrategy)).realAssets();
 
-        // haircut-discounted -> exact claimable: value can only recover
+        // pending value -> exact claimable: value can only recover
         assertGe(afterMaturity + 1, before, "maturity should not reduce value");
 
         localStrategy.claimExits();
@@ -652,8 +668,8 @@ contract SFraxETHStrategyTest is BaseStrategyTest {
         uint256 tokenId = localStrategy.requestExits(1e18);
         assertEq(localStrategy.pendingExitCount(), 1, "one pending exit expected");
 
-        // value continuity: haircut only
-        assertGe(IMYTStrategy(strategy).realAssets() + 1, (valueBefore * 99) / 100, "no phantom loss while queued");
+        // value continuity while queued
+        assertApproxEqRel(IMYTStrategy(strategy).realAssets(), valueBefore, 1e15, "no phantom loss while queued");
 
         (, uint64 maturity, uint120 amount,) = IRedemptionQueueView(FRAX_REDEMPTION_QUEUE).nftInformation(tokenId);
         assertGt(amount, 0, "ticket should carry a claim");

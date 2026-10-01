@@ -94,7 +94,6 @@ contract DeployEtherfiEETHStrategyScriptTest is Test {
         assertEq(address(strategy.depositAdapter()), depositAdapter, "unexpected deposit adapter");
         assertEq(address(strategy.redemptionManager()), redemptionManager, "unexpected redemption manager");
         assertEq(strategy.pendingExitCount(), 0, "unexpected pending exits");
-        assertEq(strategy.pendingHaircutBps(), 100, "unexpected pending haircut");
         assertEq(strategy.maxRateDropBps(), 50, "unexpected max rate drop");
         assertEq(strategy.rateCheckpoint(), 0, "rate checkpoint should start empty");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled");

@@ -829,9 +829,9 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         assertGt(shares, 0, "pending exit should track shares");
         assertEq(localStrategy.pendingExitCount(), 1, "one pending exit expected");
 
-        // pending claim valued at shares minus haircut: no phantom loss
+        // pending claim valued at face: value-neutral at the request boundary
         uint256 valuePending = IMYTStrategy(address(localStrategy)).realAssets();
-        assertGe(valuePending + 1, (valueBefore * 99) / 100, "pending accounting should not create a phantom loss");
+        assertApproxEqRel(valuePending, valueBefore, 1e15, "pending accounting should not create a phantom loss");
 
         // Preview excludes pending liquidity.
         uint256 preview = IMYTStrategy(address(localStrategy)).previewAdjustedWithdraw(type(uint256).max);
@@ -1014,6 +1014,22 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         assertEq(localStrategy.pendingExitCount(), 0, "pending exit should settle once unpaused");
     }
 
+    function test_async_request_exit_is_value_neutral() public {
+        (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) = _deployMockStrategy();
+        _mockAllocate(localStrategy, 20e18);
+
+        uint256 before = IMYTStrategy(address(localStrategy)).realAssets();
+        vm.prank(address(1));
+        localStrategy.requestExits(5e18);
+        uint256 afterRequest = IMYTStrategy(address(localStrategy)).realAssets();
+        assertApproxEqRel(afterRequest, before, 1e15, "requestExits must not move reported value");
+
+        uint256 tokenId = localStrategy.pendingExit().tokenId;
+        MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).finalizeRequests(tokenId);
+        uint256 afterFinalize = IMYTStrategy(address(localStrategy)).realAssets();
+        assertApproxEqRel(afterFinalize, before, 1e15, "finalization must not move reported value");
+    }
+
     function test_async_invalidated_exit_can_be_removed() public {
         (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) = _deployMockStrategy();
         _mockAllocate(localStrategy, 5e18);
@@ -1027,7 +1043,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         localStrategy.removeInvalidExit();
 
         uint256 valueBeforeInvalidation = IMYTStrategy(address(localStrategy)).realAssets();
-        uint256 pendingValue = (uint256(shares) * (10_000 - localStrategy.pendingHaircutBps())) / 10_000;
+        uint256 pendingValue = uint256(shares);
 
         MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).invalidateRequest(tokenId);
 
@@ -1061,15 +1077,14 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         MockLiquidityPool(payable(env.liquidityPool())).setShareRate(1.04e18);
 
         uint96 face = MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).getRequest(tokenId).amountOfEEth;
-        uint256 expected = (uint256(face) * (10_000 - localStrategy.pendingHaircutBps())) / 10_000;
-        assertEq(IMYTStrategy(address(localStrategy)).realAssets(), expected, "pending value must be capped at the request face");
+        assertEq(IMYTStrategy(address(localStrategy)).realAssets(), uint256(face), "pending value must be capped at the request face");
         assertLt(
             IMYTStrategy(address(localStrategy)).realAssets(),
-            (uint256(face) * 104 * (10_000 - localStrategy.pendingHaircutBps())) / 100 / 10_000,
+            (uint256(face) * 104) / 100,
             "pending value must not count forfeited rebase accrual"
         );
 
-        // Claim still pays face; the released haircut lands as idle WETH.
+        // Claim still pays face.
         MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).finalizeRequests(tokenId);
         MockLiquidityPool(payable(env.liquidityPool())).setShareRate(1e18);
         localStrategy.claimExits();
@@ -1139,7 +1154,7 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).finalizeRequests(tokenId);
         uint256 afterFinalize = IMYTStrategy(address(localStrategy)).realAssets();
 
-        // haircut-discounted -> exact claimable: value can only recover
+        // pending value -> exact claimable: value can only recover
         assertGe(afterFinalize + 1, before, "finalization should not reduce value");
 
         localStrategy.claimExits();

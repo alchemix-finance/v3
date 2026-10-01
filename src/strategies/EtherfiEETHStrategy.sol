@@ -71,7 +71,6 @@ interface IWeETH {
 contract EtherfiEETHMYTStrategy is MYTStrategy {
     uint256 internal constant BPS = 10_000;
     uint256 public constant MAX_GROSS_REDEEM_AMOUNT_BUFFER = 1e18;
-    uint256 public constant MAX_PENDING_HAIRCUT_BPS = 1000;
     uint256 public constant MAX_RATE_DROP_BPS = 5000;
 
     IDepositAdapter public immutable depositAdapter;
@@ -85,8 +84,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
 
     /// @notice Authorized caller (besides the owner) for `requestExits`.
     address public keeper;
-    /// @notice Discount applied to unfinalized queue claims in `_totalValue`.
-    uint256 public pendingHaircutBps = 100;
     /// @notice Max canonical-rate drop before the kill switch trips; zero disables.
     uint256 public maxRateDropBps = 50;
     /// @notice Canonical eETH-per-weETH rate observed at the last successful allocation.
@@ -102,7 +99,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     event GrossRedeemAmountBufferUpdated(uint256 grossRedeemAmountBuffer);
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
     event KeeperUpdated(address indexed keeper);
-    event PendingHaircutBpsUpdated(uint256 newPendingHaircutBps);
     event MaxRateDropBpsUpdated(uint256 newMaxRateDropBps);
     event RateGuardTripped(uint256 checkpointRate, uint256 observedRate);
     event ExitRequested(uint256 indexed tokenId, uint256 indexed eEthAmount, uint96 shares);
@@ -329,8 +325,8 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     }
 
     /// @notice Idle WETH + loose eETH + weETH at the canonical rate + pending claim
-    ///         (finalized at claimable amount, otherwise the request's payout ceiling
-    ///         — face vs live share value — minus haircut; invalidated claims are 0).
+    ///         (finalized at claimable amount, otherwise the request's payout
+    ///         ceiling — face vs live share value; invalidated claims are 0).
     function _totalValue() internal view override returns (uint256) {
         return _idleAssets() + address(this).balance + eETH.balanceOf(address(this)) + weETH.getEETHByWeETH(weETH.balanceOf(address(this))) + _pendingExitValue();
     }
@@ -351,7 +347,7 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         // is forfeit to the LP, so never mark above the ceiling.
         uint256 payout = _liquidityPool().amountForShare(_pendingExit.shareOfEEth);
         if (payout > request.amountOfEEth) payout = request.amountOfEEth;
-        return (payout * (BPS - pendingHaircutBps)) / BPS;
+        return payout;
     }
 
     /// @notice Instant capacity only; pending queue claims are excluded.
@@ -482,12 +478,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     function setKeeper(address newKeeper) external onlyOwner {
         keeper = newKeeper;
         emit KeeperUpdated(newKeeper);
-    }
-
-    function setPendingHaircutBps(uint256 newPendingHaircutBps) external onlyOwner {
-        require(newPendingHaircutBps <= MAX_PENDING_HAIRCUT_BPS, "Haircut too high");
-        pendingHaircutBps = newPendingHaircutBps;
-        emit PendingHaircutBpsUpdated(newPendingHaircutBps);
     }
 
     function setMaxRateDropBps(uint256 newMaxRateDropBps) external onlyOwner {
