@@ -97,6 +97,7 @@ contract SFraxETHStrategy is MYTStrategy {
 
     function _allocate(uint256 amount) internal override returns (uint256) {
         _checkRate();
+        if (killSwitch) return 0;
         _ensureIdleBalance(_asset(), amount);
         IWETH(_asset()).withdraw(amount);
         uint256 sharesReceived = minter.submitAndDeposit{value: amount}(address(this));
@@ -107,6 +108,7 @@ contract SFraxETHStrategy is MYTStrategy {
     /// @dev Min output floored by the canonical 1:1 frxETH:ETH rate instead of a price feed.
     function _allocate(uint256 amount, bytes memory callData) internal override returns (uint256) {
         _checkRate();
+        if (killSwitch) return 0;
         _ensureIdleBalance(_asset(), amount);
 
         uint256 minFrxEthOut = (amount * (BPS - params.slippageBPS)) / BPS;

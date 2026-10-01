@@ -136,6 +136,7 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
 
     function _allocate(uint256 amount) internal override returns (uint256) {
         _checkRate();
+        if (killSwitch) return 0;
         _ensureIdleBalance(_asset(), amount);
         TokenUtils.safeApprove(_asset(), address(depositAdapter), amount);
         depositAdapter.depositWETHForWeETH(amount, address(0));
@@ -146,6 +147,7 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     /// @dev Min output floored by the canonical weETH->eETH rate instead of a price feed.
     function _allocate(uint256 amount, bytes memory callData) internal override returns (uint256) {
         _checkRate();
+        if (killSwitch) return 0;
         _ensureIdleBalance(_asset(), amount);
 
         uint256 minEEthOut = (amount * (BPS - params.slippageBPS)) / BPS;

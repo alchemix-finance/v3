@@ -1154,9 +1154,13 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
 
         MockWeETH(payable(env.weETH())).setRate(0.5e18);
 
-        // the observing allocation completes; the switch trips for future ones
+        uint256 weEthBefore = MockWeETH(payable(env.weETH())).balanceOf(address(localStrategy));
+        uint256 wethBefore = IERC20(WETH).balanceOf(address(localStrategy));
         _mockAllocate(localStrategy, 1e18);
         assertTrue(localStrategy.killSwitch(), "kill switch should trip after rate crash");
+        assertEq(MockWeETH(payable(env.weETH())).balanceOf(address(localStrategy)), weEthBefore, "no weETH may be acquired by the tripping allocation");
+        assertEq(IERC20(WETH).balanceOf(address(localStrategy)), wethBefore + 1e18, "WETH must stay idle");
+
         vm.startPrank(vault);
         vm.expectRevert(abi.encodeWithSelector(IMYTStrategy.StrategyAllocationPaused.selector, address(localStrategy)));
         IMYTStrategy(address(localStrategy)).allocate(getDirectAllocateVaultParams(1e18), 1e18, "", address(vault));
