@@ -51,7 +51,7 @@ contract SFraxETHStrategy is MYTStrategy {
     address public keeper;
     /// @notice Max share-rate drop before the kill switch trips; zero disables.
     uint256 public maxRateDropBps = 50;
-    /// @notice Canonical frxETH-per-sfrxETH rate observed at the last successful allocation.
+    /// @notice Canonical frxETH-per-sfrxETH rate observed at the last allocation attempt.
     uint256 public rateCheckpoint;
 
     /// @dev At most one queue exit is in flight; tokenId == 0 means none.
@@ -344,14 +344,15 @@ contract SFraxETHStrategy is MYTStrategy {
 
     /// @dev Trips the kill switch when the canonical share rate drops more than
     ///      `maxRateDropBps` below the allocation checkpoint. Does not revert, so the
-    ///      kill-switch write persists; future allocations revert until the owner clears it.
+    ///      kill-switch write persists; future allocations revert until the owner
+    ///      clears it. The checkpoint follows the observed rate, so clearing the
+    ///      switch re-bases the guard at the accepted rate.
     function _checkRate() internal {
         uint256 rate = sfrxETH.convertToAssets(1e18);
         if (maxRateDropBps != 0 && rateCheckpoint != 0 && rate < (rateCheckpoint * (BPS - maxRateDropBps)) / BPS) {
             killSwitch = true;
             emit RateGuardTripped(rateCheckpoint, rate);
             emit Emergency(true);
-            return;
         }
         rateCheckpoint = rate;
     }

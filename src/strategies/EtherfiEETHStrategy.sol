@@ -86,7 +86,7 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     address public keeper;
     /// @notice Max canonical-rate drop before the kill switch trips; zero disables.
     uint256 public maxRateDropBps = 50;
-    /// @notice Canonical eETH-per-weETH rate observed at the last successful allocation.
+    /// @notice Canonical eETH-per-weETH rate observed at the last allocation attempt.
     uint256 public rateCheckpoint;
 
     /// @dev At most one queue exit is in flight; tokenId == 0 means none.
@@ -378,14 +378,15 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
 
     /// @dev Trips the kill switch when the canonical rate drops more than `maxRateDropBps`
     ///      below the allocation checkpoint. Does not revert, so the kill-switch write
-    ///      persists; future allocations revert until the owner clears it.
+    ///      persists; future allocations revert until the owner clears it. The
+    ///      checkpoint follows the observed rate, so clearing the switch re-bases
+    ///      the guard at the accepted rate instead of re-tripping against the stale one.
     function _checkRate() internal {
         uint256 rate = weETH.getEETHByWeETH(1e18);
         if (maxRateDropBps != 0 && rateCheckpoint != 0 && rate < (rateCheckpoint * (BPS - maxRateDropBps)) / BPS) {
             killSwitch = true;
             emit RateGuardTripped(rateCheckpoint, rate);
             emit Emergency(true);
-            return;
         }
         rateCheckpoint = rate;
     }

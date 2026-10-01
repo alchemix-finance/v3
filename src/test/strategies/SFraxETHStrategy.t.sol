@@ -633,6 +633,28 @@ contract SFraxETHStrategyTest is BaseStrategyTest {
         assertApproxEqRel(afterClaim, afterMaturity, 1e15, "claim should be value-neutral");
     }
 
+    function test_rate_guard_allows_resume_after_owner_clear() public {
+        (SFraxETHStrategy localStrategy, MockFraxEnvironment env) = _deployMockStrategy();
+        _mockAllocate(localStrategy, 10e18);
+
+        MockSfrxETH(address(env.sfrxETH())).setRate(0.5e18);
+        _mockAllocate(localStrategy, 1e18);
+        assertTrue(localStrategy.killSwitch(), "guard should trip on the rate crash");
+
+        vm.prank(address(1));
+        localStrategy.setKillSwitch(false);
+
+        uint256 sharesBefore = MockSfrxETH(address(env.sfrxETH())).balanceOf(address(localStrategy));
+        _mockAllocate(localStrategy, 1e18);
+        assertFalse(localStrategy.killSwitch(), "cleared switch must not re-trip at the accepted rate");
+        assertGt(MockSfrxETH(address(env.sfrxETH())).balanceOf(address(localStrategy)), sharesBefore, "allocation should resume");
+
+        // further deterioration still trips
+        MockSfrxETH(address(env.sfrxETH())).setRate(0.3e18);
+        _mockAllocate(localStrategy, 1e18);
+        assertTrue(localStrategy.killSwitch(), "guard must trip on a further drop");
+    }
+
     function test_rate_guard_trips_kill_switch_on_rate_drop() public {
         (SFraxETHStrategy localStrategy, MockFraxEnvironment env) = _deployMockStrategy();
         _mockAllocate(localStrategy, 10e18);
