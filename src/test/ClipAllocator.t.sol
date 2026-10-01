@@ -664,10 +664,40 @@ contract ClipAllocatorGuardsTest is Test {
         clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 10_001);
     }
 
-    /// @dev A second grant adds budget and overwrites the limits, including a tighter cap.
-    function test_grant_topUpAddsRemainingAndReplacesLimits() public {
+    /// @dev A second grant is a rewrite: the budget becomes the new amount and every
+    ///      limit takes the new value. budget tracks the sum across the bot's grants.
+    function test_grant_replacesBudgetAndLimits() public {
+        clip.grantAllocate(bot, address(liquidity), 30 ether, CLIP, 0, address(0), 0, 0);
         clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 5, address(0), 0, 100);
-        clip.grantDeallocate(bot, address(strategy), CLIP, 1 ether, 0, address(priceToken), 1e18, 0);
+        assertEq(clip.budget(bot), CLIP + 30 ether);
+
+        clip.grantDeallocate(bot, address(strategy), 70 ether, 1 ether, 0, address(priceToken), 1e18, 0);
+
+        (
+            uint256 remaining,
+            uint256 maxClip,
+            uint32 interval,
+            ,
+            address price,
+            uint256 limitRate,
+            uint16 maxLossBps
+        ) = clip.deallocateGrants(bot, address(strategy));
+        assertEq(remaining, 70 ether);
+        assertEq(maxClip, 1 ether);
+        assertEq(interval, 0);
+        assertEq(price, address(priceToken));
+        assertEq(limitRate, 1e18);
+        assertEq(maxLossBps, 0);
+        assertEq(clip.budget(bot), 70 ether + 30 ether);
+    }
+
+    /// @dev Top-up adds budget and touches nothing else. It needs an existing grant.
+    function test_topUp_addsRemainingOnly() public {
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.NoGrant.selector, bot, address(strategy), false));
+        clip.topUpDeallocate(bot, address(strategy), CLIP);
+
+        clip.grantDeallocate(bot, address(strategy), CLIP, 1 ether, 5, address(priceToken), 1e18, 100);
+        clip.topUpDeallocate(bot, address(strategy), CLIP);
 
         (
             uint256 remaining,
@@ -680,10 +710,15 @@ contract ClipAllocatorGuardsTest is Test {
         ) = clip.deallocateGrants(bot, address(strategy));
         assertEq(remaining, 2 * CLIP);
         assertEq(maxClip, 1 ether);
-        assertEq(interval, 0);
+        assertEq(interval, 5);
         assertEq(price, address(priceToken));
         assertEq(limitRate, 1e18);
-        assertEq(maxLossBps, 0);
+        assertEq(maxLossBps, 100);
+        assertEq(clip.budget(bot), 2 * CLIP);
+
+        vm.expectRevert(ClipAllocator.NotOwner.selector);
+        vm.prank(bot);
+        clip.topUpAllocate(bot, address(strategy), CLIP);
     }
 
     function test_ownership_twoStepAndRejectsWrongAcceptor() public {

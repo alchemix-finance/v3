@@ -43,9 +43,13 @@ interface IERC20Lite {
  *         Counters are independent: X may equal Y for a one-to-one move, or one
  *         deallocate grant may feed several allocate grants. Every clip consumes
  *         its `assets` from the matching counter; at zero the bot stops and the
- *         owner extends with another grant (amounts add). Nothing on-chain links
- *         the two sides, so a deallocate bot and an allocate bot run at their own
- *         pace, and user withdrawals in between never touch a counter.
+ *         owner adds budget with `topUp*`. Nothing on-chain links the two sides,
+ *         so a deallocate bot and an allocate bot run at their own pace, and user
+ *         withdrawals in between never touch a counter.
+ *
+ *         `grant*` is the full statement of what a key may do: it sets the budget
+ *         and every limit, replacing whatever was there. `topUp*` adds budget and
+ *         changes nothing else. `revoke*` zeroes the budget and leaves the limits.
  *
  *         Per grant, small and worth it:
  *         - maxClip: the largest single move, so one bad quote cannot spend the grant;
@@ -151,8 +155,9 @@ contract ClipAllocator {
 
     // ---- the owner (the Safe once accepted): grants, unpause, succession ------
 
-    /// @notice Add `amount` to the bot's deallocate budget on `adapter` and set
-    ///         its limits. Amounts add, so a top-up is the same call again.
+    /// @notice Set the bot's deallocate grant on `adapter`: the budget becomes
+    ///         `amount` and every limit takes the value passed. A repeat call is
+    ///         a rewrite, so the calldata is the whole cap.
     function grantDeallocate(address bot, address adapter, uint256 amount, uint256 maxClip,
                              uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps) external onlyOwner {
         _grant(deallocateGrants[bot][adapter], bot, adapter, false, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
@@ -161,6 +166,15 @@ contract ClipAllocator {
     function grantAllocate(address bot, address adapter, uint256 amount, uint256 maxClip,
                            uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps) external onlyOwner {
         _grant(allocateGrants[bot][adapter], bot, adapter, true, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
+    }
+
+    /// @notice Add `amount` to an existing grant. Limits stay.
+    function topUpDeallocate(address bot, address adapter, uint256 amount) external onlyOwner {
+        _topUp(deallocateGrants[bot][adapter], bot, adapter, false, amount);
+    }
+
+    function topUpAllocate(address bot, address adapter, uint256 amount) external onlyOwner {
+        _topUp(allocateGrants[bot][adapter], bot, adapter, true, amount);
     }
 
     /// @notice Zero a budget. The limits stay for the next grant.
@@ -184,14 +198,22 @@ contract ClipAllocator {
         require(priceToken == address(0) || limitRate > 0, "rate");   // a guarded grant needs a real limit
         require(maxLossBps <= BPS, "loss");
         if (!vault.isAdapter(adapter)) revert NotAdapter(adapter);
-        g.remaining += amount;
+        budget[bot] -= g.remaining;
         budget[bot] += amount;
+        g.remaining = amount;
         g.maxClip = maxClip;
         g.minIntervalBlocks = minIntervalBlocks;
         g.priceToken = priceToken;
         g.limitRate = limitRate;
         g.maxLossBps = maxLossBps;
-        emit GrantUpdated(bot, adapter, isAllocate, g.remaining, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
+        emit GrantUpdated(bot, adapter, isAllocate, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
+    }
+
+    function _topUp(Grant storage g, address bot, address adapter, bool isAllocate, uint256 amount) internal {
+        if (g.maxClip == 0) revert NoGrant(bot, adapter, isAllocate);
+        g.remaining += amount;
+        budget[bot] += amount;
+        emit GrantUpdated(bot, adapter, isAllocate, g.remaining, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps);
     }
 
     /// @notice Emergency stop: a bot with budget remaining may pause, only the owner may unpause.

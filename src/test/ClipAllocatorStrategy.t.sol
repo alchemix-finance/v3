@@ -189,7 +189,7 @@ abstract contract ClipAllocatorStrategyTest is Test {
         vm.prank(bot);
         clip.allocateClip(address(strategy), clipAmount);
 
-        clip.grantAllocate(bot, address(strategy), 0, clipAmount, 0, token, expected * 101 / 100, _maxLossBps());
+        clip.grantAllocate(bot, address(strategy), clipAmount, clipAmount, 0, token, expected * 101 / 100, _maxLossBps());
         vm.recordLogs();
         vm.prank(bot);
         clip.allocateClip(address(strategy), clipAmount);
@@ -203,7 +203,7 @@ abstract contract ClipAllocatorStrategyTest is Test {
         vm.prank(bot);
         clip.deallocateClip(address(strategy), pull);
 
-        clip.grantDeallocate(bot, address(strategy), 0, pull, 0, token, expected * 99 / 100, _maxLossBps());
+        clip.grantDeallocate(bot, address(strategy), pull, pull, 0, token, expected * 99 / 100, _maxLossBps());
         vm.recordLogs();
         vm.prank(bot);
         clip.deallocateClip(address(strategy), pull);
@@ -230,7 +230,7 @@ abstract contract ClipAllocatorStrategyTest is Test {
         vm.prank(bot);
         clip.allocateClip(address(strategy), clipAmount);
 
-        clip.grantDeallocate(bot, address(liquidity), 0, shortfall, 0, token, expected * 99 / 100, _maxLossBps());
+        clip.grantDeallocate(bot, address(liquidity), shortfall, shortfall, 0, token, expected * 99 / 100, _maxLossBps());
         uint256 sharesBefore = IERC20(token).balanceOf(address(liquidity));
         vm.prank(bot);
         clip.allocateClip(address(strategy), clipAmount);
