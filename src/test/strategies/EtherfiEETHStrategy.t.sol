@@ -279,7 +279,6 @@ contract MockLiquidityPool {
     address public admin;
     uint256 public minWithdrawAmount = 0.005e18;
     uint256 public maxWithdrawAmount = 1000e18;
-    bool public instantWithdrawAllowed = true;
     /// @dev eETH-per-share multiplier (1e18 = identity); models LP rebase accrual.
     uint256 public shareRate = 1e18;
 
@@ -321,25 +320,10 @@ contract MockLiquidityPool {
         admin = newAdmin;
     }
 
-    function setInstantWithdrawAllowed(bool val) external onlyAdmin {
-        instantWithdrawAllowed = val;
-    }
-
     function requestWithdraw(address recipient, uint256 amount) external returns (uint256) {
         require(amount > 0, "InvalidWithdrawalAmount()");
         IERC20(eETH).transferFrom(msg.sender, address(this), amount);
         return MockWithdrawRequestNFT(payable(withdrawRequestNFT)).requestWithdraw(uint96(amount), uint96(amount), recipient);
-    }
-
-    /// @dev Instant withdraw leg; real pool gates the caller, mock gates via a flag.
-    function withdraw(address recipient, uint256 amount) external returns (uint256) {
-        require(instantWithdrawAllowed, "Incorrect Caller");
-        require(amount >= minWithdrawAmount && amount <= maxWithdrawAmount, "InvalidWithdrawalAmount()");
-        IERC20(eETH).transferFrom(msg.sender, address(this), amount);
-        require(address(this).balance >= amount, "InsufficientLiquidity()");
-        (bool ok,) = recipient.call{value: amount}("");
-        require(ok, "SendFail()");
-        return amount;
     }
 
     /// @dev Called by the WRN mock when a request is claimed.
@@ -692,37 +676,12 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.stopPrank();
     }
 
-    function test_deallocate_direct_cascades_to_liquidity_pool_withdraw() public {
-        // Mock env with redemption drained but the LP instant withdraw leg open.
-        MockEtherfiEnvironment env = mockEnv;
-        EtherfiEETHMYTStrategy localStrategy =
-            new MockEtherfiEETHStrategy(vault, strategyConfig, env.eETH(), env.weETH(), env.depositAdapter(), env.redemptionManager());
-
-        uint256 allocateAmount = 5e18;
-        vm.startPrank(vault);
-        deal(WETH, address(localStrategy), allocateAmount);
-        IMYTStrategy(address(localStrategy)).allocate(getDirectAllocateVaultParams(allocateAmount), allocateAmount, "", address(vault));
-
-        // Drain the redemption manager so the first cascade leg is unavailable.
-        MockFullRedemptionManager(payable(env.redemptionManager())).drain(payable(address(this)));
-
-        uint256 deallocateAmount = 1e18;
-        IMYTStrategy.VaultAdapterParams memory directDealloc;
-        directDealloc.action = IMYTStrategy.ActionType.direct;
-
-        IMYTStrategy(address(localStrategy)).deallocate(abi.encode(directDealloc), deallocateAmount, "", address(vault));
-        assertGe(IERC20(WETH).balanceOf(address(localStrategy)), deallocateAmount, "LP withdraw leg should cover deallocation");
-        vm.stopPrank();
-    }
-
     function test_deallocate_direct_reverts_when_all_instant_legs_exhausted() public {
         MockEtherfiEnvironment env = mockEnv;
         EtherfiEETHMYTStrategy localStrategy =
             new MockEtherfiEETHStrategy(vault, strategyConfig, env.eETH(), env.weETH(), env.depositAdapter(), env.redemptionManager());
 
         uint256 allocateAmount = 5e18;
-        // pool admin is the test; close the LP leg before the prank
-        MockLiquidityPool(payable(env.liquidityPool())).setInstantWithdrawAllowed(false);
 
         vm.startPrank(vault);
         deal(WETH, address(localStrategy), allocateAmount);
@@ -963,9 +922,8 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.prank(address(1));
         (uint256 tokenId,) = localStrategy.requestExits(6e18);
 
-        // kill every instant leg: deallocate must revert while the exit is unfinalized
+        // drain instant redemption: deallocate must revert while the exit is unfinalized
         MockFullRedemptionManager(payable(env.redemptionManager())).drain(payable(address(this)));
-        MockLiquidityPool(payable(env.liquidityPool())).setInstantWithdrawAllowed(false);
 
         IMYTStrategy.VaultAdapterParams memory directDealloc;
         directDealloc.action = IMYTStrategy.ActionType.direct;

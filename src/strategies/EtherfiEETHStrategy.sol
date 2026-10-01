@@ -34,7 +34,6 @@ interface ILiquidityPoolLike {
     function sharesForAmount(uint256 amount) external view returns (uint256);
     function sharesForWithdrawalAmount(uint256 amount) external view returns (uint256);
     function requestWithdraw(address recipient, uint256 amount) external returns (uint256);
-    function withdraw(address recipient, uint256 amount) external returns (uint256);
     function minWithdrawAmount() external view returns (uint256);
     function maxWithdrawAmount() external view returns (uint256);
     function withdrawRequestNFT() external view returns (address);
@@ -158,9 +157,10 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         return amount;
     }
 
-    /// @notice Synchronous exit cascading idle WETH -> instant redemption ->
-    ///         LP instant withdraw; reverts when instant capacity cannot cover `amount`.
-    ///         Finalized queue exits are auto-claimed into idle WETH first.
+    /// @notice Synchronous exit cascading idle WETH -> instant redemption
+    ///         through the RedemptionManager; reverts when instant capacity
+    ///         cannot cover `amount`. Finalized queue exits are auto-claimed
+    ///         into idle WETH first.
     function _deallocate(uint256 amount) internal override returns (uint256) {
         _settleFinalizedExit();
         uint256 idleBalance = _idleAssets();
@@ -170,7 +170,7 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         }
         uint256 shortfall = amount - idleBalance;
 
-        // Leg 1: Ether.fi instant redemption through the RedemptionManager.
+        // Instant redemption through the RedemptionManager.
         uint256 weETHBalance = weETH.balanceOf(address(this));
         if (weETHBalance > 0) {
             (, uint16 exitFeeInBps,) = _redemptionInfo();
@@ -191,21 +191,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
                     TokenUtils.safeApprove(address(weETH), address(redemptionManager), 0);
                     if (ethReceived > 0) IWETH(_asset()).deposit{value: ethReceived}();
                 }
-            }
-        }
-
-        // Leg 2: LiquidityPool instant withdraw against held eETH.
-        if (_idleAssets() < amount) {
-            uint256 weETHRemaining = weETH.balanceOf(address(this));
-            if (weETHRemaining > 0) {
-                uint256 remaining = amount - _idleAssets();
-                uint256 weETHToUnwrap = weETH.getWeETHByeETH(remaining);
-                if (weETHToUnwrap == 0 || weETH.getEETHByWeETH(weETHToUnwrap) < remaining) {
-                    weETHToUnwrap += 1;
-                }
-                if (weETHToUnwrap > weETHRemaining) weETHToUnwrap = weETHRemaining;
-                weETH.unwrap(weETHToUnwrap);
-                _tryLiquidityPoolWithdraw();
             }
         }
 
@@ -391,43 +376,6 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
 
     function _withdrawRequestNFT() internal view returns (IWithdrawRequestNFT) {
         return IWithdrawRequestNFT(_liquidityPool().withdrawRequestNFT());
-    }
-
-    /// @dev Instant LP withdraw with the full eETH balance; bounds reads tolerate
-    ///      pools without `min/maxWithdrawAmount`, failures are tolerated, and
-    ///      leftover eETH is re-wrapped.
-    function _tryLiquidityPoolWithdraw() internal {
-        ILiquidityPoolLike pool = _liquidityPool();
-        uint256 eEthHeld = eETH.balanceOf(address(this));
-        if (eEthHeld == 0) return;
-
-        uint256 minWithdraw;
-        uint256 maxWithdraw = type(uint256).max;
-        try pool.minWithdrawAmount() returns (uint256 min) {
-            minWithdraw = min;
-        } catch {}
-        try pool.maxWithdrawAmount() returns (uint256 max) {
-            maxWithdraw = max;
-        } catch {}
-
-        if (eEthHeld >= minWithdraw && eEthHeld <= maxWithdraw) {
-            uint256 ethBefore = address(this).balance;
-            TokenUtils.safeApprove(address(eETH), address(pool), eEthHeld);
-            try pool.withdraw(address(this), eEthHeld) {
-                TokenUtils.safeApprove(address(eETH), address(pool), 0);
-                uint256 ethReceived = address(this).balance - ethBefore;
-                if (ethReceived > 0) IWETH(_asset()).deposit{value: ethReceived}();
-            } catch {
-                TokenUtils.safeApprove(address(eETH), address(pool), 0);
-            }
-        }
-
-        uint256 leftover = eETH.balanceOf(address(this));
-        if (leftover > 0) {
-            TokenUtils.safeApprove(address(eETH), address(weETH), leftover);
-            weETH.wrap(leftover);
-            TokenUtils.safeApprove(address(eETH), address(weETH), 0);
-        }
     }
 
     /// @dev Trips the kill switch when the canonical rate drops more than `maxRateDropBps`
