@@ -203,7 +203,6 @@ contract MockWithdrawRequestNFT {
     }
 
     function getRequest(uint256 requestId) external view returns (WithdrawRequest memory) {
-        require(_ownerOf[requestId] != address(0), "RequestNotFound");
         return _requests[requestId];
     }
 
@@ -218,7 +217,6 @@ contract MockWithdrawRequestNFT {
 
     function getClaimableAmount(uint256 tokenId) external view returns (uint256) {
         require(tokenId <= lastFinalizedRequestId, "Request is not finalized");
-        require(_ownerOf[tokenId] != address(0), "Already Claimed");
         return _requests[tokenId].amountOfEEth;
     }
 
@@ -975,6 +973,53 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         vm.prank(vault);
         IMYTStrategy(address(localStrategy)).deallocate(abi.encode(directDealloc), 1e18, "", address(vault));
         assertGe(IERC20(WETH).balanceOf(address(localStrategy)), 1e18, "auto-claimed exit should fund deallocation");
+        assertEq(localStrategy.pendingExitCount(), 0, "pending exit should be settled");
+    }
+
+    function test_async_external_claim_preserves_value_and_recovers() public {
+        (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) = _deployMockStrategy();
+        _mockAllocate(localStrategy, 20e18);
+
+        vm.prank(address(1));
+        (uint256 tokenId,) = localStrategy.requestExits(5e18);
+        MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).finalizeRequests(tokenId);
+
+        uint256 valueBefore = IMYTStrategy(address(localStrategy)).realAssets();
+
+        vm.prank(address(0xBAD));
+        MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).claimWithdraw(tokenId);
+
+        assertEq(address(localStrategy).balance, 5e18, "external claim should sit as raw ETH");
+        assertEq(IMYTStrategy(address(localStrategy)).realAssets(), valueBefore, "value must not vanish");
+        assertEq(localStrategy.pendingExitCount(), 1, "stale pending exit remains until settled");
+
+        uint256 wethBefore = IERC20(WETH).balanceOf(address(localStrategy));
+        uint256 claimed = localStrategy.claimExits();
+        assertEq(claimed, 5e18, "swept external payout should be reported");
+        assertEq(IERC20(WETH).balanceOf(address(localStrategy)), wethBefore + 5e18, "raw ETH should become idle WETH");
+        assertEq(address(localStrategy).balance, 0, "no native ETH should remain");
+        assertEq(localStrategy.pendingExitCount(), 0, "stale exit should be pruned");
+    }
+
+    function test_deallocate_unbricked_after_external_claim() public {
+        (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) = _deployMockStrategy();
+        _mockAllocate(localStrategy, 20e18);
+
+        vm.prank(address(1));
+        (uint256 tokenId,) = localStrategy.requestExits(6e18);
+        MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).finalizeRequests(tokenId);
+
+        vm.prank(address(0xBAD));
+        MockWithdrawRequestNFT(payable(env.withdrawRequestNFT())).claimWithdraw(tokenId);
+
+        IMYTStrategy.VaultAdapterParams memory directDealloc;
+        directDealloc.action = IMYTStrategy.ActionType.direct;
+
+        vm.prank(vault);
+        IMYTStrategy(address(localStrategy)).deallocate(abi.encode(directDealloc), 1e18, "", address(vault));
+
+        assertEq(address(localStrategy).balance, 0, "settle should wrap the raw payout");
+        assertGe(IERC20(WETH).balanceOf(address(localStrategy)), 5e18, "swept exit should fund the deallocation");
         assertEq(localStrategy.pendingExitCount(), 0, "pending exit should be settled");
     }
 

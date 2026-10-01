@@ -299,13 +299,21 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         uint256 tokenId = _pendingExit.tokenId;
         if (tokenId == 0) revert NoPendingExit();
 
-        uint256 ethBefore = address(this).balance;
-        _withdrawRequestNFT().claimWithdraw(tokenId);
-        ethClaimed = address(this).balance - ethBefore;
-
+        if (_exitHeld(tokenId)) _withdrawRequestNFT().claimWithdraw(tokenId);
         delete _pendingExit;
+
+        ethClaimed = address(this).balance;
         if (ethClaimed > 0) IWETH(_asset()).deposit{value: ethClaimed}();
         emit ExitClaimed(tokenId, ethClaimed);
+    }
+
+    /// @dev True while this contract still holds the exit NFT.
+    function _exitHeld(uint256 tokenId) internal view returns (bool) {
+        try _withdrawRequestNFT().ownerOf(tokenId) returns (address holder) {
+            return holder == address(this);
+        } catch {
+            return false;
+        }
     }
 
     /// @dev Claims the pending exit once finalized and payable; no-op otherwise.
@@ -331,7 +339,7 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     ///         (finalized at claimable amount, otherwise the request's payout ceiling
     ///         — face vs live share value — minus haircut; invalidated claims are 0).
     function _totalValue() internal view override returns (uint256) {
-        return _idleAssets() + eETH.balanceOf(address(this)) + weETH.getEETHByWeETH(weETH.balanceOf(address(this))) + _pendingExitValue();
+        return _idleAssets() + address(this).balance + eETH.balanceOf(address(this)) + weETH.getEETHByWeETH(weETH.balanceOf(address(this))) + _pendingExitValue();
     }
 
     function _idleAssets() internal view override returns (uint256) {
