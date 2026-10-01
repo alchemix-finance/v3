@@ -123,6 +123,7 @@ contract MockFraxEtherRedemptionQueue {
     uint256 public queueLengthSecs = 30 days;
     uint256 public nextNftId = 1;
     address public admin;
+    bool public claimsPaused;
 
     mapping(uint256 => RedemptionQueueItem) public nftInformation;
     mapping(uint256 => address) public _ownerOf;
@@ -144,6 +145,10 @@ contract MockFraxEtherRedemptionQueue {
     function transferAdmin(address newAdmin) external onlyAdmin {
         require(newAdmin != address(0), "zero admin");
         admin = newAdmin;
+    }
+
+    function setClaimsPaused(bool val) external onlyAdmin {
+        claimsPaused = val;
     }
 
     /// @dev Stands in for the EtherRouter's ETH supply; funds future ticket payouts.
@@ -174,6 +179,7 @@ contract MockFraxEtherRedemptionQueue {
     /// @notice Mirrors burnRedemptionTicketNft: only the ticket owner, after maturity,
     ///         while the queue holds enough ETH. Burns the backing frxETH 1:1.
     function burnRedemptionTicketNft(uint256 nftId, address payable recipient) external {
+        require(!claimsPaused, "Paused");
         require(_ownerOf[nftId] == msg.sender, "Erc721CallerNotOwnerOrApproved");
         RedemptionQueueItem memory item = nftInformation[nftId];
         require(!item.hasBeenRedeemed && item.amount > 0, "already redeemed");
@@ -544,6 +550,30 @@ contract SFraxETHStrategyTest is BaseStrategyTest {
         // An explicit claim surfaces the protocol error loudly.
         vm.expectRevert(bytes("InvalidEthTransfer"));
         localStrategy.claimExits();
+    }
+
+    function test_deallocate_survives_paused_queue_claim() public {
+        (SFraxETHStrategy localStrategy, MockFraxEtherRedemptionQueue queue) = _deployWithDrainableQueue(20e18);
+
+        vm.prank(address(1));
+        uint256 tokenId = localStrategy.requestExits(6e18);
+        (, uint64 maturity,,) = IRedemptionQueueView(address(queue)).nftInformation(tokenId);
+        vm.warp(uint256(maturity));
+
+        queue.setClaimsPaused(true);
+        deal(WETH, address(localStrategy), 1e18);
+
+        vm.prank(vault);
+        IMYTStrategy(address(localStrategy)).deallocate(getVaultParams(), 1e18, "", address(vault));
+        assertEq(localStrategy.pendingExitCount(), 1, "paused claim must stay pending");
+
+        vm.expectRevert(bytes("Paused"));
+        localStrategy.claimExits();
+
+        queue.setClaimsPaused(false);
+        vm.prank(vault);
+        IMYTStrategy(address(localStrategy)).deallocate(getVaultParams(), 1e18, "", address(vault));
+        assertEq(localStrategy.pendingExitCount(), 0, "pending exit should settle once unpaused");
     }
 
     function test_deallocate_auto_claims_matured_exit() public {

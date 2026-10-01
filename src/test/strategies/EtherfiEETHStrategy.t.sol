@@ -170,6 +170,7 @@ contract MockWithdrawRequestNFT {
 
     address public liquidityPool;
     address public admin;
+    bool public claimsPaused;
     uint256 public nextRequestId = 1;
     uint256 public lastFinalizedRequestId;
     mapping(uint256 => WithdrawRequest) public _requests;
@@ -195,6 +196,10 @@ contract MockWithdrawRequestNFT {
     function transferAdmin(address newAdmin) external onlyAdmin {
         require(newAdmin != address(0), "zero admin");
         admin = newAdmin;
+    }
+
+    function setClaimsPaused(bool val) external onlyAdmin {
+        claimsPaused = val;
     }
 
     modifier onlyLiquidityPool() {
@@ -250,6 +255,7 @@ contract MockWithdrawRequestNFT {
     }
 
     function _claimWithdraw(uint256 tokenId) internal {
+        require(!claimsPaused, "Paused");
         require(_ownerOf[tokenId] != address(0), "RequestNotFound");
         require(_requests[tokenId].isValid, "Request is not valid");
         require(tokenId <= lastFinalizedRequestId, "Request is not finalized");
@@ -1021,6 +1027,33 @@ contract EtherfiEETHStrategyTest is BaseStrategyTest {
         assertEq(address(localStrategy).balance, 0, "settle should wrap the raw payout");
         assertGe(IERC20(WETH).balanceOf(address(localStrategy)), 5e18, "swept exit should fund the deallocation");
         assertEq(localStrategy.pendingExitCount(), 0, "pending exit should be settled");
+    }
+
+    function test_deallocate_survives_paused_queue_claim() public {
+        (EtherfiEETHMYTStrategy localStrategy, MockEtherfiEnvironment env) = _deployMockStrategy();
+        _mockAllocate(localStrategy, 20e18);
+
+        vm.prank(address(1));
+        (uint256 tokenId,) = localStrategy.requestExits(6e18);
+        MockWithdrawRequestNFT wrn = MockWithdrawRequestNFT(payable(env.withdrawRequestNFT()));
+        wrn.finalizeRequests(tokenId);
+        wrn.setClaimsPaused(true);
+        deal(WETH, address(localStrategy), 1e18);
+
+        IMYTStrategy.VaultAdapterParams memory directDealloc;
+        directDealloc.action = IMYTStrategy.ActionType.direct;
+
+        vm.prank(vault);
+        IMYTStrategy(address(localStrategy)).deallocate(abi.encode(directDealloc), 1e18, "", address(vault));
+        assertEq(localStrategy.pendingExitCount(), 1, "paused claim must stay pending");
+
+        vm.expectRevert(bytes("Paused"));
+        localStrategy.claimExits();
+
+        wrn.setClaimsPaused(false);
+        vm.prank(vault);
+        IMYTStrategy(address(localStrategy)).deallocate(abi.encode(directDealloc), 1e18, "", address(vault));
+        assertEq(localStrategy.pendingExitCount(), 0, "pending exit should settle once unpaused");
     }
 
     function test_async_invalidated_exit_can_be_removed() public {

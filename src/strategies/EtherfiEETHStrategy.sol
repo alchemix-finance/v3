@@ -283,7 +283,7 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
     /// @notice Claim the pending withdrawal request and wrap the received ETH as idle WETH.
     /// @dev Permissionless; reverts via the protocol when the request is not finalized.
     function claimExits() external returns (uint256 ethClaimed) {
-        return _claimExit();
+        return _claimExit(false);
     }
 
     /// @notice Drop a pending exit invalidated by the protocol (no residual claim).
@@ -295,11 +295,17 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         emit InvalidExitRemoved(tokenId);
     }
 
-    function _claimExit() internal returns (uint256 ethClaimed) {
+    function _claimExit(bool tolerant) internal returns (uint256 ethClaimed) {
         uint256 tokenId = _pendingExit.tokenId;
         if (tokenId == 0) revert NoPendingExit();
 
-        if (_exitHeld(tokenId)) _withdrawRequestNFT().claimWithdraw(tokenId);
+        if (_exitHeld(tokenId)) {
+            if (tolerant) {
+                try _withdrawRequestNFT().claimWithdraw(tokenId) {} catch { return 0; }
+            } else {
+                _withdrawRequestNFT().claimWithdraw(tokenId);
+            }
+        }
         delete _pendingExit;
 
         ethClaimed = address(this).balance;
@@ -326,13 +332,13 @@ contract EtherfiEETHMYTStrategy is MYTStrategy {
         if (!_withdrawRequestNFT().isFinalized(tokenId)) return;
         uint256 claimable = _withdrawRequestNFT().getClaimableAmount(tokenId);
         if (address(_liquidityPool()).balance < claimable) return;
-        _claimExit();
+        _claimExit(true);
     }
 
     /// @dev Claim hook for the base contract; only the tracked exit is claimable.
     function _claimWithdrawalQueue(uint256 positionId) internal override returns (uint256) {
         if (positionId != _pendingExit.tokenId) revert UnknownExit(positionId);
-        return _claimExit();
+        return _claimExit(false);
     }
 
     /// @notice Idle WETH + loose eETH + weETH at the canonical rate + pending claim

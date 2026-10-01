@@ -205,15 +205,19 @@ contract SFraxETHStrategy is MYTStrategy {
     /// @notice Claim the pending redemption ticket and wrap the received ETH as idle WETH.
     /// @dev Permissionless; reverts via the protocol when the ticket is not yet mature.
     function claimExits() external returns (uint256 ethClaimed) {
-        return _claimExit();
+        return _claimExit(false);
     }
 
-    function _claimExit() internal returns (uint256 ethClaimed) {
+    function _claimExit(bool tolerant) internal returns (uint256 ethClaimed) {
         uint256 tokenId = _pendingExit.tokenId;
         if (tokenId == 0) revert NoPendingExit();
 
         uint256 ethBefore = address(this).balance;
-        redemptionQueue.burnRedemptionTicketNft(tokenId, payable(address(this)));
+        if (tolerant) {
+            try redemptionQueue.burnRedemptionTicketNft(tokenId, payable(address(this))) {} catch { return 0; }
+        } else {
+            redemptionQueue.burnRedemptionTicketNft(tokenId, payable(address(this)));
+        }
         ethClaimed = address(this).balance - ethBefore;
 
         delete _pendingExit;
@@ -223,22 +227,21 @@ contract SFraxETHStrategy is MYTStrategy {
 
     /// @dev Claims the pending exit once matured; no-op otherwise. The queue's
     ///      documented ETH-shortage state (available ETH earmarked for earlier
-    ///      tickets) is pre-checked via its balance and skipped; after the
-    ///      pre-checks the claim is deterministic, so any other failure reverts
-    ///      loudly through the caller.
+    ///      tickets) is pre-checked via its balance and skipped; any other
+    ///      protocol-side claim failure is tolerated. `claimExits()` stays loud.
     function _settleMaturedExit() internal {
         uint256 tokenId = _pendingExit.tokenId;
         if (tokenId == 0) return;
         IFraxEtherRedemptionQueue.RedemptionQueueItem memory item = redemptionQueue.nftInformation(tokenId);
         if (item.hasBeenRedeemed || block.timestamp < item.maturity) return;
         if (address(redemptionQueue).balance < item.amount) return;
-        _claimExit();
+        _claimExit(true);
     }
 
     /// @dev Claim hook for the base contract; only the tracked exit is claimable.
     function _claimWithdrawalQueue(uint256 positionId) internal override returns (uint256) {
         if (positionId != _pendingExit.tokenId) revert UnknownExit(positionId);
-        return _claimExit();
+        return _claimExit(false);
     }
 
     /// @notice Idle WETH + loose frxETH + sfrxETH at the canonical share rate + pending
