@@ -58,10 +58,10 @@ contract DeployClipAllocatorScriptTest is Test {
         vm.stopPrank();
 
         assertEq(clip.budget(bot), ALLOCATE_AMOUNT + DEALLOCATE_AMOUNT + 2 * TOP_UP, "budget");
-        (uint256 allocateLeft, uint256 allocateClip,,,,,) = clip.allocateGrants(bot, adapter);
+        (uint256 allocateLeft, uint256 allocateClip,,,,,,) = clip.allocateGrants(bot, adapter);
         assertEq(allocateLeft, ALLOCATE_AMOUNT + TOP_UP, "allocate remaining");
         assertEq(allocateClip, 10 ether, "allocate maxClip");
-        (uint256 deallocateLeft, uint256 deallocateClip,,,,,) = clip.deallocateGrants(bot, adapter);
+        (uint256 deallocateLeft, uint256 deallocateClip,,,,,,) = clip.deallocateGrants(bot, adapter);
         assertEq(deallocateLeft, DEALLOCATE_AMOUNT + TOP_UP, "deallocate remaining");
         assertEq(deallocateClip, 8 ether, "deallocate maxClip");
 
@@ -71,10 +71,10 @@ contract DeployClipAllocatorScriptTest is Test {
         vm.stopPrank();
 
         assertEq(clip.budget(bot), 0, "budget after revoke");
-        (allocateLeft, allocateClip,,,,,) = clip.allocateGrants(bot, adapter);
+        (allocateLeft, allocateClip,,,,,,) = clip.allocateGrants(bot, adapter);
         assertEq(allocateLeft, 0, "allocate remaining after revoke");
         assertEq(allocateClip, 10 ether, "revoke keeps maxClip");
-        (deallocateLeft,,,,,,) = clip.deallocateGrants(bot, adapter);
+        (deallocateLeft,,,,,,,) = clip.deallocateGrants(bot, adapter);
         assertEq(deallocateLeft, 0, "deallocate remaining after revoke");
 
         vm.expectRevert(ClipAllocator.NotOwner.selector);

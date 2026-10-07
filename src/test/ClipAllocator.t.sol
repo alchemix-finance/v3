@@ -196,6 +196,10 @@ contract ScriptedToken {
     function set(address account, uint256 amount) external {
         balanceOf[account] = amount;
     }
+
+    function decimals() external pure returns (uint8) {
+        return 18;
+    }
 }
 
 contract GuardStrategy {
@@ -351,7 +355,7 @@ contract ClipAllocatorGuardsTest is Test {
         vm.prank(bot);
         clip.deallocateClip(address(strategy), CLIP);
 
-        (uint256 remaining,,,,,,) = clip.deallocateGrants(bot, address(strategy));
+        (uint256 remaining,,,,,,,) = clip.deallocateGrants(bot, address(strategy));
         assertEq(remaining, 50 ether);
     }
 
@@ -376,14 +380,14 @@ contract ClipAllocatorGuardsTest is Test {
         vm.prank(bot);
         clip.deallocateClip(address(strategy), CLIP);
 
-        (uint256 remainingAfterRevert,,,,,,) = clip.deallocateGrants(bot, address(strategy));
+        (uint256 remainingAfterRevert,,,,,,,) = clip.deallocateGrants(bot, address(strategy));
         assertEq(remainingAfterRevert, CLIP);
 
         vm.roll(readyAt);
         vm.prank(bot);
         clip.deallocateClip(address(strategy), CLIP);
 
-        (uint256 remaining,,,,,,) = clip.deallocateGrants(bot, address(strategy));
+        (uint256 remaining,,,,,,,) = clip.deallocateGrants(bot, address(strategy));
         assertEq(remaining, 0);
     }
 
@@ -393,7 +397,7 @@ contract ClipAllocatorGuardsTest is Test {
         clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0);
         clip.revokeDeallocate(bot, address(strategy));
 
-        (uint256 remaining, uint256 maxClip,,,,,) = clip.deallocateGrants(bot, address(strategy));
+        (uint256 remaining, uint256 maxClip,,,,,,) = clip.deallocateGrants(bot, address(strategy));
         assertEq(remaining, 0);
         assertEq(maxClip, CLIP);
 
@@ -434,7 +438,7 @@ contract ClipAllocatorGuardsTest is Test {
         vm.prank(bot);
         clip.deallocateClip(address(strategy), CLIP);
 
-        (uint256 remaining,,,,,,) = clip.deallocateGrants(bot, address(strategy));
+        (uint256 remaining,,,,,,,) = clip.deallocateGrants(bot, address(strategy));
         assertEq(remaining, CLIP);
 
         address stranger = makeAddr("stranger");
@@ -587,9 +591,9 @@ contract ClipAllocatorGuardsTest is Test {
 
         assertEq(strategy.realAssets(), CLIP);
         assertEq(liquidity.realAssets(), 0);
-        (uint256 liquidityLeft,,,,,,) = clip.deallocateGrants(bot, address(liquidity));
+        (uint256 liquidityLeft,,,,,,,) = clip.deallocateGrants(bot, address(liquidity));
         assertEq(liquidityLeft, 0);
-        (uint256 allocateLeft,,,,,,) = clip.allocateGrants(bot, address(strategy));
+        (uint256 allocateLeft,,,,,,,) = clip.allocateGrants(bot, address(strategy));
         assertEq(allocateLeft, 0);
     }
 
@@ -629,7 +633,7 @@ contract ClipAllocatorGuardsTest is Test {
         clip.allocateClip(address(strategy), clipAmount);
 
         assertEq(liquidity.realAssets(), drop);
-        (uint256 liquidityLeft,,,,,,) = clip.deallocateGrants(bot, address(liquidity));
+        (uint256 liquidityLeft,,,,,,,) = clip.deallocateGrants(bot, address(liquidity));
         assertEq(liquidityLeft, shortfall);
     }
 
@@ -656,7 +660,7 @@ contract ClipAllocatorGuardsTest is Test {
         clip.allocateClip(address(strategy), CLIP);
 
         assertEq(strategy.realAssets(), CLIP);
-        (,,, uint64 lastClipBlock,,,) = clip.deallocateGrants(bot, address(liquidity));
+        (,,, uint64 lastClipBlock,,,,) = clip.deallocateGrants(bot, address(liquidity));
         assertEq(lastClipBlock, stamped);
 
         vm.expectRevert(abi.encodeWithSelector(ClipAllocator.TooSoon.selector, stamped + 5));
@@ -757,7 +761,7 @@ contract ClipAllocatorGuardsTest is Test {
             ,
             address price,
             uint256 limitRate,
-            uint16 maxLossBps
+            uint16 maxLossBps,
         ) = clip.deallocateGrants(bot, address(strategy));
         assertEq(remaining, 70 ether);
         assertEq(maxClip, 1 ether);
@@ -783,7 +787,7 @@ contract ClipAllocatorGuardsTest is Test {
             ,
             address price,
             uint256 limitRate,
-            uint16 maxLossBps
+            uint16 maxLossBps,
         ) = clip.deallocateGrants(bot, address(strategy));
         assertEq(remaining, 2 * CLIP);
         assertEq(maxClip, 1 ether);
@@ -841,5 +845,47 @@ contract ClipAllocatorGuardsTest is Test {
         vm.prank(bot);
         clip.setPaused(true);
         assertFalse(clip.paused());
+    }
+
+    /// @dev The expiry block itself still runs. The next block does not. A short grant does not expire.
+    function test_clip_revertsAfterExpiry() public {
+        strategy.setMove(1_000 ether, 900 ether, 0, 0);
+        clip.grantDeallocate(bot, address(strategy), 2 * CLIP, CLIP, 0, address(0), 0, 0, uint64(block.number + 1));
+
+        vm.roll(block.number + 1);
+        vm.prank(bot);
+        clip.deallocateClip(address(strategy), CLIP);
+
+        vm.roll(block.number + 1);
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.GrantExpired.selector, uint64(block.number - 1)));
+        vm.prank(bot);
+        clip.deallocateClip(address(strategy), CLIP);
+    }
+
+    /// @dev topUp adds budget and leaves the expiry where it was.
+    function test_topUp_doesNotMoveExpiry() public {
+        uint64 expiry = uint64(block.number + 5);
+        clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 0, address(0), 0, 0, expiry);
+        clip.topUpDeallocate(bot, address(strategy), CLIP);
+        (,,,,,,, uint64 stored) = clip.deallocateGrants(bot, address(strategy));
+        assertEq(stored, expiry);
+    }
+
+    /// @dev No feed: the caller already has underlying per token. 100 bps around 1 underlying.
+    function test_previewLimitRate_appliesBand() public view {
+        assertEq(clip.previewLimitRate(1 ether, 100, false), 0.99 ether);
+        assertEq(clip.previewLimitRate(1 ether, 100, true), 1.01 ether);
+    }
+
+    /// @dev 8 decimal feed, 18 decimal asset and token. answer 2000e8 is 2000 underlying per token.
+    function test_previewLimitRateOracleToken_scalesFeed() public view {
+        uint256 floor = clip.previewLimitRateOracleToken(address(priceToken), 2_000e8, 8, 1e18, 100, false);
+        uint256 ceiling = clip.previewLimitRateOracleToken(address(priceToken), 2_000e8, 8, 1e18, 100, true);
+        assertEq(floor, 1_980 ether);
+        assertEq(ceiling, 2_020 ether);
+
+        // One priceToken is 1.1 of the token the feed prices.
+        uint256 wrapped = clip.previewLimitRateOracleToken(address(priceToken), 2_000e8, 8, 1.1e18, 100, false);
+        assertEq(wrapped, 2_178 ether);
     }
 }
