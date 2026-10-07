@@ -4,10 +4,12 @@ pragma solidity 0.8.28;
 import "../BaseStrategyTest.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {E2EInvariantStrategyTest} from "../base/E2EInvariantStrategyTest.sol";
+import {AlchemistStrategyClassifier} from "../../AlchemistStrategyClassifier.sol";
 import {IporFusionStrategy, IIporWithdrawManager} from "../../strategies/IporFusionStrategy.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
+import {RevertContext} from "../base/StrategyTypes.sol";
 
 /// @notice Mainnet addresses and fork fixtures for the IPOR Fusion "rETH Liquity LP Carry" PlasmaVault.
 library IporLiquityETHCarryFixture {
@@ -23,6 +25,15 @@ library IporLiquityETHCarryFixture {
     uint256 internal constant MAX_WITHDRAW_FEE = 5e15; // 0.5%
     uint256 internal constant REDEEM_BUFFER_BPS = 10;
     uint256 internal constant SLIPPAGE_BPS = 20;
+
+    /// @dev Deadband for rounding and fee dust. Not a step poke can repeat.
+    uint256 internal constant BASE_BPS = 5;
+    /// @dev About 3x the 6% carry (1.6 bps/day), so daily growth fits without an owner snap.
+    uint256 internal constant UP_BPS_PER_DAY = 5;
+    uint256 internal constant DOWN_BPS_PER_DAY = 5;
+    /// @dev Largest catch-up one update may book after the anchor has been sitting.
+    uint256 internal constant MAX_UP_BPS = 50;
+    uint256 internal constant MAX_DOWN_BPS = 50;
 
     /// @dev PlasmaVaultStorageLib.ERC20_CAPPED_STORAGE_LOCATION (OZ ERC20Capped namespace).
     bytes32 internal constant TOTAL_SUPPLY_CAP_SLOT = 0x0f070392f17d5f958cc1ac31867dabecfc5c9758b4a419a200803226d7155d00;
@@ -43,8 +54,20 @@ library IporLiquityETHCarryFixture {
         });
     }
 
+    function guardParams() internal pure returns (IporFusionStrategy.PriceGuardParams memory) {
+        return IporFusionStrategy.PriceGuardParams({
+            baseBps: BASE_BPS,
+            upBpsPerDay: UP_BPS_PER_DAY,
+            downBpsPerDay: DOWN_BPS_PER_DAY,
+            maxUpBps: MAX_UP_BPS,
+            maxDownBps: MAX_DOWN_BPS
+        });
+    }
+
     function deploy(address myt, IMYTStrategy.StrategyParams memory p) internal returns (address) {
-        return address(new IporFusionStrategy(myt, p, PLASMA_VAULT, WITHDRAW_MANAGER, MAX_WITHDRAW_FEE, REDEEM_BUFFER_BPS));
+        return address(
+            new IporFusionStrategy(myt, p, PLASMA_VAULT, WITHDRAW_MANAGER, MAX_WITHDRAW_FEE, REDEEM_BUFFER_BPS, guardParams())
+        );
     }
 
     /// @dev The live vault sits at its total supply cap and enforces a 1s redemption delay after deposit.
@@ -56,6 +79,35 @@ library IporLiquityETHCarryFixture {
 
     function setRedemptionDelay(uint256 delaySeconds) internal {
         vm.store(ACCESS_MANAGER, REDEMPTION_DELAY_SLOT, bytes32(delaySeconds));
+    }
+
+    /// @dev Yearly carry the live vault earns, simulated on the frozen fork as WETH arriving in
+    ///      the PlasmaVault. Idle WETH is part of its NAV, so this lifts `previewRedeem` for all.
+    uint256 internal constant SIMULATED_CARRY_BPS_PER_YEAR = 600;
+
+    function accrueCarry(uint256 elapsed) internal {
+        if (elapsed == 0) return;
+        uint256 nav = IERC4626(PLASMA_VAULT).totalAssets();
+        uint256 carry = nav * SIMULATED_CARRY_BPS_PER_YEAR * elapsed / (10_000 * 365 days);
+        if (carry == 0) return;
+        uint256 idle = IERC20(WETH).balanceOf(PLASMA_VAULT);
+        // `deal` on a library has no `Test` context; write the WETH balance slot directly.
+        vm.store(WETH, keccak256(abi.encode(PLASMA_VAULT, uint256(3))), bytes32(idle + carry));
+    }
+
+    /// @dev Shares a fee-realizing holder redeems per call. 20-decimal shares, so about 1e-5 ETH.
+    uint256 internal constant FEE_REALIZATION_SHARES = 1e15;
+
+    /// @dev The PlasmaVault realizes its performance fee in the withdraw path, on the whole vault's
+    ///      gain since the last realization. `previewRedeem` does not include it. Live, any redeem or
+    ///      Alpha execute realizes it, so it stays small; on a frozen fork nobody does, so a single
+    ///      redeem would absorb all of it. Mirror the live cadence with a dust redeem from `holder`.
+    ///      `holder` must have approved the current sender if that sender is not `holder`.
+    function realizeFees(address holder) internal {
+        uint256 bal = IERC4626(PLASMA_VAULT).balanceOf(holder);
+        if (bal == 0) return;
+        uint256 shares = bal < FEE_REALIZATION_SHARES ? bal : FEE_REALIZATION_SHARES;
+        IERC4626(PLASMA_VAULT).redeem(shares, holder, holder);
     }
 }
 
@@ -83,7 +135,9 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
     }
 
     function getTestConfig() internal pure override returns (TestConfig memory) {
-        return TestConfig({vaultAsset: WETH, vaultInitialDeposit: 1000e18, absoluteCap: 100e18, relativeCap: 0.1e18, decimals: 18});
+        // Headroom above a 100 ETH allocate so the next allocate can book accrued NAV
+        // without exceeding the cap. The shared harness fills whatever headroom is left.
+        return TestConfig({vaultAsset: WETH, vaultInitialDeposit: 1000e18, absoluteCap: 1000e18, relativeCap: 1e18, decimals: 18});
     }
 
     function createStrategy(address vault_, IMYTStrategy.StrategyParams memory p) internal override returns (address) {
@@ -101,6 +155,53 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
     function setUp() public override {
         super.setUp();
         IporLiquityETHCarryFixture.unlockVault();
+        // HIGH risk is 10% in the shared harness, which binds at the same 100 ETH the
+        // end-to-end test deposits. Open it so a later allocate can book carry.
+        vm.prank(admin);
+        AlchemistStrategyClassifier(classifier).setRiskClass(2, 1e18, 1e18);
+
+        // A small PlasmaVault position this contract uses to realize fees on each time shift.
+        // The hook may run under an `admin` prank, so let admin redeem on this contract's behalf.
+        deal(WETH, address(this), 0.1e18);
+        IERC20(WETH).approve(PLASMA_VAULT, 0.1e18);
+        IERC4626(PLASMA_VAULT).deposit(0.1e18, address(this));
+        IERC4626(PLASMA_VAULT).approve(admin, type(uint256).max);
+    }
+
+    /// @dev `allocate` books all NAV movement since the last checkpoint. Filling the remaining
+    ///      cap exactly then reverts once carry has accrued. Skip that allocate.
+    function isProtocolRevertAllowed(bytes4 selector, RevertContext context) external pure override returns (bool) {
+        if (selector != bytes4(keccak256("AbsoluteCapExceeded()"))) return false;
+        return context == RevertContext.HandlerAllocate || context == RevertContext.FuzzAllocate;
+    }
+
+    /// @dev A fuzzed allocate or deallocate can land outside the share-price room after a fee
+    ///      realization. That revert is the guard working; the harness should skip the call.
+    function isMytRevertAllowed(bytes4 selector, RevertContext context) external pure override returns (bool) {
+        if (selector != IporFusionStrategy.PriceOutsideRoom.selector) return false;
+        return context == RevertContext.HandlerAllocate || context == RevertContext.HandlerDeallocate
+            || context == RevertContext.FuzzAllocate || context == RevertContext.FuzzDeallocate;
+    }
+
+    /// @dev A frozen fork keeps charging the PlasmaVault fees against the clock while its markets
+    ///      never earn, so the share price only falls. Accrue the carry the live vault earns and
+    ///      realize fees at the live cadence so the fork keeps production economics. Then snap the
+    ///      anchor to the destination price: inherited harnesses warp up to a year, which is more
+    ///      than the cap will book. Done with `vm.store` because those tests are often already
+    ///      pranking and `acceptPrice` is `onlyOwner`. Slots match `anchorPps` (14) and
+    ///      `anchorTimestamp` (15).
+    function _beforeTimeShift(uint256 targetTimestamp) internal override {
+        uint256 start = block.timestamp;
+        if (targetTimestamp <= start) return;
+        IporLiquityETHCarryFixture.accrueCarry(targetTimestamp - start);
+        vm.warp(targetTimestamp);
+        IporLiquityETHCarryFixture.realizeFees(address(this));
+        uint256 live = _strategy().liveSharePrice();
+        if (live != 0) {
+            vm.store(strategy, bytes32(uint256(14)), bytes32(live));
+            vm.store(strategy, bytes32(uint256(15)), bytes32(targetTimestamp));
+        }
+        vm.warp(start);
     }
 
     function _effectiveDeallocateAmount(uint256 requestedAssets) internal view override returns (uint256) {
@@ -133,13 +234,23 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         assertEq(address(_strategy().withdrawManager()), WITHDRAW_MANAGER, "unexpected WithdrawManager");
         assertEq(_strategy().maxWithdrawFee(), IporLiquityETHCarryFixture.MAX_WITHDRAW_FEE, "unexpected maxWithdrawFee");
         assertEq(_strategy().redeemBufferBps(), IporLiquityETHCarryFixture.REDEEM_BUFFER_BPS, "unexpected redeemBufferBps");
+        assertEq(_strategy().baseBps(), IporLiquityETHCarryFixture.BASE_BPS, "unexpected baseBps");
+        assertEq(_strategy().upBpsPerDay(), IporLiquityETHCarryFixture.UP_BPS_PER_DAY, "unexpected upBpsPerDay");
+        assertEq(_strategy().downBpsPerDay(), IporLiquityETHCarryFixture.DOWN_BPS_PER_DAY, "unexpected downBpsPerDay");
+        assertEq(_strategy().maxUpBps(), IporLiquityETHCarryFixture.MAX_UP_BPS, "unexpected maxUpBps");
+        assertEq(_strategy().maxDownBps(), IporLiquityETHCarryFixture.MAX_DOWN_BPS, "unexpected maxDownBps");
+        // setUp's fee-realizer deposit lands after construction and rounds the price by dust.
+        assertApproxEqRel(_strategy().anchorPps(), _strategy().liveSharePrice(), 1e8, "anchor should start at the live price");
+        assertGt(_strategy().anchorPps(), 0, "anchor should be non-zero");
         assertEq(IERC4626(PLASMA_VAULT).asset(), WETH, "PlasmaVault asset should be WETH");
     }
 
     function test_constructor_reverts_whenWithdrawManagerTargetsOtherVault() public {
         MockWithdrawManagerWrongVault wrongWm = new MockWithdrawManagerWrongVault(address(0xBEEF));
         vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.WithdrawManagerVaultMismatch.selector, PLASMA_VAULT, address(0xBEEF)));
-        new IporFusionStrategy(vault, getStrategyConfig(), PLASMA_VAULT, address(wrongWm), 5e15, 10);
+        new IporFusionStrategy(
+            vault, getStrategyConfig(), PLASMA_VAULT, address(wrongWm), 5e15, 10, IporLiquityETHCarryFixture.guardParams()
+        );
     }
 
     function test_setters_onlyOwner() public {
@@ -216,8 +327,9 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         assertLt(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "shares should be burned");
 
         // Fee is already netted in _totalValue, so the reported change tracks the requested amount.
+        // Redeemed WETH stays idle in the strategy, so it remains inside realAssets until the vault pulls it.
         assertApproxEqRel(change, -int256(amount), 2e15, "change should track requested amount");
-        assertApproxEqRel(IMYTStrategy(strategy).realAssets() + amount, realBefore, 2e15, "value conserved up to rounding");
+        assertApproxEqRel(IMYTStrategy(strategy).realAssets(), realBefore, 2e15, "idle proceeds stay in total value");
         assertEq(IERC20(WETH).allowance(strategy, vault), amount, "allowance for vault pull");
     }
 
@@ -254,8 +366,11 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         _allocateDirect(50e18);
         uint256 withdrawFee = IIporWithdrawManager(WITHDRAW_MANAGER).getWithdrawFee();
 
-        // Shrink the PlasmaVault's idle WETH below our position.
+        // Shrink the PlasmaVault's idle WETH below our position. Replacing the balance also
+        // drops the share price, so book that print before exiting.
         deal(WETH, PLASMA_VAULT, 10e18);
+        vm.prank(admin);
+        _strategy().acceptPrice();
         assertEq(_strategy().availableSyncLiquidity(), 10e18, "liquidity should equal vault idle WETH");
 
         uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(50e18);
@@ -270,6 +385,8 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
     function test_deallocate_reverts_whenRequestExceedsSyncLiquidity() public {
         _allocateDirect(50e18);
         deal(WETH, PLASMA_VAULT, 10e18);
+        vm.prank(admin);
+        _strategy().acceptPrice();
 
         vm.prank(vault);
         vm.expectPartialRevert(IporFusionStrategy.InsufficientSyncLiquidity.selector);
@@ -297,6 +414,10 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
 
         assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(1e18), 0, "preview should fall back to idle only");
 
+        // The higher fee is inside previewRedeem, so book it before the exit checks the fee itself.
+        vm.prank(admin);
+        _strategy().acceptPrice();
+
         vm.prank(vault);
         vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.WithdrawFeeTooHigh.selector, highFee, IporLiquityETHCarryFixture.MAX_WITHDRAW_FEE));
         IMYTStrategy(strategy).deallocate(getVaultParams(), 1e18, "", vault);
@@ -318,6 +439,92 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         vm.warp(block.timestamp + 1);
         _deallocateDirect(1e18);
         assertGe(IERC20(WETH).balanceOf(strategy), 1e18, "exit should succeed once unlocked");
+    }
+
+    // ------------------------------------------------------------------
+    // Share-price room
+    // ------------------------------------------------------------------
+
+    function test_totalValue_clampsInflatedSharePriceAndLeavesIdleUnclamped() public {
+        _allocateDirect(10e18);
+        uint256 shares = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+        uint256 unit = _strategy().shareUnit();
+        uint256 anchor = _strategy().anchorPps();
+        (, uint256 upper) = _strategy().priceBounds();
+        uint256 inflated = anchor * 2;
+
+        deal(WETH, strategy, 1e18);
+        vm.mockCall(PLASMA_VAULT, abi.encodeWithSelector(IERC4626.previewRedeem.selector, unit), abi.encode(inflated));
+        vm.mockCall(
+            PLASMA_VAULT,
+            abi.encodeWithSelector(IERC4626.previewRedeem.selector, shares),
+            abi.encode(shares * inflated / unit)
+        );
+
+        uint256 raw = shares * inflated / unit;
+        assertEq(IMYTStrategy(strategy).realAssets(), 1e18 + raw * upper / inflated, "idle plus ceiling-priced shares");
+        vm.clearMockedCalls();
+    }
+
+    function test_allocate_reverts_whenLivePriceIsAboveTheRoom() public {
+        uint256 unit = _strategy().shareUnit();
+        uint256 inflated = _strategy().anchorPps() * 2;
+        vm.mockCall(PLASMA_VAULT, abi.encodeWithSelector(IERC4626.previewRedeem.selector, unit), abi.encode(inflated));
+
+        (uint256 lower, uint256 upper) = _strategy().priceBounds();
+        deal(WETH, strategy, 1e18);
+        vm.prank(vault);
+        vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.PriceOutsideRoom.selector, inflated, lower, upper));
+        IMYTStrategy(strategy).allocate(getVaultParams(), 1e18, "", vault);
+        vm.clearMockedCalls();
+    }
+
+    function test_deallocate_reverts_whenLivePriceIsBelowTheRoom() public {
+        _allocateDirect(5e18);
+        uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+        uint256 unit = _strategy().shareUnit();
+        uint256 crashed = _strategy().anchorPps() / 2;
+        vm.mockCall(PLASMA_VAULT, abi.encodeWithSelector(IERC4626.previewRedeem.selector, unit), abi.encode(crashed));
+
+        (uint256 lower, uint256 upper) = _strategy().priceBounds();
+        vm.prank(vault);
+        vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.PriceOutsideRoom.selector, crashed, lower, upper));
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 1e18, "", vault);
+
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "crash print must not be redeemed");
+        vm.clearMockedCalls();
+    }
+
+    function test_poke_booksOneBudgetThenStopsInTheSameTimestamp() public {
+        uint256 start = _strategy().anchorPps();
+        vm.warp(block.timestamp + 10 days);
+
+        uint256 inflated = start * 2;
+        uint256 unit = _strategy().shareUnit();
+        vm.mockCall(PLASMA_VAULT, abi.encodeWithSelector(IERC4626.previewRedeem.selector, unit), abi.encode(inflated));
+
+        _strategy().poke();
+        uint256 afterFirst = _strategy().anchorPps();
+        // 10 days * 5 bps/day, capped at 50 bps.
+        assertEq(afterFirst, start * (10_000 + IporLiquityETHCarryFixture.MAX_UP_BPS) / 10_000, "poke books the cap");
+
+        _strategy().poke();
+        assertEq(_strategy().anchorPps(), afterFirst, "a second poke in this timestamp does not walk");
+        vm.clearMockedCalls();
+    }
+
+    function test_acceptPrice_isOwnerAndBooksAPrintOutsideTheRoom() public {
+        uint256 unit = _strategy().shareUnit();
+        uint256 inflated = _strategy().anchorPps() * 2;
+        vm.mockCall(PLASMA_VAULT, abi.encodeWithSelector(IERC4626.previewRedeem.selector, unit), abi.encode(inflated));
+
+        vm.expectRevert();
+        _strategy().acceptPrice();
+
+        vm.prank(admin);
+        _strategy().acceptPrice();
+        assertEq(_strategy().anchorPps(), inflated, "owner books the live print");
+        vm.clearMockedCalls();
     }
 
     // ------------------------------------------------------------------
@@ -377,8 +584,15 @@ contract IporLiquityETHCarryInvariantTest is E2EInvariantStrategyTest {
         return IporLiquityETHCarryFixture.deploy(vault_, p);
     }
 
-    function _postCreateStrategy(address) internal override {
+    function _postCreateStrategy(address strategy_) internal override {
         IporLiquityETHCarryFixture.unlockVault();
+        // The fuzzer warps up to a year. Widen the catch-up cap so a frozen snapshot's fee
+        // accrual still fits; the per-day rate and the same-block deadband stay as deployed.
+        IporFusionStrategy.PriceGuardParams memory guard = IporLiquityETHCarryFixture.guardParams();
+        guard.maxUpBps = 500;
+        guard.maxDownBps = 500;
+        vm.prank(admin);
+        IporFusionStrategy(strategy_).setPriceGuard(guard);
     }
 
     function _enableForceDeallocate(address strategy_) internal override {
