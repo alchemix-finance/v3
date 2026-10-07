@@ -204,6 +204,8 @@ contract GuardStrategy {
     uint256 public nextRealAssets;
     ScriptedToken public priceToken;
     uint256 public nextPriceBalance;
+    ScriptedToken public idleToken;
+    uint256 public nextIdleBalance;
 
     constructor(bytes32 id) {
         adapterId = id;
@@ -211,6 +213,13 @@ contract GuardStrategy {
 
     function setPriceToken(ScriptedToken token) external {
         priceToken = token;
+    }
+
+    /// @dev Script the vault asset held idle at this strategy before and after the next touch.
+    function setIdleMove(ScriptedToken token, uint256 currentIdle, uint256 nextIdle) external {
+        idleToken = token;
+        nextIdleBalance = nextIdle;
+        token.set(address(this), currentIdle);
     }
 
     /// @dev The next allocator touch jumps realAssets and, when a price token is
@@ -225,6 +234,7 @@ contract GuardStrategy {
     function applyMove() external {
         realAssets = nextRealAssets;
         if (address(priceToken) != address(0)) priceToken.set(address(this), nextPriceBalance);
+        if (address(idleToken) != address(0)) idleToken.set(address(this), nextIdleBalance);
     }
 }
 
@@ -450,6 +460,32 @@ contract ClipAllocatorGuardsTest is Test {
         vm.prank(bot);
         clip.allocateClip(address(strategy), CLIP);
         assertEq(strategy.realAssets(), CLIP);
+    }
+
+    /// @dev 60 ether sat idle from earlier clips. The swap sells 100 ether of the position
+    ///      for only 40 ether; the vault still pulls 100 and idle drops to 0. The floor must
+    ///      see 40 / 100 = 0.4e18, not the 100 / 100 that crediting leftover idle would give.
+    function test_deallocate_floorIgnoresLeftoverIdle() public {
+        strategy.setMove(1_000 ether, 940 ether, 100 ether, 0);
+        strategy.setIdleMove(asset, 60 ether, 0);
+        clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 0, address(priceToken), 1e18, 0);
+
+        vm.expectRevert(abi.encodeWithSelector(ClipAllocator.RateOutsideLimit.selector, 0.4e18, 1e18, false));
+        vm.prank(bot);
+        clip.deallocateClip(address(strategy), CLIP);
+    }
+
+    /// @dev No idle before. The swap sells 100 ether of the position for 110 ether; the vault
+    ///      pulls 100 and 10 stays idle. The floor credits the full 110: rate 1.1e18 clears a
+    ///      1.05e18 floor that `assets` alone (1e18) would miss.
+    function test_deallocate_floorCreditsSwapExcessLeftIdle() public {
+        strategy.setMove(1_000 ether, 910 ether, 100 ether, 0);
+        strategy.setIdleMove(asset, 0, 10 ether);
+        clip.grantDeallocate(bot, address(strategy), CLIP, CLIP, 0, address(priceToken), 1.05e18, 0);
+
+        vm.prank(bot);
+        clip.deallocateClip(address(strategy), CLIP);
+        assertEq(strategy.realAssets(), 910 ether);
     }
 
     function test_guardedDeallocate_revertsWhenPriceTokenDoesNotMove() public {

@@ -61,10 +61,12 @@ interface IERC20Lite {
  *         - a PRICE FLOOR, not a slippage bound: `priceToken` is the ERC20 whose
  *           balance at the adapter measures the position (the LST a swap
  *           strategy holds, an aToken, a 4626 share), and `limitRate` is
- *           underlying per token, WAD-scaled on raw units
- *           (rate = assets × 1e18 / Δtokens). A deallocate clip must RECEIVE at
- *           least limitRate per token given up; an allocate clip must PAY at
- *           most limitRate per token gained. priceToken = 0 leaves the grant
+ *           underlying per token, WAD-scaled on raw units. A deallocate clip must
+ *           RECEIVE at least limitRate per token given up, where "received" is
+ *           what the clip itself raised (`assets` plus any change in the adapter's
+ *           idle balance), so leftover idle from earlier clips is not credited to
+ *           this one. An allocate clip must PAY at most limitRate per token gained
+ *           (rate = assets × 1e18 / Δtokens). priceToken = 0 leaves the grant
  *           unguarded here (the adapter's own slippageBPS still applies).
  *
  *         Idle cash: an allocate clip needs the vault to hold `assets`. When it is
@@ -286,7 +288,7 @@ contract ClipAllocator {
         g.lastClipBlock = uint64(block.number);
     }
 
-    struct Snap { bytes32 id; uint256 booked; uint256 real; uint256 tokens; }
+    struct Snap { bytes32 id; uint256 booked; uint256 real; uint256 tokens; uint256 idle; }
 
     function _deallocate(address adapter, uint256 assets, uint8 mode, bytes memory txData,
                          uint256 minIntermediateOut) internal {
@@ -298,9 +300,19 @@ contract ClipAllocator {
         (int256 dReal, int256 dBooked, int256 dTokens) = _deltas(adapter, g.priceToken, b);
         if (dReal >= 0) revert RealAssetsDidNotMove(assets, dReal);
         _checkRealLoss(g.maxLossBps, assets, dReal, false);
-        // price floor: the vault received `assets` for |dTokens| of the position
-        uint256 rate = _rate(g, assets, dTokens, false);
+        // price floor: the position gave up |dTokens| for what this clip actually raised
+        uint256 rate = _rate(g, _raised(adapter, assets, b), dTokens, false);
         emit ClipExecuted(msg.sender, adapter, false, assets, dReal, dBooked, dTokens, rate, g.remaining);
+    }
+
+    /// @dev The underlying this deallocate clip actually produced: the `assets` the vault pulled
+    ///      plus whatever the swap left idle at the adapter beyond what was already there.
+    function _raised(address adapter, uint256 assets, Snap memory b) internal view returns (uint256) {
+        uint256 idleAfter = asset.balanceOf(adapter);
+        if (idleAfter >= b.idle) return assets + (idleAfter - b.idle);
+        // Idle fell: part of `assets` came from leftover, not from this clip's swap.
+        uint256 drawn = b.idle - idleAfter;
+        return drawn >= assets ? 0 : assets - drawn;
     }
 
     function _allocate(address adapter, uint256 assets, bool withSwap, bytes memory txData) internal {
@@ -328,10 +340,8 @@ contract ClipAllocator {
         }
     }
 
-    /// @dev rate = underlying per position token, WAD on raw units. Deallocate:
-    ///      tokens leave the adapter (dTokens < 0) and must fetch >= limitRate
-    ///      each. Allocate: tokens arrive (dTokens > 0) and must cost <= limitRate
-    ///      each. Unguarded grants (priceToken = 0) report rate 0.
+    /// @dev Underlying per position token, WAD. Deallocate must clear `limitRate`;
+    ///      allocate must stay under it. Unguarded grants return 0.
     function _rate(Grant storage g, uint256 assets, int256 dTokens, bool isAllocate) internal view returns (uint256 rate) {
         if (g.priceToken == address(0)) return 0;
         if (isAllocate ? dTokens <= 0 : dTokens >= 0) revert PositionDidNotMove(g.priceToken, dTokens);
@@ -345,6 +355,7 @@ contract ClipAllocator {
         s.booked = vault.allocation(s.id);
         s.real = IMYTStrategyLite(adapter).realAssets();
         s.tokens = priceToken == address(0) ? 0 : IERC20Lite(priceToken).balanceOf(adapter);
+        s.idle = asset.balanceOf(adapter);
     }
 
     function _deltas(address adapter, address priceToken, Snap memory b)
@@ -375,7 +386,7 @@ contract ClipAllocator {
         (int256 dReal,, int256 dTokens) = _deltas(liq, g.priceToken, b);
         if (dReal >= 0) revert RealAssetsDidNotMove(shortfall, dReal);
         _checkRealLoss(g.maxLossBps, shortfall, dReal, false);
-        _rate(g, shortfall, dTokens, false);
+        _rate(g, _raised(liq, shortfall, b), dTokens, false);
         emit IdleRaised(msg.sender, liq, shortfall, g.remaining);
     }
 }
