@@ -235,6 +235,23 @@ contract GuardStrategy {
         realAssets = nextRealAssets;
         if (address(priceToken) != address(0)) priceToken.set(address(this), nextPriceBalance);
         if (address(idleToken) != address(0)) idleToken.set(address(this), nextIdleBalance);
+        if (reenter != address(0)) {
+            (bool ok, bytes memory err) = reenter.call(reenterData);
+            if (!ok) {
+                assembly {
+                    revert(add(err, 32), mload(err))
+                }
+            }
+        }
+    }
+
+    address public reenter;
+    bytes public reenterData;
+
+    /// @dev During the next allocator touch, call `target` with `data`. Used to reenter a clip.
+    function setReenter(address target, bytes calldata data) external {
+        reenter = target;
+        reenterData = data;
     }
 }
 
@@ -258,6 +275,19 @@ contract GuardVault {
 
     function allocation(bytes32) external pure returns (uint256) {
         return 0;
+    }
+}
+
+/// @dev Calls back into the clip it was granted. Stands in for a contract bot reached from swap calldata.
+contract ReenteringBot {
+    ClipAllocator public clip;
+
+    constructor(ClipAllocator _clip) {
+        clip = _clip;
+    }
+
+    function deallocate(address adapter, uint256 assets) external {
+        clip.deallocateClip(adapter, assets);
     }
 }
 
@@ -486,6 +516,17 @@ contract ClipAllocatorGuardsTest is Test {
         vm.prank(bot);
         clip.deallocateClip(address(strategy), CLIP);
         assertEq(strategy.realAssets(), 910 ether);
+    }
+
+    /// @dev A contract bot reached mid clip reenters as itself. The lock rejects the second entry.
+    function test_clip_revertsOnReentry() public {
+        ReenteringBot attacker = new ReenteringBot(clip);
+        strategy.setMove(1_000 ether, 900 ether, 0, 0);
+        strategy.setReenter(address(attacker), abi.encodeCall(ReenteringBot.deallocate, (address(strategy), CLIP)));
+        clip.grantDeallocate(address(attacker), address(strategy), 2 * CLIP, CLIP, 0, address(0), 0, 10_000);
+
+        vm.expectRevert(ClipAllocator.Reentrant.selector);
+        attacker.deallocate(address(strategy), CLIP);
     }
 
     function test_guardedDeallocate_revertsWhenPriceTokenDoesNotMove() public {

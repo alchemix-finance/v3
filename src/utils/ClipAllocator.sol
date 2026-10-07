@@ -136,6 +136,18 @@ contract ClipAllocator {
     error RealAssetsDidNotMove(uint256 assets, int256 realAssetsDelta);
     error LossExceedsLimit(uint256 valueMoved, uint256 limit, bool isAllocate);
     error ZeroAmount();
+    error Reentrant();
+
+    /// @dev Set for the whole clip, including the idle raise. A contract bot can be called
+    ///      from its own swap calldata; without this it can change balances before the checks.
+    bool private locked;
+
+    modifier nonReentrant() {
+        if (locked) revert Reentrant();
+        locked = true;
+        _;
+        locked = false;
+    }
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -241,20 +253,20 @@ contract ClipAllocator {
     // ---- clips ------------------------------------------------------------------
 
     /// @notice Pull `assets` out of `adapter` on the direct path.
-    function deallocateClip(address adapter, uint256 assets) external whenActive {
+    function deallocateClip(address adapter, uint256 assets) external nonReentrant whenActive {
         _consume(deallocateGrants[msg.sender][adapter], adapter, false, assets);
         _deallocate(adapter, assets, 0, "", 0);
     }
 
     /// @notice Pull `assets` out of a swap-path adapter with 0x calldata.
-    function deallocateClipWithSwap(address adapter, uint256 assets, bytes calldata txData) external whenActive {
+    function deallocateClipWithSwap(address adapter, uint256 assets, bytes calldata txData) external nonReentrant whenActive {
         _consume(deallocateGrants[msg.sender][adapter], adapter, false, assets);
         _deallocate(adapter, assets, 1, txData, 0);
     }
 
     /// @notice Pull `assets` out of an unwrap-then-swap adapter (sfrxETH and the like).
     function deallocateClipWithUnwrapAndSwap(address adapter, uint256 assets, bytes calldata txData,
-                                             uint256 minIntermediateOut) external whenActive {
+                                             uint256 minIntermediateOut) external nonReentrant whenActive {
         _consume(deallocateGrants[msg.sender][adapter], adapter, false, assets);
         _deallocate(adapter, assets, 2, txData, minIntermediateOut);
     }
@@ -262,13 +274,13 @@ contract ClipAllocator {
     /// @notice Push `assets` into `adapter` on the direct path, raising idle from
     ///         the liquidity adapter (against the caller's deallocate grant there)
     ///         when the vault is short.
-    function allocateClip(address adapter, uint256 assets) external whenActive {
+    function allocateClip(address adapter, uint256 assets) external nonReentrant whenActive {
         _consume(allocateGrants[msg.sender][adapter], adapter, true, assets);
         _raiseIdle(assets, adapter);
         _allocate(adapter, assets, false, "");
     }
 
-    function allocateClipWithSwap(address adapter, uint256 assets, bytes calldata txData) external whenActive {
+    function allocateClipWithSwap(address adapter, uint256 assets, bytes calldata txData) external nonReentrant whenActive {
         _consume(allocateGrants[msg.sender][adapter], adapter, true, assets);
         _raiseIdle(assets, adapter);
         _allocate(adapter, assets, true, txData);
