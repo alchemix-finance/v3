@@ -44,8 +44,10 @@ interface IERC20Lite {
  *         deallocate grant may feed several allocate grants. Every clip consumes
  *         its `assets` from the matching counter; at zero the bot stops and the
  *         owner adds budget with `topUp*`. Nothing on-chain links the two sides,
- *         so a deallocate bot and an allocate bot run at their own pace, and user
- *         withdrawals in between never touch a counter.
+ *         so a deallocate bot and an allocate bot run at their own pace. A user
+ *         withdrawal does not write a counter, but it drains vault idle, so the
+ *         next allocate clip spends the bot's deallocate grant on the liquidity
+ *         adapter to cover the shortfall.
  *
  *         `grant*` is the full statement of what a key may do: it sets the budget
  *         and every limit, replacing whatever was there. `topUp*` adds budget and
@@ -57,7 +59,8 @@ interface IERC20Lite {
  *           A deallocate may shrink the position by at most assets × (1 + maxLossBps);
  *           an allocate must grow it by at least assets × (1 − maxLossBps). 10_000
  *           is the maximum (100%). This bound does not depend on priceToken;
- *         - minIntervalBlocks: spacing between clips from the same grant;
+ *         - minIntervalBlocks: blocks between clips from the same grant. The
+ *           same setting is a different amount of time on each chain;
  *         - a PRICE FLOOR, not a slippage bound: `priceToken` is the ERC20 whose
  *           balance at the adapter measures the position (the LST a swap
  *           strategy holds, an aToken, a 4626 share), and `limitRate` is
@@ -72,14 +75,16 @@ interface IERC20Lite {
  *         Idle cash: an allocate clip needs the vault to hold `assets`. When it is
  *         short, the clip raises the shortfall from the liquidity adapter, and that
  *         raise consumes the bot's DEALLOCATE grant on the liquidity adapter. The
- *         raise is spacing-exempt (it is part of this clip) but it is still bound
+ *         raise skips minIntervalBlocks and does not stamp lastClipBlock, so it
+ *         neither waits out nor restarts that grant's interval. It is still bound
  *         by that grant's maxClip, maxLossBps, and price floor. No grant there
  *         means IdleUnavailable: nothing moves outside a grant.
  *
- *         Caps: the allocator proxy applies the risk-class global cap and, for
- *         operators, the class local cap to every allocate clip; this contract
- *         cannot lift them. The proxy's deallocate has no cap check, which is why
- *         the grant, maxClip, and maxLossBps are the ceiling on the way out.
+ *         Caps: on allocate, the proxy enforces the relative cap and the risk
+ *         class caps against live totalAssets, so a same block deposit raises
+ *         them and a withdrawal lowers them. The absolute cap is fixed. This
+ *         contract cannot lift any of them. Deallocate has no proxy cap check,
+ *         so the grant, maxClip, and maxLossBps are the ceiling on the way out.
  *
  *         Authority: one owner. The deployer starts as owner, grants the first
  *         budgets, then hands ownership to the allocator admin (the Safe) with the
@@ -381,7 +386,8 @@ contract ClipAllocator {
 
     /// @dev An allocate clip needs the vault to hold `needed`. The shortfall comes
     ///      out of the liquidity adapter, drawn from the caller's deallocate grant
-    ///      there. Spacing (minIntervalBlocks) does not apply. maxClip, maxLossBps, and the price floor do.
+    ///      there. It skips minIntervalBlocks and does not stamp lastClipBlock.
+    ///      maxClip, maxLossBps, and the price floor still apply.
     function _raiseIdle(uint256 needed, address target) internal {
         uint256 idle = asset.balanceOf(address(vault));
         if (idle >= needed) return;
