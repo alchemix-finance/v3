@@ -380,3 +380,34 @@ Notes:
   This path is liquidity-dependent and reverts if instant redemption is unavailable.
 4. `deallocateWithSwap()` remains useful as the market exit path when the operator prefers to sell `weETH -> WETH` rather than rely on the redemption manager.
 
+
+
+### `IporFusionStrategy`
+
+PlasmaVault `0xB9E806e8f2d94c015ffefa90cD24Ecce18f1663C` (rETH Liquity LP Carry) on Ethereum. Synchronous deposit and redeem at the moment.
+
+Supported allocator paths:
+
+- `allocate()`
+- `deallocate()`
+
+Notes:
+
+1. `allocate()` and `deallocate()` only. The strategy deposits `WETH` into the PlasmaVault and exits with `redeem`.
+2. Share price room defaults: 5 bp minimum, 5 bp per day up and down, 50 bp maximum per update. The vault's expected carry is about 6% a year, about 1.6 bp per day. 5 bp per day is about 3 times that, so one week of carry fits in a single `poke()` without an owner snap. 50 bp is about 30 days of that carry. The 5 bp minimum covers rounding and fee dust. `priceBounds()` is that band. `allocate()` must sit inside it. `deallocate()` reverts `PriceOutsideRoom` only under the floor. One `poke()` books at most the accrued daily budget, excluding the 5 bp minimum, and a second poke in the same timestamp does nothing.
+3. A redeem is grossed up by the live withdraw fee (0.2% today) plus 10 bp, and it must fit in `availableSyncLiquidity()`. `maxWithdrawFee` is 0.5%. Entry costs about 0.4%. Deploy cap is 100 `WETH`.
+4. `previewRedeem` includes the withdraw fee and skips the unrealized 10% performance fee. The 10 bp buffer covers about two months of a 6% carry.
+5. The PlasmaVault locks a fresh deposit for 1 second (`AccountIsLocked`) and can sit at its supply cap.
+
+Scenarios:
+
+1. No `allocate()` or `deallocate()` this week. Anyone: `poke()`.
+2. Allocate. Allocator operator: `allocate(adapter, amount)`.
+3. Deallocate. Allocator operator: `deallocate(adapter, amount)`, at least 1 second after this strategy's last deposit, sized to `availableSyncLiquidity()`.
+4. `liveSharePrice()` above `priceBounds()`. Anyone: `poke()` when the gap is within 50 bp. Owner: `acceptPrice()` when it is not.
+5. `liveSharePrice()` under the floor. Owner: `acceptPrice()`, then the allocator deallocates.
+6. No poke for more than about 30 days. Anyone: `poke()` once. If the price is still outside `priceBounds()`, wait for the daily budget and `poke()` again, or the owner calls `acceptPrice()`.
+7. `currentWithdrawFee()` above `maxWithdrawFee`. Owner: `setMaxWithdrawFee(newMax)`, then deallocate.
+8. No PlasmaVault redeem for about two months. Any shareholder: dust `redeem` on the PlasmaVault, then deallocate.
+9. PlasmaVault supply cap is full. Wait for IPOR before allocating.
+

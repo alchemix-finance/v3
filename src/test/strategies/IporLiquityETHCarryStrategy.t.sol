@@ -26,7 +26,7 @@ library IporLiquityETHCarryFixture {
     uint256 internal constant REDEEM_BUFFER_BPS = 10;
     uint256 internal constant SLIPPAGE_BPS = 20;
 
-    /// @dev Deadband for rounding and fee dust. Not a step poke can repeat.
+    /// @dev Minimum room for rounding and fee dust. The anchor never moves by this amount.
     uint256 internal constant BASE_BPS = 5;
     /// @dev About 3x the 6% carry (1.6 bps/day), so daily growth fits without an owner snap.
     uint256 internal constant UP_BPS_PER_DAY = 5;
@@ -587,7 +587,7 @@ contract IporLiquityETHCarryInvariantTest is E2EInvariantStrategyTest {
     function _postCreateStrategy(address strategy_) internal override {
         IporLiquityETHCarryFixture.unlockVault();
         // The fuzzer warps up to a year. Widen the catch-up cap so a frozen snapshot's fee
-        // accrual still fits; the per-day rate and the same-block deadband stay as deployed.
+        // accrual still fits; the per-day rate and the minimum room stay as deployed.
         IporFusionStrategy.PriceGuardParams memory guard = IporLiquityETHCarryFixture.guardParams();
         guard.maxUpBps = 500;
         guard.maxDownBps = 500;

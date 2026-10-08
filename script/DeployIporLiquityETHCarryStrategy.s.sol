@@ -20,8 +20,9 @@ contract DeployIporLiquityETHCarryStrategyScript is Script {
     uint256 public constant MAX_WITHDRAW_FEE = 5e15;
     /// @dev Extra shares redeemed to cover rounding and pre-redeem management fee realization.
     uint256 public constant REDEEM_BUFFER_BPS = 10;
-    /// @dev Share-price deadband. About 3x the 6% carry, with a 50 bp catch-up cap.
+    /// @dev Minimum room around the anchor, for rounding and fee dust. The anchor never moves by this amount.
     uint256 public constant BASE_BPS = 5;
+    /// @dev About 3x the 6% carry (1.6 bps/day), so daily growth fits without an owner snap.
     uint256 public constant UP_BPS_PER_DAY = 5;
     uint256 public constant DOWN_BPS_PER_DAY = 5;
     uint256 public constant MAX_UP_BPS = 50;

@@ -18,8 +18,8 @@ interface IIporWithdrawManager {
  *      - `withdraw(assets)` delivers `assets * (1 - withdrawFee)` instead of `assets`.
  *      - `previewWithdraw(assets)` is not fee-consistent on deployed vaults.
  *      - Synchronous exits are only served from the asset balance idle in the PlasmaVault
- *        (no instant-withdrawal fuses); anything beyond that must go through the async
- *        WithdrawManager request flow, which this version does not implement.
+ *        (no instant withdrawal fuses); anything beyond that must go through the async
+ *        WithdrawManager request flow.
  *      This strategy therefore exits via `redeem`, grosses shares up by the live withdraw fee,
  *      and caps previews at the PlasmaVault's available synchronous liquidity.
  *      `previewRedeem` nets the withdraw fee. `_totalValue` prices shares at that rate, clamped
