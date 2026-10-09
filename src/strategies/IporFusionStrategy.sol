@@ -30,6 +30,10 @@ contract IporFusionStrategy is ERC4626Strategy {
     uint256 internal constant WAD = 1e18;
     uint256 internal constant BPS = 10_000;
 
+    /// @dev `acceptPrice` redeems `shareUnit / REALIZE_SHARES_DIVISOR` shares so the PlasmaVault
+    ///      realizes its fees and refreshes its cached balances before the anchor is read.
+    uint256 internal constant REALIZE_SHARES_DIVISOR = 100_000;
+
     IIporWithdrawManager public withdrawManager;
 
     /// @notice Highest PlasmaVault withdraw fee (WAD) this strategy will exit through synchronously.
@@ -80,6 +84,7 @@ contract IporFusionStrategy is ERC4626Strategy {
     error InsufficientSyncLiquidity(uint256 requested, uint256 available);
     error ZeroSharePrice();
     error PriceOutsideRoom(uint256 livePps, uint256 lower, uint256 upper);
+    error PriceOutsideAcceptBounds(uint256 livePps, uint256 minPps, uint256 maxPps);
 
     event WithdrawManagerUpdated(address indexed withdrawManager);
     event MaxWithdrawFeeUpdated(uint256 maxWithdrawFee);
@@ -121,7 +126,17 @@ contract IporFusionStrategy is ERC4626Strategy {
     }
 
     /// @notice Book the live share price as the anchor, including a print outside the room.
-    function acceptPrice() external onlyOwner {
+    ///         A dust redeem first makes the PlasmaVault realize its fees and refresh its cached
+    ///         balances, so the anchor lands on the price the next allocate or deallocate sees.
+    ///         The snap does not depend on that redeem succeeding.
+    /// @dev Read `liveSharePrice()` off-chain and pass a small band around it. The realized price
+    ///      must land inside the band, so a print pushed in front of this call cannot be booked.
+    /// @param minPps Lowest realized price the owner will book.
+    /// @param maxPps Highest realized price the owner will book.
+    function acceptPrice(uint256 minPps, uint256 maxPps) external onlyOwner {
+        _realizeVaultPrice();
+        uint256 live = _liveSharePrice();
+        if (live < minPps || live > maxPps) revert PriceOutsideAcceptBounds(live, minPps, maxPps);
         _acceptLivePrice();
     }
 
@@ -168,6 +183,21 @@ contract IporFusionStrategy is ERC4626Strategy {
 
     function _requireBps(uint256 value) internal pure {
         if (value >= BPS) revert InvalidBps(value);
+    }
+
+    /// @dev Redeem a dust amount of this strategy's shares. The PlasmaVault realizes its management
+    ///      and performance fees and refreshes cached market balances on that path, which is what
+    ///      moves `previewRedeem` on the first allocate or deallocate after a quiet gap. If the
+    ///      redeem reverts, for example under the redemption lock or while the PlasmaVault is
+    ///      paused, the snap proceeds on the cached price rather than leaving the owner without
+    ///      the lever.
+    function _realizeVaultPrice() internal {
+        uint256 bal = vault.balanceOf(address(this));
+        if (bal == 0) return;
+        uint256 shares = shareUnit / REALIZE_SHARES_DIVISOR;
+        if (shares > bal) shares = bal;
+        if (shares == 0) return;
+        try vault.redeem(shares, address(this), address(this)) {} catch {}
     }
 
     function _acceptLivePrice() internal {
@@ -226,11 +256,14 @@ contract IporFusionStrategy is ERC4626Strategy {
     /* ========== CORE ========== */
 
     function _allocate(uint256 amount) internal override returns (uint256) {
+        uint256 allocated = super._allocate(amount);
+
+        // Check after the deposit. That call realizes the PlasmaVault's fees and refreshes its
+        // cached balances, so this reads the price the position is now held at. A revert undoes it.
         uint256 live = _liveSharePrice();
         (uint256 lower, uint256 upper) = _reportingBounds();
         if (live < lower || live > upper) revert PriceOutsideRoom(live, lower, upper);
 
-        uint256 allocated = super._allocate(amount);
         _moveAnchor();
         return allocated;
     }
@@ -254,10 +287,6 @@ contract IporFusionStrategy is ERC4626Strategy {
     }
 
     function _deallocate(uint256 amount) internal override returns (uint256) {
-        uint256 live = _liveSharePrice();
-        (uint256 lower, uint256 upper) = _reportingBounds();
-        if (live < lower) revert PriceOutsideRoom(live, lower, upper);
-
         uint256 idleBalance = _idleAssets();
 
         if (idleBalance < amount) {
@@ -281,6 +310,12 @@ contract IporFusionStrategy is ERC4626Strategy {
 
             vault.redeem(shares, address(this), address(this));
         }
+
+        // Check after the redeem, which realizes the PlasmaVault's fees and refreshes its cached
+        // balances. Only a price under the floor blocks an exit. A revert undoes the redeem.
+        uint256 live = _liveSharePrice();
+        (uint256 lower, uint256 upper) = _reportingBounds();
+        if (live < lower) revert PriceOutsideRoom(live, lower, upper);
 
         _ensureIdleBalance(address(mytAsset), amount);
         TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);

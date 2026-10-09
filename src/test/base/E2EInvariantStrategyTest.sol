@@ -117,6 +117,10 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         }
     }
 
+    /// @dev The fuzzer jumps the clock without the weekly poke. Strategies that track a share price
+    ///      override this to book the rate those pokes would have followed.
+    function onWarp(uint256) external virtual {}
+
     // =============================================================================================
     // Invariants
     // =============================================================================================

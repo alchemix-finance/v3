@@ -398,15 +398,16 @@ Notes:
 3. A redeem is grossed up by the live withdraw fee (0.2% today) plus 10 bp, and it must fit in `availableSyncLiquidity()`. `maxWithdrawFee` is 0.5%. Entry costs about 0.4%. Deploy cap is 100 `WETH`.
 4. `previewRedeem` includes the withdraw fee and skips the unrealized 10% performance fee. The 10 bp buffer covers about two months of a 6% carry.
 5. The PlasmaVault locks a fresh deposit for 1 second (`AccountIsLocked`) and can sit at its supply cap.
+6. `allocate()` and `deallocate()` check the price after their deposit or redeem, which is when the PlasmaVault realizes fees and refreshes its booked balances. `acceptPrice(minPps, maxPps)` redeems a dust amount of the strategy's shares first for the same reason, so one snap books the price the next call will see. If that dust redeem cannot run (fresh deposit lock, no shares), the snap still books the current preview. Read `liveSharePrice()` right before the call and pass a band of about 1% around it; a print pushed in front of the call lands outside the band and the call reverts `PriceOutsideAcceptBounds` instead of booking it.
 
 Scenarios:
 
 1. No `allocate()` or `deallocate()` this week. Anyone: `poke()`.
 2. Allocate. Allocator operator: `allocate(adapter, amount)`.
 3. Deallocate. Allocator operator: `deallocate(adapter, amount)`, at least 1 second after this strategy's last deposit, sized to `availableSyncLiquidity()`.
-4. `liveSharePrice()` above `priceBounds()`. Anyone: `poke()` when the gap is within 50 bp. Owner: `acceptPrice()` when it is not.
-5. `liveSharePrice()` under the floor. Owner: `acceptPrice()`, then the allocator deallocates.
-6. No poke for more than about 30 days. Anyone: `poke()` once. If the price is still outside `priceBounds()`, wait for the daily budget and `poke()` again, or the owner calls `acceptPrice()`.
+4. `liveSharePrice()` above `priceBounds()`. Anyone: `poke()` when the gap is within 50 bp. Owner: `acceptPrice(minPps, maxPps)` with a band around the live price when it is not.
+5. `liveSharePrice()` under the floor. Owner: `acceptPrice(minPps, maxPps)` with a band around the live price, then the allocator deallocates.
+6. No poke for more than about 30 days. Anyone: `poke()` once. If the price is still outside `priceBounds()`, wait for the daily budget and `poke()` again, or the owner calls `acceptPrice(minPps, maxPps)` with a band around the live price.
 7. `currentWithdrawFee()` above `maxWithdrawFee`. Owner: `setMaxWithdrawFee(newMax)`, then deallocate.
 8. No PlasmaVault redeem for about two months. Any shareholder: dust `redeem` on the PlasmaVault, then deallocate.
 9. PlasmaVault supply cap is full. Wait for IPOR before allocating.

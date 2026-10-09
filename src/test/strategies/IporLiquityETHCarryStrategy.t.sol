@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import "../BaseStrategyTest.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {E2EInvariantStrategyTest} from "../base/E2EInvariantStrategyTest.sol";
+import {AlchemistCurator} from "../../AlchemistCurator.sol";
 import {AlchemistStrategyClassifier} from "../../AlchemistStrategyClassifier.sol";
 import {IporFusionStrategy, IIporWithdrawManager} from "../../strategies/IporFusionStrategy.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
@@ -20,7 +21,7 @@ library IporLiquityETHCarryFixture {
     address internal constant WITHDRAW_MANAGER = 0xe99b6ef767A42131263bDd3d4a0A7c16B32F0543;
     address internal constant ACCESS_MANAGER = 0x2C6Ce3773EcEb3107a5AaDE37f3c20D4E41902D2;
 
-    uint256 internal constant FORK_BLOCK = 26_094_670;
+    uint256 internal constant FORK_BLOCK = 26_149_293;
 
     uint256 internal constant MAX_WITHDRAW_FEE = 5e15; // 0.5%
     uint256 internal constant REDEEM_BUFFER_BPS = 10;
@@ -367,14 +368,17 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         uint256 withdrawFee = IIporWithdrawManager(WITHDRAW_MANAGER).getWithdrawFee();
 
         // Shrink the PlasmaVault's idle WETH below our position. Replacing the balance also
-        // drops the share price, so book that print before exiting.
+        // drops the share price, so book that print before exiting. The snap's dust redeem
+        // takes a sliver of that idle WETH.
         deal(WETH, PLASMA_VAULT, 10e18);
         vm.prank(admin);
-        _strategy().acceptPrice();
-        assertEq(_strategy().availableSyncLiquidity(), 10e18, "liquidity should equal vault idle WETH");
+        _strategy().acceptPrice(0, type(uint256).max);
+        uint256 liquidity = _strategy().availableSyncLiquidity();
+        assertApproxEqAbs(liquidity, 10e18, 1e14, "liquidity should equal vault idle WETH");
+        assertEq(liquidity, IERC20(WETH).balanceOf(PLASMA_VAULT), "liquidity is the vault's idle WETH");
 
         uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(50e18);
-        uint256 maxNet = 10e18 * (1e18 - withdrawFee) / 1e18;
+        uint256 maxNet = liquidity * (1e18 - withdrawFee) / 1e18;
         assertLe(preview, maxNet, "preview must not exceed net liquidity");
         assertGe(preview, maxNet * 99 / 100, "preview should be close to net liquidity");
 
@@ -386,7 +390,7 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         _allocateDirect(50e18);
         deal(WETH, PLASMA_VAULT, 10e18);
         vm.prank(admin);
-        _strategy().acceptPrice();
+        _strategy().acceptPrice(0, type(uint256).max);
 
         vm.prank(vault);
         vm.expectPartialRevert(IporFusionStrategy.InsufficientSyncLiquidity.selector);
@@ -416,7 +420,7 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
 
         // The higher fee is inside previewRedeem, so book it before the exit checks the fee itself.
         vm.prank(admin);
-        _strategy().acceptPrice();
+        _strategy().acceptPrice(0, type(uint256).max);
 
         vm.prank(vault);
         vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.WithdrawFeeTooHigh.selector, highFee, IporLiquityETHCarryFixture.MAX_WITHDRAW_FEE));
@@ -519,11 +523,91 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         vm.mockCall(PLASMA_VAULT, abi.encodeWithSelector(IERC4626.previewRedeem.selector, unit), abi.encode(inflated));
 
         vm.expectRevert();
-        _strategy().acceptPrice();
+        _strategy().acceptPrice(0, type(uint256).max);
 
         vm.prank(admin);
-        _strategy().acceptPrice();
+        _strategy().acceptPrice(inflated, inflated);
         assertEq(_strategy().anchorPps(), inflated, "owner books the live print");
+        vm.clearMockedCalls();
+    }
+
+    /// @dev The owner passes a band read off-chain. A print pushed in front of the call lands
+    ///      outside that band and must not be booked; the revert also undoes the dust redeem.
+    function test_acceptPrice_rejectsAPrintOutsideTheOwnersBounds() public {
+        _allocateDirect(5e18);
+        uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+        uint256 anchorBefore = _strategy().anchorPps();
+
+        uint256 unit = _strategy().shareUnit();
+        uint256 pushed = anchorBefore * 2;
+        vm.mockCall(PLASMA_VAULT, abi.encodeWithSelector(IERC4626.previewRedeem.selector, unit), abi.encode(pushed));
+
+        // Band around the price the owner saw, well under the pushed print.
+        uint256 lo = anchorBefore * (10_000 - 100) / 10_000;
+        uint256 hi = anchorBefore * (10_000 + 100) / 10_000;
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.PriceOutsideAcceptBounds.selector, pushed, lo, hi));
+        _strategy().acceptPrice(lo, hi);
+        vm.clearMockedCalls();
+
+        assertEq(_strategy().anchorPps(), anchorBefore, "anchor must not book the pushed print");
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "revert undoes the dust redeem");
+    }
+
+    /// @dev After a quiet gap the PlasmaVault's cached price lags what its next redeem books.
+    ///      One `acceptPrice` has to land on the booked price so a chunked exit needs no second snap.
+    function test_acceptPrice_realizesVaultFeesSoOneSnapCoversAChunkedExit() public {
+        _allocateDirect(50e18);
+        uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+
+        // A year with no PlasmaVault interaction. The management fee is unrealized and the
+        // booked balances are stale, so the cached price is not what the next redeem will use.
+        vm.warp(block.timestamp + 365 days);
+        uint256 cached = _strategy().liveSharePrice();
+        uint256 supplyBefore = IERC4626(PLASMA_VAULT).totalSupply();
+
+        // Production flow: the owner reads the live price, then snaps inside a band around it.
+        vm.prank(admin);
+        _strategy().acceptPrice(cached * (10_000 - 100) / 10_000, cached * (10_000 + 100) / 10_000);
+
+        assertLt(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "snap redeems dust");
+        assertGt(IERC4626(PLASMA_VAULT).totalSupply(), supplyBefore, "snap makes the vault mint its fee shares");
+        assertTrue(_strategy().anchorPps() != cached, "anchor books the realized price, not the cache");
+        assertEq(_strategy().anchorPps(), _strategy().liveSharePrice(), "anchor equals the live price after the snap");
+
+        // Chunked exits and a re-entry in this same timestamp, all inside the 5 bps minimum room.
+        // The vault pulls each chunk before the next, so every chunk redeems from the PlasmaVault.
+        uint256 realBefore = IMYTStrategy(strategy).realAssets();
+        vm.mockCall(vault, abi.encodeWithSelector(IVaultV2.allocation.selector, IMYTStrategy(strategy).adapterId()), abi.encode(realBefore));
+        uint256 sharesAfterSnap = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+        _deallocateDirect(10e18);
+        uint256 sharesAfterFirst = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+        assertLt(sharesAfterFirst, sharesAfterSnap, "first chunk redeems");
+        vm.prank(vault);
+        IERC20(WETH).transferFrom(strategy, vault, 10e18);
+        _deallocateDirect(10e18);
+        vm.clearMockedCalls();
+        assertLt(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesAfterFirst, "second chunk redeems after the same snap");
+        assertGe(IERC20(WETH).balanceOf(strategy), 10e18, "second chunk is idle for the vault");
+        _allocateDirect(5e18);
+    }
+
+    /// @dev The owner's exit lever must not depend on the dust redeem. A locked account makes
+    ///      that redeem revert; the snap still books the cached price.
+    function test_acceptPrice_snapsEvenWhenTheDustRedeemReverts() public {
+        IporLiquityETHCarryFixture.setRedemptionDelay(1);
+        _allocateDirect(5e18);
+        uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+
+        uint256 unit = _strategy().shareUnit();
+        uint256 inflated = _strategy().anchorPps() * 2;
+        vm.mockCall(PLASMA_VAULT, abi.encodeWithSelector(IERC4626.previewRedeem.selector, unit), abi.encode(inflated));
+
+        vm.prank(admin);
+        _strategy().acceptPrice(inflated, inflated);
+
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "locked redeem leaves shares untouched");
+        assertEq(_strategy().anchorPps(), inflated, "snap still books the live print");
         vm.clearMockedCalls();
     }
 
@@ -586,13 +670,17 @@ contract IporLiquityETHCarryInvariantTest is E2EInvariantStrategyTest {
 
     function _postCreateStrategy(address strategy_) internal override {
         IporLiquityETHCarryFixture.unlockVault();
-        // The fuzzer warps up to a year. Widen the catch-up cap so a frozen snapshot's fee
-        // accrual still fits; the per-day rate and the minimum room stay as deployed.
-        IporFusionStrategy.PriceGuardParams memory guard = IporLiquityETHCarryFixture.guardParams();
-        guard.maxUpBps = 500;
-        guard.maxDownBps = 500;
+        // The shared harness registers 50,000 ETH. Lower this strategy to the deploy cap so a
+        // round trip cannot move the PlasmaVault share price the way that size would.
+        // The price guard stays at the deployed values.
         vm.prank(admin);
-        IporFusionStrategy(strategy_).setPriceGuard(guard);
+        AlchemistCurator(curatorContract).decreaseAbsoluteCap(strategy_, IporLiquityETHCarryFixture.params(address(0)).cap);
+
+        // A small PlasmaVault position this contract redeems from on each warp. It stands in for
+        // the live vault's other holders, whose redeems realize fees between our calls.
+        deal(IporLiquityETHCarryFixture.WETH, address(this), 0.1e18);
+        IERC20(IporLiquityETHCarryFixture.WETH).approve(IporLiquityETHCarryFixture.PLASMA_VAULT, 0.1e18);
+        IERC4626(IporLiquityETHCarryFixture.PLASMA_VAULT).deposit(0.1e18, address(this));
     }
 
     function _enableForceDeallocate(address strategy_) internal override {
@@ -607,5 +695,17 @@ contract IporLiquityETHCarryInvariantTest is E2EInvariantStrategyTest {
         if (shares == 0) return;
         vm.prank(strategy_);
         IERC20(plasmaVault).transfer(address(0xdead), shares);
+    }
+
+    /// @dev The fuzzer jumps the clock with no PlasmaVault traffic and no pokes. Accrue the carry
+    ///      the live vault earns, realize fees the way other holders' redeems do, then book the
+    ///      price the owner would after a gap without pokes.
+    function onWarp(uint256 elapsed) external override {
+        IporLiquityETHCarryFixture.accrueCarry(elapsed);
+        IporLiquityETHCarryFixture.realizeFees(address(this));
+        // Production flow: the owner reads the live price, then snaps inside a band around it.
+        uint256 live = IporFusionStrategy(realStrategy).liveSharePrice();
+        vm.prank(admin);
+        IporFusionStrategy(realStrategy).acceptPrice(live * (10_000 - 100) / 10_000, live * (10_000 + 100) / 10_000);
     }
 }

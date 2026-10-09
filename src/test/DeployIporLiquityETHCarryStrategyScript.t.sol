@@ -40,7 +40,7 @@ contract MockIporWithdrawManager {
 
 contract DeployIporLiquityETHCarryStrategyScriptTest is Test {
     address internal constant MAINNET_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    uint256 internal constant MAINNET_FORK_BLOCK = 26_094_670;
+    uint256 internal constant MAINNET_FORK_BLOCK = 26_149_293;
 
     DeployIporLiquityETHCarryStrategyScript internal deployScript;
     TestERC20 internal weth;
