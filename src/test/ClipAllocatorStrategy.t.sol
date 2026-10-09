@@ -131,7 +131,7 @@ abstract contract ClipAllocatorStrategyTest is Test {
         assertApproxEqAbs(held, clipAmount, dust);
         assertApproxEqAbs(vault.allocation(strategy.adapterId()), held, dust);
         assertEq(IERC20(asset).balanceOf(address(vault)), vaultBefore - clipAmount);
-        (uint256 allocateLeft,,,,,,) = clip.allocateGrants(bot, address(strategy));
+        (uint256 allocateLeft,,,,,,,) = clip.allocateGrants(bot, address(strategy));
         assertEq(allocateLeft, 0);
 
         uint256 pull = held > clipAmount ? clipAmount : held;
@@ -140,7 +140,7 @@ abstract contract ClipAllocatorStrategyTest is Test {
 
         assertApproxEqAbs(strategy.realAssets(), held - pull, dust);
         assertEq(IERC20(asset).balanceOf(address(vault)), vaultBefore - clipAmount + pull);
-        (uint256 deallocateLeft,,,,,,) = clip.deallocateGrants(bot, address(strategy));
+        (uint256 deallocateLeft,,,,,,,) = clip.deallocateGrants(bot, address(strategy));
         assertEq(deallocateLeft, clipAmount - pull);
     }
 
@@ -166,9 +166,9 @@ abstract contract ClipAllocatorStrategyTest is Test {
         assertApproxEqAbs(strategy.realAssets(), clipAmount, _dust());
         assertApproxEqAbs(liquidityBefore - liquidity.realAssets(), shortfall, _dust());
         assertEq(IERC20(_asset()).balanceOf(address(vault)), 0);
-        (uint256 allocateLeft,,,,,,) = clip.allocateGrants(bot, address(strategy));
+        (uint256 allocateLeft,,,,,,,) = clip.allocateGrants(bot, address(strategy));
         assertEq(allocateLeft, 0);
-        (uint256 liquidityLeft,,,,,,) = clip.deallocateGrants(bot, address(liquidity));
+        (uint256 liquidityLeft,,,,,,,) = clip.deallocateGrants(bot, address(liquidity));
         assertEq(liquidityLeft, 0);
     }
 

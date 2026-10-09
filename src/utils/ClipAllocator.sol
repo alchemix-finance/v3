@@ -27,6 +27,7 @@ interface IMYTStrategyLite {
 
 interface IERC20Lite {
     function balanceOf(address) external view returns (uint256);
+    function decimals() external view returns (uint8);
 }
 
 /**
@@ -61,6 +62,9 @@ interface IERC20Lite {
  *           is the maximum (100%). This bound does not depend on priceToken;
  *         - minIntervalBlocks: blocks between clips from the same grant. The
  *           same setting is a different amount of time on each chain;
+ *         - expiresAtBlock, on the long grant call: the last block a clip from
+ *           this grant may run. 0 does not expire. The short grant call does
+ *           not expire, and topUp does not change an expiry;
  *         - a PRICE FLOOR, not a slippage bound: `priceToken` is the ERC20 whose
  *           balance at the adapter measures the position (the LST a swap
  *           strategy holds, an aToken, a 4626 share), and `limitRate` is
@@ -105,6 +109,7 @@ contract ClipAllocator {
         address priceToken;        // ERC20 whose balance at the adapter measures the position (0 = unguarded)
         uint256 limitRate;         // underlying per token, WAD on raw units: floor (deallocate) / ceiling (allocate)
         uint16 maxLossBps;         // realAssets may diverge from assets by this many basis points (max 10_000)
+        uint64 expiresAtBlock;     // last block a clip may run; 0 does not expire
     }
 
     uint256 internal constant BPS = 10_000;
@@ -118,7 +123,7 @@ contract ClipAllocator {
 
     event GrantUpdated(address indexed bot, address indexed adapter, bool isAllocate,
                        uint256 remaining, uint256 maxClip, uint32 minIntervalBlocks,
-                       address priceToken, uint256 limitRate, uint16 maxLossBps);
+                       address priceToken, uint256 limitRate, uint16 maxLossBps, uint64 expiresAtBlock);
     event ClipExecuted(address indexed bot, address indexed adapter, bool isAllocate,
                        uint256 assets, int256 realAssetsDelta, int256 bookedAllocationDelta,
                        int256 priceTokenDelta, uint256 rate, uint256 remaining);
@@ -142,6 +147,8 @@ contract ClipAllocator {
     error LossExceedsLimit(uint256 valueMoved, uint256 limit, bool isAllocate);
     error ZeroAmount();
     error Reentrant();
+    error GrantExpired(uint64 expiresAtBlock);
+    error InvalidRateInput();
 
     /// @dev Set for the whole clip, including the idle raise. A contract bot can be called
     ///      from its own swap calldata; without this it can change balances before the checks.
@@ -174,17 +181,31 @@ contract ClipAllocator {
 
     // ---- the owner (the Safe once accepted): grants, unpause, succession ------
 
-    /// @notice Set the bot's deallocate grant on `adapter`: the budget becomes
-    ///         `amount` and every limit takes the value passed. A repeat call is
-    ///         a rewrite, so the calldata is the whole cap.
+    /// @notice Set the bot's deallocate grant on `adapter`. Does not expire.
     function grantDeallocate(address bot, address adapter, uint256 amount, uint256 maxClip,
                              uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps) external onlyOwner {
-        _grant(deallocateGrants[bot][adapter], bot, adapter, false, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
+        _grant(deallocateGrants[bot][adapter], bot, adapter, false, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps, 0);
+    }
+
+    /// @notice Same as the short form, and the grant may not run after `expiresAtBlock`.
+    ///         0 does not expire. A repeat call rewrites the budget and every limit.
+    function grantDeallocate(address bot, address adapter, uint256 amount, uint256 maxClip,
+                             uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps,
+                             uint64 expiresAtBlock) external onlyOwner {
+        _grant(deallocateGrants[bot][adapter], bot, adapter, false, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps, expiresAtBlock);
     }
 
     function grantAllocate(address bot, address adapter, uint256 amount, uint256 maxClip,
                            uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps) external onlyOwner {
-        _grant(allocateGrants[bot][adapter], bot, adapter, true, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
+        _grant(allocateGrants[bot][adapter], bot, adapter, true, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps, 0);
+    }
+
+    /// @notice Same as the short form, and the grant may not run after `expiresAtBlock`.
+    ///         0 does not expire. A repeat call rewrites the budget and every limit.
+    function grantAllocate(address bot, address adapter, uint256 amount, uint256 maxClip,
+                           uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps,
+                           uint64 expiresAtBlock) external onlyOwner {
+        _grant(allocateGrants[bot][adapter], bot, adapter, true, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps, expiresAtBlock);
     }
 
     /// @notice Add `amount` to an existing grant. Limits stay.
@@ -201,18 +222,19 @@ contract ClipAllocator {
         Grant storage g = deallocateGrants[bot][adapter];
         budget[bot] -= g.remaining;
         g.remaining = 0;
-        emit GrantUpdated(bot, adapter, false, 0, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps);
+        emit GrantUpdated(bot, adapter, false, 0, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps, g.expiresAtBlock);
     }
 
     function revokeAllocate(address bot, address adapter) external onlyOwner {
         Grant storage g = allocateGrants[bot][adapter];
         budget[bot] -= g.remaining;
         g.remaining = 0;
-        emit GrantUpdated(bot, adapter, true, 0, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps);
+        emit GrantUpdated(bot, adapter, true, 0, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps, g.expiresAtBlock);
     }
 
     function _grant(Grant storage g, address bot, address adapter, bool isAllocate, uint256 amount,
-                    uint256 maxClip, uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps) internal {
+                    uint256 maxClip, uint32 minIntervalBlocks, address priceToken, uint256 limitRate, uint16 maxLossBps,
+                    uint64 expiresAtBlock) internal {
         require(bot != address(0) && maxClip > 0, "grant");
         require(priceToken == address(0) || limitRate > 0, "rate");   // a guarded grant needs a real limit
         require(maxLossBps <= BPS, "loss");
@@ -225,14 +247,15 @@ contract ClipAllocator {
         g.priceToken = priceToken;
         g.limitRate = limitRate;
         g.maxLossBps = maxLossBps;
-        emit GrantUpdated(bot, adapter, isAllocate, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps);
+        g.expiresAtBlock = expiresAtBlock;
+        emit GrantUpdated(bot, adapter, isAllocate, amount, maxClip, minIntervalBlocks, priceToken, limitRate, maxLossBps, expiresAtBlock);
     }
 
     function _topUp(Grant storage g, address bot, address adapter, bool isAllocate, uint256 amount) internal {
         if (g.maxClip == 0) revert NoGrant(bot, adapter, isAllocate);
         g.remaining += amount;
         budget[bot] += amount;
-        emit GrantUpdated(bot, adapter, isAllocate, g.remaining, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps);
+        emit GrantUpdated(bot, adapter, isAllocate, g.remaining, g.maxClip, g.minIntervalBlocks, g.priceToken, g.limitRate, g.maxLossBps, g.expiresAtBlock);
     }
 
     /// @notice Emergency stop: a bot with budget remaining may pause, only the owner may unpause.
@@ -253,6 +276,43 @@ contract ClipAllocator {
         owner = pendingOwner;
         pendingOwner = address(0);
         emit OwnerUpdated(owner);
+    }
+
+    /// @notice The `limitRate` to pass to `grant*` when `priceToken` is not priced by a feed.
+    ///         `rate` is already underlying per raw priceToken, in WAD: a one for one token, or a
+    ///         share price read elsewhere. A deallocate grant gets a floor under that rate. An
+    ///         allocate grant gets a ceiling over it.
+    function previewLimitRate(uint256 rate, uint256 toleranceBps, bool isAllocate) public pure returns (uint256) {
+        if (rate == 0 || toleranceBps > BPS) revert InvalidRateInput();
+        if (isAllocate) return rate * (BPS + toleranceBps) / BPS;
+        return rate * (BPS - toleranceBps) / BPS;
+    }
+
+    /// @notice Same band as `previewLimitRate`, after scaling a feed answer into underlying per
+    ///         raw `priceToken`. `oracleAnswer` and `oracleDecimals` are supplied by the caller.
+    ///         The answer prices one unit of the feed's token in the vault asset. `assetsPerShare`
+    ///         is how many of those units one raw `priceToken` is worth, in WAD: pass 1e18 when
+    ///         `priceToken` is the token the feed prices.
+    function previewLimitRateOracleToken(
+        address priceToken,
+        int256 oracleAnswer,
+        uint8 oracleDecimals,
+        uint256 assetsPerShare,
+        uint256 toleranceBps,
+        bool isAllocate
+    ) external view returns (uint256) {
+        if (assetsPerShare == 0 || oracleAnswer <= 0) revert InvalidRateInput();
+
+        uint256 assetDec = IERC20Lite(address(asset)).decimals();
+        uint256 tokenDec = IERC20Lite(priceToken).decimals();
+        uint256 fair = uint256(oracleAnswer) * assetsPerShare;
+        uint256 scaleUp = assetDec + 18;
+        uint256 scaleDown = uint256(oracleDecimals) + tokenDec;
+        if (scaleUp >= scaleDown) fair *= 10 ** (scaleUp - scaleDown);
+        else fair /= 10 ** (scaleDown - scaleUp);
+        fair /= 1e18;
+
+        return previewLimitRate(fair, toleranceBps, isAllocate);
     }
 
     // ---- clips ------------------------------------------------------------------
@@ -296,6 +356,7 @@ contract ClipAllocator {
     function _consume(Grant storage g, address adapter, bool isAllocate, uint256 assets) internal {
         if (assets == 0) revert ZeroAmount();
         if (g.maxClip == 0) revert NoGrant(msg.sender, adapter, isAllocate);
+        _notExpired(g);
         if (assets > g.remaining) revert GrantExhausted(g.remaining, assets);
         if (assets > g.maxClip) revert ClipTooLarge(g.maxClip, assets);
         uint64 readyAt = g.lastClipBlock + g.minIntervalBlocks;
@@ -303,6 +364,11 @@ contract ClipAllocator {
         g.remaining -= assets;
         budget[msg.sender] -= assets;
         g.lastClipBlock = uint64(block.number);
+    }
+
+    /// @dev `expiresAtBlock` is the last block a clip may run. 0 does not expire.
+    function _notExpired(Grant storage g) internal view {
+        if (g.expiresAtBlock != 0 && block.number > g.expiresAtBlock) revert GrantExpired(g.expiresAtBlock);
     }
 
     struct Snap { bytes32 id; uint256 booked; uint256 real; uint256 tokens; uint256 idle; }
@@ -396,6 +462,7 @@ contract ClipAllocator {
         if (liq == address(0) || liq == target) revert IdleUnavailable(needed, idle, liq);
         Grant storage g = deallocateGrants[msg.sender][liq];
         if (g.maxClip == 0 || shortfall > g.remaining) revert IdleUnavailable(needed, idle, liq);
+        _notExpired(g);
         if (shortfall > g.maxClip) revert ClipTooLarge(g.maxClip, shortfall);
         g.remaining -= shortfall;
         budget[msg.sender] -= shortfall;
