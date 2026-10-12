@@ -10,7 +10,7 @@ Preferred-Languages: en
 
 ## Security contact details.
 
-security@alchemix.fi
+security@mail.alchemix.fi
 
 ## The URL for accessing the security.txt file.
 
