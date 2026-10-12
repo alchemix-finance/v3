@@ -27,3 +27,8 @@ opencode.jsonc
 opencode.json
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Redemption sync keeper runtime files
+/keeper/.env
+/keeper/data/
+/keeper/node_modules/

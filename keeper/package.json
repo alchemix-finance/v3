@@ -1,0 +1,19 @@
+{
+  "name": "alchemix-v3-redemption-sync-keeper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node --check src/index.js && node --check src/config.js && node --check src/storage.js && node --check src/risk.js",
+    "keeper": "node src/index.js",
+    "scan": "node src/index.js --once",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "dotenv": "18.0.4",
+    "web3": "4.16.0"
+  }
+}
