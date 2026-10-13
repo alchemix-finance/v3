@@ -78,6 +78,7 @@ contract E2EStrategyHandler is Test {
     uint256 public MIN_DEPOSIT;
     uint256 public MIN_ALLOCATE;
     uint256 public constant BPS = 10_000;
+    mapping(address => uint256) public minAllocateOverride;
 
     struct InitParams {
         address vault;
@@ -269,12 +270,13 @@ contract E2EStrategyHandler is Test {
         uint256 idle = IERC20(asset).balanceOf(address(vault));
         if (maxAllocate > idle) maxAllocate = idle;
 
-        if (!canProceed || maxAllocate < MIN_ALLOCATE) {
+        uint256 minAllocate = _minAllocate(strategy);
+        if (!canProceed || maxAllocate < minAllocate) {
             skips[selector]++;
             return;
         }
 
-        amount = bound(amount, MIN_ALLOCATE, maxAllocate);
+        amount = bound(amount, minAllocate, maxAllocate);
 
         uint256[] memory snap = _snapshotAllocations();
 
@@ -731,12 +733,13 @@ contract E2EStrategyHandler is Test {
 
         uint8 riskLevel = AlchemistStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
         uint256 globalRiskHeadroom = _remainingGlobalRiskHeadroom(riskLevel);
-        if (globalRiskHeadroom < MIN_ALLOCATE) return (false, 0);
+        uint256 minAllocate = _minAllocate(strategy);
+        if (globalRiskHeadroom < minAllocate) return (false, 0);
 
         uint256 underlyingMaxDeposit = _getUnderlyingMaxDeposit(strategy);
         // Morpho-style vaults report maxDeposit(address) == 0 regardless of actual capacity;
         // ignore sub-minimal values (mirrors the maxWithdraw handling in _computeDeallocateBounds).
-        if (underlyingMaxDeposit != 0 && underlyingMaxDeposit < MIN_ALLOCATE) return (false, 0);
+        if (underlyingMaxDeposit != 0 && underlyingMaxDeposit < minAllocate) return (false, 0);
 
         uint256 currentRealAssets = IMYTStrategy(strategy).realAssets();
         uint256 pendingYield = currentRealAssets > currentAllocation ? currentRealAssets - currentAllocation : 0;
@@ -748,7 +751,7 @@ contract E2EStrategyHandler is Test {
         maxAllocate = maxByAbsoluteRemaining;
         if (maxByRelativeCap < maxAllocate) maxAllocate = maxByRelativeCap;
         if (globalRiskHeadroom < maxAllocate) maxAllocate = globalRiskHeadroom;
-        if (underlyingMaxDeposit >= MIN_ALLOCATE && underlyingMaxDeposit < maxAllocate) maxAllocate = underlyingMaxDeposit;
+        if (underlyingMaxDeposit >= minAllocate && underlyingMaxDeposit < maxAllocate) maxAllocate = underlyingMaxDeposit;
 
         // Individual risk cap is allocator-enforced (operator path only, matching production).
         if (caller != admin) {
@@ -938,6 +941,16 @@ contract E2EStrategyHandler is Test {
     ///      force-deallocate (i.e. its `_canForceDeallocate` returns true / was enabled).
     function setForceDeallocateEnabled(address strategy, bool enabled) external {
         forceDeallocateEnabled[strategy] = enabled;
+    }
+
+    /// @dev Per-strategy allocate floor for venues with a minimum deposit size; 0 falls back to MIN_ALLOCATE.
+    function setMinAllocate(address strategy, uint256 minAllocate) external {
+        minAllocateOverride[strategy] = minAllocate;
+    }
+
+    function _minAllocate(address strategy) internal view returns (uint256) {
+        uint256 override_ = minAllocateOverride[strategy];
+        return override_ == 0 ? MIN_ALLOCATE : override_;
     }
 
     ///      handler delegates yield/loss injection to this address instead of dealing inline.

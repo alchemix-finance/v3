@@ -22,6 +22,22 @@ library Re7ETHMidasAddresses {
     uint256 internal constant REDEMPTION_LIQUIDITY = 100_000e18;
 }
 
+contract MockReplacementAggregator {
+    int256 internal immutable answer;
+
+    constructor(int256 _answer) {
+        answer = _answer;
+    }
+
+    function decimals() external pure returns (uint8) {
+        return 8;
+    }
+
+    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80) {
+        return (1, answer, block.timestamp, block.timestamp, 1);
+    }
+}
+
 contract Re7ETHMidasStrategyTest is BaseStrategyTest {
     uint80 internal feedRoundId;
     int256 internal feedAnswer;
@@ -117,6 +133,11 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         assertEq(address(s.depositVault()), Re7ETHMidasAddresses.DEPOSIT_VAULT, "unexpected deposit vault");
         assertEq(address(s.redemptionVault()), Re7ETHMidasAddresses.REDEMPTION_VAULT, "unexpected redemption vault");
         assertEq(address(s.dataFeed()), Re7ETHMidasAddresses.DATA_FEED, "unexpected data feed");
+        assertEq(address(s.aggregator()), Re7ETHMidasAddresses.AGGREGATOR, "unexpected aggregator");
+        assertEq(s.aggregatorDecimals(), 8, "unexpected aggregator decimals");
+        assertEq(s.maxNavStaleness(), 7 days, "unexpected staleness default");
+        assertEq(s.maxNavDeviationBPS(), 500, "unexpected deviation default");
+        assertEq(s.lastNav(), _nav(), "lastNav should be seeded from the live feed");
         assertFalse(s.canForceDeallocate(), "force deallocate should default disabled");
     }
 
@@ -149,16 +170,14 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), amount, 1e9, "realAssets should track deposit at NAV");
     }
 
-    function test_allocate_belowMidasMinimumStaysIdle() public {
+    function test_allocate_belowMidasMinimumReverts() public {
         uint256 minAmount = IMidasDepositVault(Re7ETHMidasAddresses.DEPOSIT_VAULT).minAmount();
         uint256 dust = (minAmount * _nav()) / 1e18 / 2;
 
-        _allocateDirect(dust);
-
-        assertEq(IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(strategy), 0, "dust should not be deposited");
-        assertEq(IERC20(Re7ETHMidasAddresses.WETH).balanceOf(strategy), dust, "dust should stay idle");
-        assertEq(IMYTStrategy(strategy).realAssets(), dust, "idle dust should be valued");
-        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(dust), dust, "idle dust should be fully withdrawable");
+        deal(Re7ETHMidasAddresses.WETH, strategy, dust);
+        vm.prank(vault);
+        vm.expectRevert("DV: mToken amount < min");
+        IMYTStrategy(strategy).allocate(getVaultParams(), dust, "", address(vault));
     }
 
     function test_allocate_swapActionReverts() public {
@@ -309,11 +328,157 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
     // Oracle health
     // ---------------------------------------------------------------------------------------------
 
-    function test_realAssets_revertsWhenFeedStale() public {
+    function test_staleNav_failsSoftInValuation_failsHardInExecution() public {
         _allocateDirect(1e18);
-        vm.warp(block.timestamp + 31 days);
-        vm.expectRevert("DF: feed is unhealthy");
-        IMYTStrategy(strategy).realAssets();
+        uint256 healthyValue = IMYTStrategy(strategy).realAssets();
+
+        // Exceed our 7-day staleness window (Midas's own 30-day check would still pass).
+        vm.warp(block.timestamp + 8 days);
+
+        // Valuation holds cached lastNav flat instead of reverting or dipping.
+        assertEq(IMYTStrategy(strategy).realAssets(), healthyValue, "stale value should hold lastNav");
+
+        // Only idle is reported withdrawable.
+        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(1e18), 0, "no idle, nothing withdrawable");
+        deal(Re7ETHMidasAddresses.WETH, strategy, 0.3e18);
+        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(1e18), 0.3e18, "only idle should be withdrawable");
+
+        // Execution fails hard: minting and position redemptions require a healthy NAV.
+        vm.prank(vault);
+        vm.expectRevert("NAV unhealthy");
+        IMYTStrategy(strategy).allocate(getVaultParams(), 0.3e18, "", address(vault));
+
+        vm.prank(vault);
+        vm.expectRevert("NAV unhealthy");
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 1e18, "", address(vault));
+
+        // But idle-covered deallocations still work without a NAV.
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 0.3e18, "", address(vault));
+
+        // A fresh print restores full valuation (idle 0.3e18 was approved to the vault but never pulled).
+        _refreshFeed(block.timestamp);
+        assertApproxEqRel(IMYTStrategy(strategy).realAssets(), healthyValue + 0.3e18, 1e12, "fresh print should restore value");
+    }
+
+    function test_navDeviationGuard_rejectsOutlierPrint() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _allocateDirect(1e18);
+        uint256 healthyValue = IMYTStrategy(strategy).realAssets();
+
+        // A fresh print that jumps +6% (beyond the 5% spread guard) is treated as unhealthy.
+        int256 originalAnswer = feedAnswer;
+        feedAnswer = (feedAnswer * 106) / 100;
+        _refreshFeed(block.timestamp);
+
+        assertEq(IMYTStrategy(strategy).realAssets(), healthyValue, "outlier print should hold lastNav");
+
+        vm.expectRevert("NAV unhealthy");
+        s.pokeNav();
+
+        // Same for a -6% print.
+        feedAnswer = (originalAnswer * 94) / 100;
+        _refreshFeed(block.timestamp);
+        assertEq(IMYTStrategy(strategy).realAssets(), healthyValue, "outlier drop should hold lastNav");
+
+        // A print within the spread is accepted again.
+        feedAnswer = (originalAnswer * 104) / 100;
+        _refreshFeed(block.timestamp);
+        s.pokeNav();
+        assertApproxEqRel(IMYTStrategy(strategy).realAssets(), (healthyValue * 104) / 100, 1e12, "value should follow accepted print");
+    }
+
+    function test_acceptNav_ownerAcceptsOutOfBandPrint() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _allocateDirect(1e18);
+        uint256 healthyValue = IMYTStrategy(strategy).realAssets();
+        uint256 navBefore = s.lastNav();
+
+        feedAnswer = (feedAnswer * 80) / 100;
+        uint256 expectedNav = (uint256(feedAnswer) * 1e18) / 10 ** s.aggregatorDecimals();
+        _refreshFeed(block.timestamp);
+        assertEq(IMYTStrategy(strategy).realAssets(), healthyValue, "rejected print should hold lastNav");
+
+        vm.prank(address(0xBEEF));
+        vm.expectRevert();
+        s.acceptNav();
+
+        // A stale print cannot be accepted either.
+        vm.warp(block.timestamp + 8 days);
+        vm.prank(admin);
+        vm.expectRevert("Stale NAV");
+        s.acceptNav();
+
+        _refreshFeed(block.timestamp);
+        vm.prank(admin);
+        vm.expectEmit(true, true, true, true, strategy);
+        emit Re7ETHMidasStrategy.NavAccepted(navBefore, expectedNav);
+        s.acceptNav();
+
+        assertEq(s.lastNav(), expectedNav, "lastNav should take the accepted print");
+        assertEq(s.lastNavUpdatedAt(), block.timestamp, "lastNavUpdatedAt should be refreshed");
+        assertApproxEqRel(IMYTStrategy(strategy).realAssets(), (healthyValue * 80) / 100, 1e12, "value should follow accepted print");
+
+        // Execution is healthy again at the new reference.
+        s.pokeNav();
+    }
+
+    function test_pokeNav_updatesCache() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        uint256 navBefore = s.lastNav();
+
+        feedAnswer = (feedAnswer * 101) / 100;
+        _refreshFeed(block.timestamp);
+        s.pokeNav();
+
+        assertApproxEqRel(s.lastNav(), (navBefore * 101) / 100, 1e12, "lastNav should track the poked print");
+        assertEq(s.lastNavUpdatedAt(), block.timestamp, "lastNavUpdatedAt should be refreshed");
+    }
+
+    function test_setAggregator_replacesFeedAndReseedsCache() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _allocateDirect(1e18);
+        uint256 valueBefore = IMYTStrategy(strategy).realAssets();
+
+        // Replacement feed prints +50% — far beyond the deviation guard, accepted only via re-seed.
+        MockReplacementAggregator replacement = new MockReplacementAggregator((feedAnswer * 150) / 100);
+
+        vm.prank(address(0xBEEF));
+        vm.expectRevert();
+        s.setAggregator(address(replacement));
+
+        vm.startPrank(admin);
+        vm.expectRevert("Zero aggregator address");
+        s.setAggregator(address(0));
+        s.setAggregator(address(replacement));
+        vm.stopPrank();
+
+        assertEq(address(s.aggregator()), address(replacement), "aggregator not replaced");
+        assertApproxEqRel(s.lastNav(), (_nav() * 150) / 100, 1e12, "lastNav should re-seed from new feed");
+        assertApproxEqRel(IMYTStrategy(strategy).realAssets(), (valueBefore * 150) / 100, 1e12, "valuation should follow new feed");
+    }
+
+    function test_navSetters_onlyOwnerAndBounds() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+
+        vm.startPrank(address(0xBEEF));
+        vm.expectRevert();
+        s.setMaxNavStaleness(1 days);
+        vm.expectRevert();
+        s.setMaxNavDeviationBPS(300);
+        vm.stopPrank();
+
+        vm.startPrank(admin);
+        s.setMaxNavStaleness(3 days);
+        assertEq(s.maxNavStaleness(), 3 days, "staleness not updated");
+        s.setMaxNavDeviationBPS(300);
+        assertEq(s.maxNavDeviationBPS(), 300, "deviation not updated");
+
+        vm.expectRevert("Zero staleness");
+        s.setMaxNavStaleness(0);
+        vm.expectRevert("Invalid deviation");
+        s.setMaxNavDeviationBPS(10_000);
+        vm.stopPrank();
     }
 
     function test_realAssets_tracksNavIncrease() public {
@@ -360,7 +525,7 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         Re7ETHMidasStrategy(strategy).rescueTokens(Re7ETHMidasAddresses.WETH, admin, 1);
         vm.stopPrank();
     }
-     
+
     function test_full_lifecycle_with_time() public {
         vm.startPrank(allocator);
         bytes32 allocationId = IMYTStrategy(strategy).adapterId();
@@ -445,11 +610,23 @@ contract Re7ETHMidasInvariantTest is E2EInvariantStrategyTest {
         return false;
     }
 
-    function _postCreateStrategy(address) internal override {
+    function _postCreateStrategy(address strategy_) internal override {
         // The handler warps up to a year at a time; pin the NAV so the Midas feed never trips its 30-day health check.
         navSnapshot = IMidasDataFeed(Re7ETHMidasAddresses.DATA_FEED).getDataInBase18();
         vm.mockCall(Re7ETHMidasAddresses.DATA_FEED, abi.encodeWithSelector(IMidasDataFeed.getDataInBase18.selector), abi.encode(navSnapshot));
         deal(Re7ETHMidasAddresses.WETH, Re7ETHMidasAddresses.REDEMPTION_VAULT, Re7ETHMidasAddresses.REDEMPTION_LIQUIDITY);
+
+        // The strategy reads the aggregator directly, whose on-fork print has a fixed timestamp; the
+        // handler's raw warps would trip the 7-day staleness guard, so relax it for the fuzz campaign.
+        // The deviation guard stays active (the pinned print never moves).
+        vm.prank(admin);
+        Re7ETHMidasStrategy(strategy_).setMaxNavStaleness(36_500 days);
+    }
+
+    /// @dev Midas rejects mints below `minAmount` mTokens; size fuzzed allocations above it (2x for slippage rounding).
+    function _realStrategyMinAllocate() internal view override returns (uint256) {
+        uint256 minMint = IMidasDepositVault(Re7ETHMidasAddresses.DEPOSIT_VAULT).minAmount();
+        return (minMint * navSnapshot * 2) / 1e18;
     }
 
     function onSimulateValueLoss(address strategy, uint256 amount) external override {

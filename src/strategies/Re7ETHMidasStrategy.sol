@@ -4,18 +4,21 @@ pragma solidity 0.8.28;
 import {MYTStrategy} from "../MYTStrategy.sol";
 import {TokenUtils} from "../libraries/TokenUtils.sol";
 
-/// @notice Midas `DataFeed` — returns the mToken/asset rate scaled to 1e18.
 interface IMidasDataFeed {
     function getDataInBase18() external view returns (uint256);
+    function aggregator() external view returns (address);
 }
 
-/// @notice Midas `DepositVault` — mints mTokens against a payment token at oracle NAV.
+interface IAggregatorV3 {
+    function decimals() external view returns (uint8);
+    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80);
+}
+
 interface IMidasDepositVault {
     function depositInstant(address tokenIn, uint256 amountToken, uint256 minReceiveAmount, bytes32 referrerId) external;
     function minAmount() external view returns (uint256);
 }
 
-/// @notice Midas `RedemptionVault` — burns mTokens for a payment token at oracle NAV.
 interface IMidasRedemptionVault {
     function redeemInstant(address tokenOut, uint256 amountMTokenIn, uint256 minReceiveAmount) external;
     function tokensConfig(address token) external view returns (address dataFeed, uint256 fee, uint256 allowance, bool stable);
@@ -27,12 +30,12 @@ interface IMidasRedemptionVault {
 
 /**
  * @title Re7ETHMidasStrategy
- * @notice Allocates WETH into the Re7ETH tokenized fund (Midas) on Optimism.
- *
- * Only the instant mint / instant redeem paths are supported. 
+ * @notice Allocates WETH into the Re7ETH tokenized fund (Midas) on Optimism via instant mint/redeem.
+ * @dev Positions are priced from the aggregator's `latestRoundData()` with own staleness and deviation
+ *      guards.
  */
 contract Re7ETHMidasStrategy is MYTStrategy {
-    uint256 internal constant MIDAS_ONE_HUNDRED_PERCENT = 10_000;
+    uint256 internal constant BPS = 10_000;
     uint256 internal constant WAD = 1e18;
 
     address public immutable weth;
@@ -41,9 +44,23 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     IMidasRedemptionVault public immutable redemptionVault;
     IMidasDataFeed public immutable dataFeed;
 
+    IAggregatorV3 public aggregator;
+    uint8 public aggregatorDecimals;
+
+    uint256 public maxNavStaleness;
+    uint256 public maxNavDeviationBPS;
+
+    uint256 public lastNav;
+    uint256 public lastNavUpdatedAt;
+
     bool public canForceDeallocate;
 
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
+    event AggregatorUpdated(address indexed newAggregator, uint8 decimals);
+    event NavSynced(uint256 nav);
+    event MaxNavStalenessUpdated(uint256 newMaxNavStaleness);
+    event MaxNavDeviationBPSUpdated(uint256 newMaxNavDeviationBPS);
+    event NavAccepted(uint256 previousNav, uint256 newNav);
 
     constructor(address _myt, StrategyParams memory _params, address _re7ETH, address _depositVault, address _redemptionVault, address _dataFeed)
         MYTStrategy(_myt, _params)
@@ -59,7 +76,11 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         redemptionVault = IMidasRedemptionVault(_redemptionVault);
         dataFeed = IMidasDataFeed(_dataFeed);
 
-        // Sanity check the feed is live and that WETH is an accepted redemption token.
+        maxNavStaleness = 7 days;
+        maxNavDeviationBPS = 500;
+
+        _setAggregator(IMidasDataFeed(_dataFeed).aggregator());
+
         require(dataFeed.getDataInBase18() > 0, "Invalid NAV");
         (address wethFeed,,,) = redemptionVault.tokensConfig(weth);
         require(wethFeed != address(0), "WETH not redeemable");
@@ -70,16 +91,40 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         emit CanForceDeallocateUpdated(canForceDeallocate_);
     }
 
-    /// @dev Amounts that would mint fewer mTokens than the Midas minimum are held idle instead of reverting
-    ///      they remain part of `_totalValue()` and are served first on deallocation.
+    function setAggregator(address aggregator_) external onlyOwner {
+        _setAggregator(aggregator_);
+    }
+
+    function setMaxNavStaleness(uint256 maxNavStaleness_) external onlyOwner {
+        require(maxNavStaleness_ > 0, "Zero staleness");
+        maxNavStaleness = maxNavStaleness_;
+        emit MaxNavStalenessUpdated(maxNavStaleness_);
+    }
+
+    function setMaxNavDeviationBPS(uint256 maxNavDeviationBPS_) external onlyOwner {
+        require(maxNavDeviationBPS_ > 0 && maxNavDeviationBPS_ < BPS, "Invalid deviation");
+        maxNavDeviationBPS = maxNavDeviationBPS_;
+        emit MaxNavDeviationBPSUpdated(maxNavDeviationBPS_);
+    }
+
+    /// @notice Permissionless cache refresh; only accepts a healthy print.
+    function pokeNav() external {
+        _syncNav();
+    }
+
+    /// @notice Owner override to accept a fresh print that the deviation guard rejected.
+    function acceptNav() external onlyOwner {
+        uint256 previous = lastNav;
+        _seedNav();
+        emit NavAccepted(previous, lastNav);
+    }
+
+    /// @dev Midas enforces a minimum mint, amounts below it revert here.
     function _allocate(uint256 amount) internal override returns (uint256) {
         _ensureIdleBalance(weth, amount);
+        _syncNav();
 
-        if (_assetToMTokenDown(amount) < depositVault.minAmount()) return amount;
-
-        uint256 minAssetsOut = (amount * (MIDAS_ONE_HUNDRED_PERCENT - params.slippageBPS)) / MIDAS_ONE_HUNDRED_PERCENT;
-        uint256 minMTokenOut = _assetToMTokenDown(minAssetsOut);
-        if (minMTokenOut == 0) minMTokenOut = 1;
+        uint256 minMTokenOut = _assetToMTokenDown((amount * (BPS - params.slippageBPS)) / BPS);
 
         uint256 mTokenBefore = _positionBalance();
         TokenUtils.safeApprove(weth, address(depositVault), amount);
@@ -94,6 +139,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         uint256 idleBalance = _idleAssets();
 
         if (idleBalance < amount) {
+            _syncNav();
             uint256 shortfall = amount - idleBalance;
 
             uint256 mTokenIn = _mTokenInForAssetsOut(shortfall);
@@ -118,7 +164,10 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     function _totalValue() internal view override returns (uint256) {
         uint256 mTokenBalance = _positionBalance();
         if (mTokenBalance == 0) return _idleAssets();
-        return _idleAssets() + _mTokenToAsset(mTokenBalance);
+
+        (uint256 nav, bool healthy) = _readNav();
+        if (!healthy) nav = lastNav;
+        return _idleAssets() + (mTokenBalance * nav) / WAD;
     }
 
     function _idleAssets() internal view override returns (uint256) {
@@ -129,17 +178,19 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         uint256 idleBalance = _idleAssets();
         if (idleBalance >= amount) return amount;
 
+        (, bool healthy) = _readNav();
+        if (!healthy) return idleBalance;
+
         uint256 remaining = amount - idleBalance;
         uint256 available = _instantRedeemableAssets();
         uint256 fundable = remaining < available ? remaining : available;
 
-        return idleBalance + (fundable * (MIDAS_ONE_HUNDRED_PERCENT - params.slippageBPS)) / MIDAS_ONE_HUNDRED_PERCENT;
+        return idleBalance + (fundable * (BPS - params.slippageBPS)) / BPS;
     }
 
-    /// @notice WETH that can be pulled right now via `redeemInstant`, net of Midas fees and bounded by
-    ///         the redemption vault's liquidity, daily limit and per token allowance.
-    /// @dev Every redeem sends at least `minAmount` gross mTokens (see `_deallocate`), so any cap that cannot
-    ///      absorb a minimum size redeem makes the position non withdrawable right now.
+    /// @dev WETH withdrawable right now via `redeemInstant`, net of fees and bounded by the redemption
+    ///      vault's liquidity, daily limit and token allowance. Any bound below one minimum size redeem
+    ///      means nothing is withdrawable.
     function _instantRedeemableAssets() internal view returns (uint256) {
         uint256 minRedeem = redemptionVault.minAmount();
         uint256 mTokenBalance = _positionBalance();
@@ -148,7 +199,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         uint256 feeBps = _redeemFeeBps();
         uint256 fromPosition = _netAssetsForGrossMToken(mTokenBalance, feeBps);
 
-        // Daily limit is consumed in gross mTokens.
+        // Consumed in gross mTokens.
         uint256 dailyLimit = redemptionVault.instantDailyLimit();
         if (dailyLimit != type(uint256).max) {
             uint256 dailyUsed = redemptionVault.dailyLimits(block.timestamp / 1 days);
@@ -157,15 +208,14 @@ contract Re7ETHMidasStrategy is MYTStrategy {
             if (headroomAssets < fromPosition) fromPosition = headroomAssets;
         }
 
-        // Per token allowance is consumed in gross WETH (before fee).
+        // Consumed in gross WETH.
         (,, uint256 tokenAllowance,) = redemptionVault.tokensConfig(weth);
         if (tokenAllowance != type(uint256).max) {
             if (tokenAllowance < _mTokenToAsset(minRedeem)) return 0;
-            uint256 allowanceNet = tokenAllowance - (tokenAllowance * feeBps) / MIDAS_ONE_HUNDRED_PERCENT;
+            uint256 allowanceNet = tokenAllowance - (tokenAllowance * feeBps) / BPS;
             if (allowanceNet < fromPosition) fromPosition = allowanceNet;
         }
 
-        // Instant redemptions are paid from the redemption vault's own WETH balance.
         uint256 vaultLiquidity = TokenUtils.safeBalanceOf(weth, address(redemptionVault));
         if (vaultLiquidity < _netAssetsForGrossMToken(minRedeem, feeBps)) return 0;
         if (vaultLiquidity < fromPosition) fromPosition = vaultLiquidity;
@@ -173,23 +223,70 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         return fromPosition;
     }
 
-    function _netAssetsForGrossMToken(uint256 grossMToken, uint256 feeBps) internal view returns (uint256) {
-        uint256 netMToken = grossMToken - (grossMToken * feeBps) / MIDAS_ONE_HUNDRED_PERCENT;
-        return _mTokenToAsset(netMToken);
+    /// @dev Healthy = positive fresh answer within `maxNavDeviationBPS` of `lastNav`. Reverts read as unhealthy.
+    function _readNav() internal view returns (uint256 nav, bool healthy) {
+        try aggregator.latestRoundData() returns (uint80, int256 answer, uint256, uint256 updatedAt, uint80) {
+            if (answer <= 0 || updatedAt == 0 || updatedAt > block.timestamp) return (0, false);
+            if (block.timestamp - updatedAt > maxNavStaleness) return (0, false);
+
+            nav = (uint256(answer) * WAD) / (10 ** aggregatorDecimals);
+
+            uint256 ref = lastNav;
+            uint256 diff = nav > ref ? nav - ref : ref - nav;
+            if (diff * BPS > ref * maxNavDeviationBPS) return (nav, false);
+
+            healthy = true;
+        } catch {
+            return (0, false);
+        }
+    }
+
+    function _nav() internal view returns (uint256 nav) {
+        bool healthy;
+        (nav, healthy) = _readNav();
+        require(healthy, "NAV unhealthy");
+    }
+
+    function _syncNav() internal returns (uint256 nav) {
+        nav = _nav();
+        if (nav != lastNav) lastNav = nav;
+        lastNavUpdatedAt = block.timestamp;
+        emit NavSynced(nav);
+    }
+
+    function _setAggregator(address aggregator_) internal {
+        require(aggregator_ != address(0), "Zero aggregator address");
+
+        aggregator = IAggregatorV3(aggregator_);
+        aggregatorDecimals = IAggregatorV3(aggregator_).decimals();
+        emit AggregatorUpdated(aggregator_, aggregatorDecimals);
+
+        _seedNav();
+    }
+
+    /// @dev Sets `lastNav` from a fresh print, bypassing the deviation guard.
+    function _seedNav() internal {
+        (, int256 answer,, uint256 updatedAt,) = aggregator.latestRoundData();
+        require(answer > 0 && updatedAt != 0 && updatedAt <= block.timestamp, "Invalid NAV");
+        require(block.timestamp - updatedAt <= maxNavStaleness, "Stale NAV");
+        lastNav = (uint256(answer) * WAD) / (10 ** aggregatorDecimals);
+        lastNavUpdatedAt = block.timestamp;
+        emit NavSynced(lastNav);
     }
 
     function _positionBalance() internal view returns (uint256) {
         return TokenUtils.safeBalanceOf(re7ETH, address(this));
     }
 
-    function _nav() internal view returns (uint256) {
-        return dataFeed.getDataInBase18();
+    function _netAssetsForGrossMToken(uint256 grossMToken, uint256 feeBps) internal view returns (uint256) {
+        uint256 netMToken = grossMToken - (grossMToken * feeBps) / BPS;
+        return _mTokenToAsset(netMToken);
     }
 
     function _redeemFeeBps() internal view returns (uint256 feeBps) {
         (, uint256 tokenFee,,) = redemptionVault.tokensConfig(weth);
         feeBps = tokenFee + redemptionVault.instantFee();
-        if (feeBps > MIDAS_ONE_HUNDRED_PERCENT) feeBps = MIDAS_ONE_HUNDRED_PERCENT;
+        if (feeBps > BPS) feeBps = BPS;
     }
 
     function _mTokenToAsset(uint256 mTokenAmount) internal view returns (uint256) {
@@ -205,13 +302,13 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         return (assetAmount * WAD + nav - 1) / nav;
     }
 
-    /// @dev Gross mTokens to send to `redeemInstant` so that, after Midas fees, at least `assetsOut` WETH is paid.
+    /// @dev Gross mTokens such that, after Midas fees, at least `assetsOut` WETH is paid.
     function _mTokenInForAssetsOut(uint256 assetsOut) internal view returns (uint256) {
         uint256 netMToken = _assetToMTokenUp(assetsOut);
         uint256 feeBps = _redeemFeeBps();
         if (feeBps == 0) return netMToken;
-        uint256 denominator = MIDAS_ONE_HUNDRED_PERCENT - feeBps;
-        return (netMToken * MIDAS_ONE_HUNDRED_PERCENT + denominator - 1) / denominator;
+        uint256 denominator = BPS - feeBps;
+        return (netMToken * BPS + denominator - 1) / denominator;
     }
 
     function _isProtectedToken(address token) internal view override returns (bool) {

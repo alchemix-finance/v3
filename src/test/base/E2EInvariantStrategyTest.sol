@@ -66,6 +66,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         );
 
         handler.setForceDeallocateEnabled(realStrategy, _realStrategySupportsForceDeallocate());
+        handler.setMinAllocate(realStrategy, _realStrategyMinAllocate());
         handler.setSimulator(address(this));
 
         targetContract(address(handler));
@@ -103,6 +104,11 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
 
     function _realStrategySupportsForceDeallocate() internal view virtual returns (bool) {
         return true;
+    }
+
+    /// @dev Venue minimum deposit size for the real strategy; 0 uses the handler default.
+    function _realStrategyMinAllocate() internal view virtual returns (uint256) {
+        return 0;
     }
 
     function onSimulateYield(address strategy, uint256 amount) external virtual {

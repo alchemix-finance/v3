@@ -15,8 +15,23 @@ contract MockMYTForRe7ETHMidasDeployTest {
     }
 }
 
+contract MockAggregator {
+    function decimals() external pure returns (uint8) {
+        return 8;
+    }
+
+    function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80) {
+        return (1, 1e8, block.timestamp, block.timestamp, 1);
+    }
+}
+
 contract MockMidasDataFeed {
     uint256 public nav = 1e18;
+    address public aggregator;
+
+    constructor() {
+        aggregator = address(new MockAggregator());
+    }
 
     function getDataInBase18() external view returns (uint256) {
         return nav;
@@ -81,6 +96,9 @@ contract DeployRe7ETHMidasStrategyScriptTest is Test {
         assertEq(address(strategy.depositVault()), depositVault, "unexpected deposit vault");
         assertEq(address(strategy.redemptionVault()), address(redemptionVault), "unexpected redemption vault");
         assertEq(address(strategy.dataFeed()), address(dataFeed), "unexpected data feed");
+        assertEq(address(strategy.aggregator()), dataFeed.aggregator(), "unexpected aggregator");
+        assertEq(strategy.lastNav(), 1e18, "lastNav should be seeded from the aggregator");
+        assertEq(strategy.maxNavStaleness(), 7 days, "unexpected staleness default");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled");
         assertFalse(strategy.canForceDeallocate(), "force deallocate should default disabled");
