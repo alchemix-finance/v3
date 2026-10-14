@@ -71,8 +71,7 @@ library IporLiquityETHCarryFixture {
         );
     }
 
-    /// @dev The live vault sits at its total supply cap and enforces a 1s redemption delay after deposit.
-    ///      Lift both so the shared harness (which allocates and deallocates within one block) can run.
+    /// @dev Lift the live vault's supply cap and 1s redemption delay so the shared harness can run inside one block.
     function unlockVault() internal {
         vm.store(PLASMA_VAULT, TOTAL_SUPPLY_CAP_SLOT, bytes32(type(uint256).max / 2));
         setRedemptionDelay(0);
@@ -82,8 +81,16 @@ library IporLiquityETHCarryFixture {
         vm.store(ACCESS_MANAGER, REDEMPTION_DELAY_SLOT, bytes32(delaySeconds));
     }
 
-    /// @dev Yearly carry the live vault earns, simulated on the frozen fork as WETH arriving in
-    ///      the PlasmaVault. Idle WETH is part of its NAV, so this lifts `previewRedeem` for all.
+    /// @dev WithdrawManagerStorageLib.LAST_RELEASE_FUNDS: uint32 timestamp in the low bits, uint128 sharesToRelease above.
+    bytes32 internal constant RELEASE_FUNDS_SLOT = 0x88d141dcaacfb8523e39ee7fba7c6f591450286f42f9c7069cc072812d539200;
+
+    /// @dev Stand in for IPOR's Alpha calling `releaseFunds`, which sets these two fields behind a role check.
+    function releaseFunds(uint256 releaseTimestamp, uint256 sharesToRelease) internal {
+        uint256 packed = uint256(uint32(releaseTimestamp)) | (uint256(uint128(sharesToRelease)) << 32);
+        vm.store(WITHDRAW_MANAGER, RELEASE_FUNDS_SLOT, bytes32(packed));
+    }
+
+    /// @dev Yearly carry the live vault earns, simulated on the frozen fork as idle WETH arriving in the PlasmaVault.
     uint256 internal constant SIMULATED_CARRY_BPS_PER_YEAR = 600;
 
     function accrueCarry(uint256 elapsed) internal {
@@ -407,10 +414,6 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         vm.clearMockedCalls();
     }
 
-    // ------------------------------------------------------------------
-    // Fee guard
-    // ------------------------------------------------------------------
-
     function test_deallocate_reverts_whenWithdrawFeeAboveMax() public {
         _allocateDirect(10e18);
         uint256 highFee = IporLiquityETHCarryFixture.MAX_WITHDRAW_FEE + 1;
@@ -427,10 +430,6 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         IMYTStrategy(strategy).deallocate(getVaultParams(), 1e18, "", vault);
         vm.clearMockedCalls();
     }
-
-    // ------------------------------------------------------------------
-    // Redemption delay
-    // ------------------------------------------------------------------
 
     function test_redemptionDelay_blocksSameBlockExit_andClearsNextSecond() public {
         IporLiquityETHCarryFixture.setRedemptionDelay(1);
@@ -611,9 +610,185 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         vm.clearMockedCalls();
     }
 
-    // ------------------------------------------------------------------
-    // Lifecycle via the real allocator
-    // ------------------------------------------------------------------
+    address internal constant KEEPER = address(0xCEE9);
+
+    /// @dev Request as keeper, then stand in for the Alpha releasing exactly our shares one
+    ///      second later. Returns the shares the WithdrawManager recorded.
+    function _requestAndRelease(uint256 wethAmount) internal returns (uint256 pending) {
+        vm.prank(admin);
+        _strategy().setKeeper(KEEPER);
+        vm.prank(KEEPER);
+        _strategy().requestExit(wethAmount);
+        pending = _strategy().pendingExitShares();
+        assertGt(pending, 0, "request recorded");
+        vm.warp(block.timestamp + 1);
+        IporLiquityETHCarryFixture.releaseFunds(block.timestamp, pending);
+        assertEq(IIporWithdrawManager(WITHDRAW_MANAGER).getSharesToRelease(), pending, "release slot decodes to our shares");
+    }
+
+    function test_requestExit_onlyKeeperOrOwner() public {
+        _allocateDirect(10e18);
+        vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.NotKeeper.selector, address(this)));
+        _strategy().requestExit(1e18);
+
+        vm.prank(admin);
+        _strategy().requestExit(1e18);
+        assertGt(_strategy().pendingExitShares(), 0, "owner can request");
+        assertGt(_strategy().exitWindowEnd(), block.timestamp, "window runs from the request");
+        assertEq(_strategy().claimableExit(), 0, "nothing claimable before a release");
+    }
+
+    function test_requestExit_sharesStayInStrategy_andValueIsUnchanged() public {
+        _allocateDirect(10e18);
+        uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+        uint256 valueBefore = IMYTStrategy(strategy).realAssets();
+
+        vm.prank(admin);
+        _strategy().requestExit(4e18);
+
+        uint256 fee = IIporWithdrawManager(WITHDRAW_MANAGER).getRequestFee();
+        if (fee == 0) {
+            assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "request does not move shares");
+            assertEq(IMYTStrategy(strategy).realAssets(), valueBefore, "request does not change reported value");
+        } else {
+            assertLt(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "request fee is skimmed in shares");
+        }
+    }
+
+    function test_claimExit_paysNoWithdrawFee_andLandsIdle() public {
+        _allocateDirect(10e18);
+        uint256 pending = _requestAndRelease(4e18);
+        uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+        uint256 feeNetted = IERC4626(PLASMA_VAULT).previewRedeem(pending);
+        uint256 grossValue = IERC4626(PLASMA_VAULT).convertToAssets(pending);
+        assertLt(feeNetted, grossValue, "sync preview nets the withdraw fee");
+
+        assertEq(_strategy().claimableExit(), grossValue, "claimable is the fee free amount");
+
+        // Permissionless: a stranger claims.
+        vm.prank(address(0xBEEF));
+        uint256 assets = _strategy().claimExit();
+
+        assertApproxEqRel(assets, grossValue, 1e14, "claim pays the gross amount, no withdraw fee");
+        assertGt(assets, feeNetted, "claim beats the sync path");
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore - pending, "requested shares burned");
+        assertEq(IERC20(WETH).balanceOf(strategy), assets, "proceeds idle in the strategy");
+        assertEq(_strategy().pendingExitShares(), 0, "request consumed");
+        assertEq(IIporWithdrawManager(WITHDRAW_MANAGER).getSharesToRelease(), 0, "reservation consumed");
+    }
+
+    function test_claimExit_reverts_whenNothingIsClaimable() public {
+        _allocateDirect(10e18);
+        vm.expectRevert(IporFusionStrategy.NoClaimableExit.selector);
+        _strategy().claimExit();
+
+        vm.prank(admin);
+        _strategy().requestExit(1e18);
+        vm.expectRevert(IporFusionStrategy.NoClaimableExit.selector);
+        _strategy().claimExit();
+    }
+
+    /// @dev Released shares sit in the global `sharesToRelease`, which our sync view subtracts.
+    ///      Until we claim, our own release counts against our own sync capacity.
+    function test_ownRelease_suppressesSyncLiquidity_untilClaimed() public {
+        _allocateDirect(10e18);
+        uint256 before = _strategy().availableSyncLiquidity();
+        uint256 pending = _requestAndRelease(4e18);
+
+        uint256 reserved = IERC4626(PLASMA_VAULT).convertToAssets(pending);
+        assertEq(_strategy().availableSyncLiquidity(), before - reserved, "own release reserves idle");
+
+        _strategy().claimExit();
+        uint256 after_ = _strategy().availableSyncLiquidity();
+        assertApproxEqRel(after_, before - reserved, 1e12, "claim takes the reserved idle out of the vault");
+        assertEq(IIporWithdrawManager(WITHDRAW_MANAGER).getSharesToRelease(), 0, "reservation cleared");
+    }
+
+    /// @dev `deallocate` claims a released request before touching sync liquidity, so a request
+    ///      larger than idle still exits in one call and pays no withdraw fee on the claimed part.
+    function test_deallocate_settlesReleasedRequestFirst() public {
+        _allocateDirect(10e18);
+        uint256 pending = _requestAndRelease(6e18);
+        uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+        uint256 claimValue = IERC4626(PLASMA_VAULT).convertToAssets(pending);
+
+        uint256 realBefore = IMYTStrategy(strategy).realAssets();
+        vm.mockCall(vault, abi.encodeWithSelector(IVaultV2.allocation.selector, IMYTStrategy(strategy).adapterId()), abi.encode(realBefore));
+        // Ask for less than the claim: no sync redeem should happen at all.
+        _deallocateDirect(5e18);
+        vm.clearMockedCalls();
+
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore - pending, "only the requested shares left the vault");
+        assertGe(IERC20(WETH).balanceOf(strategy), claimValue, "claim proceeds cover the exit with excess idle");
+        assertEq(_strategy().pendingExitShares(), 0, "request settled");
+    }
+
+    function test_deallocate_leavesUnreleasedRequestAlone() public {
+        _allocateDirect(10e18);
+        vm.prank(admin);
+        _strategy().requestExit(4e18);
+        uint256 pending = _strategy().pendingExitShares();
+
+        uint256 realBefore = IMYTStrategy(strategy).realAssets();
+        vm.mockCall(vault, abi.encodeWithSelector(IVaultV2.allocation.selector, IMYTStrategy(strategy).adapterId()), abi.encode(realBefore));
+        _deallocateDirect(2e18);
+        vm.clearMockedCalls();
+
+        assertEq(_strategy().pendingExitShares(), pending, "unreleased request untouched by a sync exit");
+    }
+
+    function test_previewAdjustedWithdraw_countsReleasedRequestAsIdle() public {
+        _allocateDirect(10e18);
+        uint256 pending = _requestAndRelease(4e18);
+        uint256 claimValue = IERC4626(PLASMA_VAULT).convertToAssets(pending);
+
+        // Fully served by the claim: no fee or slippage haircut.
+        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(claimValue), claimValue, "claimable serves at par");
+    }
+
+    /// @dev The window runs from the request. A lapsed window loses nothing: shares stay ours,
+    ///      a new request replaces the old one, and only a claim or the next release moves the counter.
+    function test_requestExit_windowLapse_thenReRequest() public {
+        _allocateDirect(10e18);
+        uint256 pending = _requestAndRelease(4e18);
+        uint256 window = IIporWithdrawManager(WITHDRAW_MANAGER).getWithdrawWindow();
+        uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+
+        vm.warp(_strategy().exitWindowEnd() + 1);
+        assertEq(_strategy().claimableExit(), 0, "lapsed window is not claimable");
+        vm.expectRevert(IporFusionStrategy.NoClaimableExit.selector);
+        _strategy().claimExit();
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "shares intact after lapse");
+        assertEq(IIporWithdrawManager(WITHDRAW_MANAGER).getSharesToRelease(), pending, "stale reservation persists until the next release");
+
+        vm.prank(KEEPER);
+        _strategy().requestExit(4e18);
+        assertEq(_strategy().exitWindowEnd(), block.timestamp + window, "new request restarts the window");
+        // The new request postdates the old release, so it is not claimable until the Alpha releases again.
+        assertEq(_strategy().claimableExit(), 0, "needs a fresh release");
+    }
+
+    /// @dev A claim moves no value out of the MYT, so a crashed print must not block it; the
+    ///      guard still blocks the following exit until the owner books the print.
+    function test_claimExit_succeedsUnderTheFloor() public {
+        _allocateDirect(10e18);
+        uint256 pending = _requestAndRelease(4e18);
+        uint256 unit = _strategy().shareUnit();
+        uint256 crashed = _strategy().anchorPps() / 2;
+        vm.mockCall(PLASMA_VAULT, abi.encodeWithSelector(IERC4626.previewRedeem.selector, unit), abi.encode(crashed));
+
+        uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+        uint256 assets = _strategy().claimExit();
+        assertGt(assets, 0, "claim proceeds under a crashed print");
+        assertEq(_strategy().pendingExitShares(), 0, "request consumed");
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore - pending, "requested shares burned");
+
+        vm.prank(vault);
+        vm.expectPartialRevert(IporFusionStrategy.PriceOutsideRoom.selector);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), assets + 1e18, "", vault);
+        vm.clearMockedCalls();
+    }
+
 
     function test_full_lifecycle_through_allocator() public {
         vm.startPrank(admin);

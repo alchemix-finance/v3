@@ -412,7 +412,7 @@ Notes:
 
 ### `IporFusionStrategy`
 
-PlasmaVault `0xB9E806e8f2d94c015ffefa90cD24Ecce18f1663C` (rETH Liquity LP Carry) on Ethereum. Synchronous deposit and redeem at the moment.
+PlasmaVault (rETH Liquity LP Carry) on Ethereum. Synchronous deposit and redeem, plus a scheduled exit leg through the WithdrawManager for amounts beyond idle liquidity.
 
 Supported allocator paths:
 
@@ -421,7 +421,7 @@ Supported allocator paths:
 
 Notes:
 
-1. `allocate()` and `deallocate()` only. The strategy deposits `WETH` into the PlasmaVault and exits with `redeem`.
+1. `allocate()` and `deallocate()` only for the allocator. The strategy deposits `WETH` into the PlasmaVault and exits with `redeem`. For exits larger than `availableSyncLiquidity()`, the keeper or owner calls `requestExit(amount)`; IPOR's Alpha releases funds on its schedule; anyone calls `claimExit()` inside the window, and `deallocate()` claims a released request on its own before touching sync liquidity. The claim pays no withdraw fee. Requested shares stay in the strategy until claimed, so `realAssets()` needs no adjustment. Views: `pendingExitShares()`, `claimableExit()`, `exitWindowEnd()`.
 2. Share price room defaults: 5 bp minimum, 5 bp per day up and down, 50 bp maximum per update. The vault's expected carry is about 6% a year, about 1.6 bp per day. 5 bp per day is about 3 times that, so one week of carry fits in a single `poke()` without an owner snap. 50 bp is about 30 days of that carry. The 5 bp minimum covers rounding and fee dust. `priceBounds()` is that band. `allocate()` must sit inside it. `deallocate()` reverts `PriceOutsideRoom` only under the floor. One `poke()` books at most the accrued daily budget, excluding the 5 bp minimum, and a second poke in the same timestamp does nothing.
 3. A redeem is grossed up by the live withdraw fee (0.2% today) plus 10 bp, and it must fit in `availableSyncLiquidity()`. `maxWithdrawFee` is 0.5%. Entry costs about 0.4%. Deploy cap is 100 `WETH`.
 4. `previewRedeem` includes the withdraw fee and skips the unrealized 10% performance fee. The 10 bp buffer covers about two months of a 6% carry.
@@ -439,3 +439,6 @@ Scenarios:
 7. `currentWithdrawFee()` above `maxWithdrawFee`. Owner: `setMaxWithdrawFee(newMax)`, then deallocate.
 8. No PlasmaVault redeem for about two months. Any shareholder: dust `redeem` on the PlasmaVault, then deallocate.
 9. PlasmaVault supply cap is full. Wait for IPOR before allocating.
+10. Exit needed is larger than `availableSyncLiquidity()`. Keeper or owner: `requestExit(amount)`. Bot: poll `claimableExit()`; call `claimExit()` as soon as it is nonzero; alert when `exitWindowEnd()` is within a day and nothing is claimable yet. Then the allocator deallocates from idle.
+11. Claim window lapsed with nothing claimed. Nothing is lost; the shares are still ours. Keeper: `requestExit(amount)` again. Expect `availableSyncLiquidity()` to read low until IPOR's next release overwrites the reservation counter.
+12. `redeemFromRequest` reverts on access. IPOR has re-gated the claim path. Fall back to sync exits sized to `availableSyncLiquidity()`. This shares the access manager with `redeem`, so treat it as a signal that sync exits may be next; the bot watches that access manager's role updates for both selectors.
