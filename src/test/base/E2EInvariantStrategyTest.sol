@@ -19,6 +19,12 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
 
     uint256 internal constant REAL_STRATEGY_RELATIVE_CAP = 0.5e18;
 
+    /// @dev Vault-side absolute cap for the real strategy. Suites whose underlying
+    ///      protocol has tighter capacity than 50k override this.
+    function _realAbsoluteCap() internal view virtual returns (uint256) {
+        return 50_000 * 10 ** assetDecimals;
+    }
+
     function createStrategy(address vault_, IMYTStrategy.StrategyParams memory params) internal virtual returns (address);
 
     function getRealStrategyParams() internal virtual returns (IMYTStrategy.StrategyParams memory);
@@ -33,7 +39,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         realStrategy = createStrategy(address(vault), params);
         require(realStrategy != address(0), "createStrategy returned zero");
         _enableForceDeallocate(realStrategy);
-        uint256 realAbsoluteCap = 50_000 * 10 ** assetDecimals;
+        uint256 realAbsoluteCap = _realAbsoluteCap();
         _addStrategyViaCurator(realStrategy, realAbsoluteCap, REAL_STRATEGY_RELATIVE_CAP);
         vm.stopPrank();
 
@@ -77,7 +83,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
     }
 
     function _targetedSelectors() internal view virtual returns (bytes4[] memory selectors) {
-        selectors = new bytes4[](17);
+        selectors = new bytes4[](20);
         selectors[0] = handler.deposit.selector;
         selectors[1] = handler.withdraw.selector;
         selectors[2] = handler.mint.selector;
@@ -88,13 +94,16 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         selectors[7] = handler.forceDeallocate.selector;
         selectors[8] = handler.reclassifyStrategy.selector;
         selectors[9] = handler.modifyRiskClassCaps.selector;
-        selectors[10] = handler.simulateYield.selector;
-        selectors[11] = handler.simulateValueLoss.selector;
-        selectors[12] = handler.warpTime.selector;
-        selectors[13] = handler.mine.selector;
-        selectors[14] = handler.alchemistDepositCollateral.selector;
-        selectors[15] = handler.alchemistBorrow.selector;
-        selectors[16] = handler.alchemistRepayDebt.selector;
+        selectors[10] = handler.setLiquidityAdapter.selector;
+        selectors[11] = handler.simulateYield.selector;
+        selectors[12] = handler.simulateValueLoss.selector;
+        selectors[13] = handler.warpTime.selector;
+        selectors[14] = handler.mine.selector;
+        selectors[15] = handler.alchemistDepositCollateral.selector;
+        selectors[16] = handler.alchemistBorrow.selector;
+        selectors[17] = handler.alchemistRepayDebt.selector;
+        selectors[18] = handler.requestAsyncExit.selector;
+        selectors[19] = handler.claimAsyncExits.selector;
     }
 
     function _enableForceDeallocate(address) internal virtual {}
@@ -103,6 +112,10 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
 
     function _realStrategySupportsForceDeallocate() internal view virtual returns (bool) {
         return true;
+    }
+
+    function _realStrategySupportsAsyncExit() internal view virtual returns (bool) {
+        return false;
     }
 
     function onSimulateYield(address strategy, uint256 amount) external virtual {
@@ -121,9 +134,10 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
     ///      override this to book the rate those pokes would have followed.
     function onWarp(uint256) external virtual {}
 
+    function onBeforeAsyncClaim(address) external virtual {}
+
     // =============================================================================================
     // Invariants
-    // =============================================================================================
 
     function invariant_allocationWithinAbsoluteCap() public view {
         for (uint256 i = 0; i < strategies.length; i++) {
@@ -291,12 +305,38 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         }
     }
 
-    // =============================================================================================
+    function invariant_realAssetsNonNegative() public view {
+        for (uint256 i = 0; i < strategies.length; i++) {
+            assertGe(IMYTStrategy(strategies[i]).realAssets(), 0, _label(strategies[i], "real assets negative"));
+        }
+    }
+
+    function invariant_riskLevelAggregateCaps() public view {
+        uint256 totalAssets = vault.totalAssets();
+        uint256[3] memory riskLevelAllocations;
+        uint256[3] memory yieldGaps;
+
+        for (uint256 i = 0; i < strategies.length; i++) {
+            bytes32 allocationId = IMYTStrategy(strategies[i]).adapterId();
+            uint256 allocation = vault.allocation(allocationId);
+            uint8 riskLevel = _riskLevel(allocationId);
+
+            riskLevelAllocations[riskLevel] += allocation;
+            uint256 ra = IMYTStrategy(strategies[i]).realAssets();
+            if (ra > allocation) yieldGaps[riskLevel] += ra - allocation;
+        }
+
+        for (uint8 r = 0; r < 3; r++) {
+            uint256 cap = (totalAssets * _globalCap(r)) / 1e18;
+            uint256 tolerance = yieldGaps[r] + handler.ghost_liquidityAdapterBypass(r);
+            assertLe(riskLevelAllocations[r], cap + tolerance, "risk aggregate exceeds global cap");
+        }
+    }
+
     // Coverage gates
-    // =============================================================================================
 
     function invariant_handlerCallAccounting() public view {
-        bytes4[17] memory sels = _allSelectors();
+        bytes4[20] memory sels = _allSelectors();
         for (uint256 i = 0; i < sels.length; i++) {
             (uint256 c, uint256 sk, uint256 ex) = handler.getStats(sels[i]);
             assertEq(c, sk + ex, "call accounting mismatch");
@@ -310,6 +350,16 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
 
         assertGt(executed, 0, "allocate path never succeeded despite sufficient calls");
         assertLt(skips, totalCalls, "allocate path always skipped");
+    }
+
+    function invariant_liquidityAdapterPathExercised() public view {
+        uint256 totalCalls = handler.getCalls(handler.setLiquidityAdapter.selector);
+        if (totalCalls < 10) return;
+        (,, uint256 executed) = handler.getStats(handler.setLiquidityAdapter.selector);
+
+        // Every call executes by construction (no-headroom falls back to the zero-reset);
+        // allow half for unexpected protocol reverts, but never a fully dead path.
+        assertGe(executed, totalCalls / 2, "setLiquidityAdapter path not meaningfully exercised");
     }
 
     function invariant_allocatorRolesExercised() public view {
@@ -329,9 +379,20 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         _assertPathProgress(handler.withdraw.selector, "withdraw");
     }
 
-    // =============================================================================================
+    function invariant_asyncPathHasProgress() public view {
+        if (!_realStrategySupportsAsyncExit()) return;
+
+        (uint256 reqCalls, uint256 reqSkips, uint256 reqExecuted) = handler.getStats(handler.requestAsyncExit.selector);
+        if (reqCalls < 10 || reqSkips == reqCalls) return;
+        assertGt(reqExecuted, 0, "async request path never succeeded despite sufficient calls");
+
+        (uint256 claimCalls, uint256 claimSkips, uint256 claimExecuted) = handler.getStats(handler.claimAsyncExits.selector);
+        if (claimCalls < 10 || handler.ghost_asyncExitsRequested() == 0) return;
+        if (claimSkips == claimCalls) return;
+        assertGt(claimExecuted, 0, "async claim path never succeeded despite requests being made");
+    }
+
     // Full-stack invariants — strategy value vs Alchemist debt
-    // =============================================================================================
 
     function invariant_strategyValueBacksAlchemistDebt() public view {
         uint256 vaultTVL = IERC20(vault.asset()).balanceOf(address(vault));
@@ -371,9 +432,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         vm.revertTo(snapshot);
     }
 
-    // =============================================================================================
     // Internal helpers
-    // =============================================================================================
 
     uint256 minMaterial;
 
@@ -409,7 +468,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         assertGt(executed, 0, string(abi.encodePacked(name, " path never succeeded")));
     }
 
-    function _allSelectors() internal view returns (bytes4[17] memory) {
+    function _allSelectors() internal view returns (bytes4[20] memory) {
         return [
             handler.deposit.selector,
             handler.withdraw.selector,
@@ -421,13 +480,16 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
             handler.forceDeallocate.selector,
             handler.reclassifyStrategy.selector,
             handler.modifyRiskClassCaps.selector,
+            handler.setLiquidityAdapter.selector,
             handler.simulateYield.selector,
             handler.simulateValueLoss.selector,
             handler.warpTime.selector,
             handler.mine.selector,
             handler.alchemistDepositCollateral.selector,
             handler.alchemistBorrow.selector,
-            handler.alchemistRepayDebt.selector
+            handler.alchemistRepayDebt.selector,
+            handler.requestAsyncExit.selector,
+            handler.claimAsyncExits.selector
         ];
     }
 

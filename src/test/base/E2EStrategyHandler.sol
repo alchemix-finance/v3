@@ -20,14 +20,18 @@ import {ITestYieldToken} from "../../interfaces/test/ITestYieldToken.sol";
 import {MockYieldToken} from "../mocks/MockYieldToken.sol";
 import {TokenUtils} from "../../libraries/TokenUtils.sol";
 import {AlchemistNFTHelper} from "../libraries/AlchemistNFTHelper.sol";
+import {StrategyRevertUtils} from "./StrategyRevertUtils.sol";
+import {IAsyncExitStrategy} from "./StrategyHandler.sol";
 
 interface IStrategySimulationProvider {
     function onSimulateYield(address strategy, uint256 amount) external;
     function onSimulateValueLoss(address strategy, uint256 amount) external;
     function onWarp(uint256 elapsed) external;
+    /// @dev Prepare the strategy's pending queue exit for claiming (finalization, queue funding).
+    function onBeforeAsyncClaim(address strategy) external;
 }
 
-contract E2EStrategyHandler is Test {
+contract E2EStrategyHandler is Test, StrategyRevertUtils {
     IVaultV2 public vault;
     address public allocator;
     address public classifier;
@@ -67,6 +71,9 @@ contract E2EStrategyHandler is Test {
     uint256 public ghost_totalCollateralDeposited;
     uint256 public ghost_totalDebtMinted;
     uint256 public ghost_totalDebtRepaid;
+    uint256 public ghost_asyncExitsRequested;
+    uint256 public ghost_asyncExitsClaimed;
+    mapping(uint8 => uint256) public ghost_liquidityAdapterBypass;
 
     mapping(bytes4 => uint256) public calls;
     mapping(bytes4 => uint256) public skips;
@@ -146,7 +153,14 @@ contract E2EStrategyHandler is Test {
             return;
         }
 
-        amount = bound(amount, MIN_DEPOSIT, balance);
+        uint256 maxEnter = _maxEnterAssets();
+        uint256 upperBound = balance < maxEnter ? balance : maxEnter;
+        if (upperBound < MIN_DEPOSIT) {
+            skips[selector]++;
+            return;
+        }
+
+        amount = bound(amount, MIN_DEPOSIT, upperBound);
 
         IERC20(asset).approve(address(vault), amount);
         uint256[] memory snap = _snapshotAllocations();
@@ -201,7 +215,13 @@ contract E2EStrategyHandler is Test {
             skips[selector]++;
             return;
         }
-        uint256 maxShares = vault.convertToShares(balance);
+        uint256 maxEnter = _maxEnterAssets();
+        uint256 maxAssets = balance < maxEnter ? balance : maxEnter;
+        if (maxAssets < MIN_DEPOSIT) {
+            skips[selector]++;
+            return;
+        }
+        uint256 maxShares = vault.convertToShares(maxAssets);
         if (maxShares == 0) {
             skips[selector]++;
             return;
@@ -312,10 +332,14 @@ contract E2EStrategyHandler is Test {
         uint256[] memory snap = _snapshotAllocations();
 
         vm.prank(_pickAllocatorCaller());
-        IAllocator(allocator).deallocate(strategy, preview);
-        executed[selector]++;
-
-        _recordAllocationDeltas(snap, 0, preview);
+        // Async strategies revert "Insufficient WETH available" beyond instant capacity; rethrow anything else.
+        try IAllocator(allocator).deallocate(strategy, preview) {
+            executed[selector]++;
+            _recordAllocationDeltas(snap, 0, preview);
+        } catch (bytes memory errData) {
+            _revertUnlessWhitelisted(errData, errorStringEquals(errData, "Insufficient WETH available"));
+            skips[selector]++;
+        }
     }
 
     function deallocateAll(uint256 strategyIndexSeed) external countCall(this.deallocateAll.selector) {
@@ -342,10 +366,92 @@ contract E2EStrategyHandler is Test {
         uint256[] memory snap = _snapshotAllocations();
 
         vm.prank(_pickAllocatorCaller());
-        IAllocator(allocator).deallocate(strategy, preview);
-        executed[selector]++;
+        try IAllocator(allocator).deallocate(strategy, preview) {
+            executed[selector]++;
+            _recordAllocationDeltas(snap, 0, preview);
+        } catch (bytes memory errData) {
+            _revertUnlessWhitelisted(errData, errorStringEquals(errData, "Insufficient WETH available"));
+            skips[selector]++;
+        }
+    }
 
-        _recordAllocationDeltas(snap, 0, preview);
+    /// @notice Async action: request a withdrawal-queue exit on a strategy that supports one.
+    function requestAsyncExit(uint256 strategyIndexSeed, uint256 amountSeed) external countCall(this.requestAsyncExit.selector) {
+        bytes4 selector = this.requestAsyncExit.selector;
+        address strategy = _pickAsyncStrategy(strategyIndexSeed);
+        if (strategy == address(0)) {
+            skips[selector]++;
+            return;
+        }
+        IAsyncExitStrategy asyncStrategy = IAsyncExitStrategy(strategy);
+
+        // one exit at a time
+        if (asyncStrategy.pendingExitCount() != 0) {
+            skips[selector]++;
+            return;
+        }
+
+        // position value excluding idle; no pending exit exists here
+        uint256 idle = IERC20(asset).balanceOf(strategy);
+        uint256 realAssets = IMYTStrategy(strategy).realAssets();
+        uint256 positionValue = realAssets > idle ? realAssets - idle : 0;
+        if (positionValue < MIN_ALLOCATE) {
+            skips[selector]++;
+            return;
+        }
+
+        uint256 amount = bound(amountSeed, MIN_ALLOCATE, positionValue);
+
+        vm.prank(admin);
+        try asyncStrategy.requestExits(amount) {
+            executed[selector]++;
+            ghost_asyncExitsRequested++;
+        } catch (bytes memory errData) {
+            // tolerated: position entirely in the loose intermediate token (eETH/frxETH),
+            // or the requested eETH is below the pool's minWithdrawAmount
+            _revertUnlessWhitelisted(
+                errData,
+                errorStringEquals(errData, "No weETH available") || errorStringEquals(errData, "No sfrxETH available")
+                    || errorStringEquals(errData, "Exit amount out of pool bounds")
+            );
+            skips[selector]++;
+        }
+    }
+
+    /// @notice Async action: claim a matured/finalized queue exit. Permissionless.
+    function claimAsyncExits(uint256 strategyIndexSeed) external countCall(this.claimAsyncExits.selector) {
+        bytes4 selector = this.claimAsyncExits.selector;
+        address strategy = _pickAsyncStrategy(strategyIndexSeed);
+        if (strategy == address(0)) {
+            skips[selector]++;
+            return;
+        }
+        IAsyncExitStrategy asyncStrategy = IAsyncExitStrategy(strategy);
+
+        if (asyncStrategy.pendingExitCount() == 0) {
+            skips[selector]++;
+            return;
+        }
+
+        // protocol-side claim preparation (finalization, queue funding); no-op by default
+        if (simulator != address(0)) IStrategySimulationProvider(simulator).onBeforeAsyncClaim(strategy);
+
+        if (asyncStrategy.claimableExits() == 0) {
+            skips[selector]++;
+            return;
+        }
+
+        asyncStrategy.claimExits();
+        executed[selector]++;
+        ghost_asyncExitsClaimed++;
+    }
+
+    function _pickAsyncStrategy(uint256 seed) internal view returns (address strategy) {
+        uint256 len = strategies.length;
+        if (len == 0) return address(0);
+        strategy = strategies[seed % len];
+        (bool supported,) = strategy.staticcall(abi.encodeWithSignature("pendingExitCount()"));
+        if (!supported) return address(0);
     }
 
     /// strategies that have force-deallocate enabled
@@ -494,6 +600,79 @@ contract E2EStrategyHandler is Test {
         vm.prank(admin);
         AlchemistStrategyClassifier(classifier).setRiskClass(riskClass, newGlobalPct, newLocalPct);
         executed[selector]++;
+    }
+
+    function setLiquidityAdapter(uint256 strategySeed, uint256 modeSeed) external countCall(this.setLiquidityAdapter.selector) {
+        bytes4 selector = this.setLiquidityAdapter.selector;
+        uint256 len = strategies.length;
+        if (len == 0) {
+            skips[selector]++;
+            return;
+        }
+
+        address newLiquidityAdapter = address(0);
+        if (modeSeed % 3 != 0) {
+            address candidate = strategies[strategySeed % len];
+            if (_liquidityAdapterHasHeadroom(candidate)) {
+                newLiquidityAdapter = candidate;
+            }
+        }
+
+        vm.prank(_pickAllocatorCaller());
+        try IAllocator(allocator).setLiquidityAdapter(newLiquidityAdapter, _directLiquidityData()) {
+            executed[selector]++;
+        } catch {
+            skips[selector]++;
+        }
+    }
+
+    function _directLiquidityData() internal pure returns (bytes memory) {
+        IMYTStrategy.VaultAdapterParams memory params;
+        params.action = IMYTStrategy.ActionType.direct;
+        return abi.encode(params);
+    }
+
+    // bounded to cap headroom
+    function _maxEnterAssets() internal view returns (uint256 maxEnter) {
+        address adapter = vault.liquidityAdapter();
+        if (adapter == address(0)) return type(uint256).max;
+
+        bytes32 id = IMYTStrategy(adapter).adapterId();
+        uint256 allocation = vault.allocation(id);
+        uint256 absoluteCap = vault.absoluteCap(id);
+        if (absoluteCap == 0 || allocation >= absoluteCap) return 0;
+
+        maxEnter = absoluteCap - allocation;
+
+        uint256 relativeCap = vault.relativeCap(id);
+        if (relativeCap != type(uint256).max && relativeCap != 1e18) {
+            uint256 firstTotalAssets = vault.firstTotalAssets();
+            if (firstTotalAssets == 0) return 0;
+            uint256 relativeLimit = (firstTotalAssets * relativeCap) / 1e18;
+            if (relativeLimit <= allocation) return 0;
+            uint256 relativeHeadroom = relativeLimit - allocation;
+            if (relativeHeadroom < maxEnter) maxEnter = relativeHeadroom;
+        }
+    }
+
+    function _liquidityAdapterHasHeadroom(address strategy) internal view returns (bool) {
+        bytes32 allocationId = IMYTStrategy(strategy).adapterId();
+        uint256 currentAllocation = vault.allocation(allocationId);
+        uint256 absoluteCap = vault.absoluteCap(allocationId);
+        uint256 relativeCap = vault.relativeCap(allocationId);
+        uint256 totalAssets = vault.totalAssets();
+        uint256 firstTotalAssets = vault.firstTotalAssets();
+        if (firstTotalAssets == 0) {
+            firstTotalAssets = totalAssets;
+        }
+
+        uint256 allocatorRelativeCapValue = relativeCap == type(uint256).max ? type(uint256).max : (totalAssets * relativeCap) / 1e18;
+        uint256 vaultRelativeCapValue = relativeCap == type(uint256).max ? type(uint256).max : (firstTotalAssets * relativeCap) / 1e18;
+        uint256 relativeLimit = allocatorRelativeCapValue < vaultRelativeCapValue ? allocatorRelativeCapValue : vaultRelativeCapValue;
+        uint256 hardLimit = absoluteCap < relativeLimit ? absoluteCap : relativeLimit;
+
+        if (hardLimit <= currentAllocation) return false;
+        return hardLimit - currentAllocation >= MIN_DEPOSIT * 10;
     }
 
     function simulateYield(uint256 strategyIndexSeed, uint256 bpsSeed) external countCall(this.simulateYield.selector) {
@@ -839,6 +1018,7 @@ contract E2EStrategyHandler is Test {
             bytes32 allocationId = IMYTStrategy(strategy).adapterId();
             uint256 afterAllocation = vault.allocation(allocationId);
             uint256 beforeAllocation = beforeAllocations[i];
+            uint8 riskLevel = IStrategyClassifier(classifier).getStrategyRiskLevel(uint256(allocationId));
 
             if (afterAllocation >= beforeAllocation) {
                 uint256 deltaUp = afterAllocation - beforeAllocation;
@@ -858,6 +1038,18 @@ contract E2EStrategyHandler is Test {
                     ghost_strategyAllocations[strategy] = 0;
                 }
             }
+
+            _recordLiquidityAdapterBypassDelta(riskLevel, beforeAllocation, afterAllocation);
+        }
+    }
+
+    function _recordLiquidityAdapterBypassDelta(uint8 riskLevel, uint256 beforeAllocation, uint256 afterAllocation) internal {
+        if (afterAllocation > beforeAllocation) {
+            ghost_liquidityAdapterBypass[riskLevel] += afterAllocation - beforeAllocation;
+        } else if (beforeAllocation > afterAllocation) {
+            uint256 decrease = beforeAllocation - afterAllocation;
+            ghost_liquidityAdapterBypass[riskLevel] =
+                ghost_liquidityAdapterBypass[riskLevel] > decrease ? ghost_liquidityAdapterBypass[riskLevel] - decrease : 0;
         }
     }
 
@@ -867,7 +1059,11 @@ contract E2EStrategyHandler is Test {
 
         (bool ok, bytes memory data) = underlyingVault.staticcall(abi.encodeWithSignature("maxDeposit(address)", strategy));
         if (!ok || data.length < 32) return type(uint256).max;
-        return abi.decode(data, (uint256));
+        uint256 maxDeposit = abi.decode(data, (uint256));
+        // Some adapters (e.g. the Re7 Morpho wrapper) report maxDeposit == 0 while
+        // accepting deposits; treat zero as uninformative rather than zero capacity.
+        // Absolute/relative/risk caps still bound the allocation.
+        return maxDeposit == 0 ? type(uint256).max : maxDeposit;
     }
 
     function _getUnderlyingMaxWithdraw(address strategy) internal view returns (uint256) {
@@ -957,9 +1153,12 @@ contract E2EStrategyHandler is Test {
         console.log("allocate:      ", calls[this.allocate.selector]);
         console.log("deallocate:    ", calls[this.deallocate.selector]);
         console.log("deallocateAll: ", calls[this.deallocateAll.selector]);
+        console.log("reqAsyncExit:  ", calls[this.requestAsyncExit.selector]);
+        console.log("claimAsync:    ", calls[this.claimAsyncExits.selector]);
         console.log("forceDealloc:  ", calls[this.forceDeallocate.selector]);
         console.log("reclassify:    ", calls[this.reclassifyStrategy.selector]);
         console.log("modifyCaps:    ", calls[this.modifyRiskClassCaps.selector]);
+        console.log("setLiqAdapter: ", calls[this.setLiquidityAdapter.selector]);
         console.log("simulateYield: ", calls[this.simulateYield.selector]);
         console.log("simulateLoss:  ", calls[this.simulateValueLoss.selector]);
         console.log("warpTime:      ", calls[this.warpTime.selector]);

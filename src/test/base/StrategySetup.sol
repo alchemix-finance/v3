@@ -136,10 +136,12 @@ abstract contract StrategySetup is Test, IRevertAllowlistProvider {
         targetContract(address(handler));
 
         // Target specific functions in the handler for invariant fuzzing
-        bytes4[] memory selectors = new bytes4[](3);
+        bytes4[] memory selectors = new bytes4[](5);
         selectors[0] = handler.allocate.selector;
         selectors[1] = handler.deallocate.selector;
         selectors[2] = handler.warpTime.selector;
+        selectors[3] = handler.requestAsyncExit.selector;
+        selectors[4] = handler.claimAsyncExits.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
 

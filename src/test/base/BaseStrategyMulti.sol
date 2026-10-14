@@ -9,10 +9,8 @@ import {RevertContext} from "./StrategyTypes.sol";
 import {StrategyOps} from "./StrategyOps.sol";
 import "forge-std/console.sol";
 
-/// @notice Multi-step/fuzz/loop-heavy base tests shared by strategy suites.
-/// @dev Keep stochastic, iterative, and invariant-like tests here; prefer allowlist-aware helper paths.
 abstract contract BaseStrategyMulti is StrategyOps {
-    // Fuzz test: Multiple random allocations and deallocations
+
     function test_fuzz_multiple_allocations_deallocations(uint256[] calldata amounts, uint8[] calldata actions) public {
         uint256 numOps = bound(amounts.length, 1, 10);
         uint256 maxIterations = numOps < amounts.length ? numOps : amounts.length;
@@ -199,7 +197,7 @@ abstract contract BaseStrategyMulti is StrategyOps {
 
         // Invariant: Allocation should increase by at least amountToAllocate minus fees/slippage
         // Allow for small tolerance (1%) for protocol fees
-        uint256 minExpectedIncrease = amountToAllocate * 99 / 100;
+        uint256 minExpectedIncrease = amountToAllocate * 99 / 100; // FIXME maybe too large ?
         assertGe(
             allocationAfter - allocationBefore, minExpectedIncrease, "Invariant violation: Allocation should increase appropriately"
         );
