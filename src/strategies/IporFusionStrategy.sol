@@ -90,6 +90,7 @@ contract IporFusionStrategy is ERC4626Strategy {
     error PriceOutsideAcceptBounds(uint256 livePps, uint256 minPps, uint256 maxPps);
     error NotKeeper(address caller);
     error NoClaimableExit();
+    error ClaimableExitPending(uint256 shares);
 
     event WithdrawManagerUpdated(address indexed withdrawManager);
     event MaxWithdrawFeeUpdated(uint256 maxWithdrawFee);
@@ -157,11 +158,11 @@ contract IporFusionStrategy is ERC4626Strategy {
         _moveAnchor();
     }
 
-    /// @notice Schedule an exit worth about `wethAmount` at the WithdrawManager, 
-    ///         replacing any prior request after claiming a released one.
+    /// @notice Schedule an exit worth about `wethAmount` at the WithdrawManager; replaces an unreleased request, refuses to overwrite a claimable one.
     function requestExit(uint256 wethAmount) external onlyKeeperOrOwner {
         if (wethAmount == 0) revert InvalidAmount(1, 0);
-        _settleClaimableExit();
+        IporWithdrawRequestInfo memory current = withdrawManager.requestInfo(address(this));
+        if (current.canWithdraw && current.shares > 0) revert ClaimableExitPending(current.shares);
 
         uint256 shares = vault.convertToShares(wethAmount);
         shares = _mulDivUp(shares, BPS + redeemBufferBps, BPS);
@@ -175,17 +176,17 @@ contract IporFusionStrategy is ERC4626Strategy {
         emit ExitRequested(shares, info.shares, info.endWithdrawWindowTimestamp);
     }
 
-    /// @notice Redeem the released request into idle balance; permissionless and not floor checked so the window is never missed.
+    /// @notice Redeem the released request into idle balance; permissionless, and floor checked like any exit that realizes value.
     function claimExit() external returns (uint256 assets) {
         IporWithdrawRequestInfo memory info = withdrawManager.requestInfo(address(this));
         if (!info.canWithdraw || info.shares == 0) revert NoClaimableExit();
         assets = IIporPlasmaVaultRequests(address(vault)).redeemFromRequest(info.shares, address(this), address(this));
+        _requireAboveFloor();
         _moveAnchor();
         emit ExitClaimed(info.shares, assets);
     }
 
-    /// @dev Claim a released request if any, so its proceeds serve the exit and 
-    ///      stop counting against sync liquidity.
+    /// @dev Tolerant claim of a released request for `_deallocate`, which runs its own floor check after.
     function _settleClaimableExit() internal {
         IporWithdrawRequestInfo memory info = withdrawManager.requestInfo(address(this));
         if (!info.canWithdraw || info.shares == 0) return;
@@ -199,18 +200,14 @@ contract IporFusionStrategy is ERC4626Strategy {
         return withdrawManager.requestInfo(address(this)).shares;
     }
 
-    /// @notice Last timestamp the current request can be claimed; zero when there is none.
+    /// @notice Last timestamp the current request can be claimed, zero when there is none.
     function exitWindowEnd() external view returns (uint256) {
         IporWithdrawRequestInfo memory info = withdrawManager.requestInfo(address(this));
         return info.shares == 0 ? 0 : info.endWithdrawWindowTimestamp;
     }
 
     /// @notice Assets a claim would return right now, else zero.
-    function claimableExit() public view returns (uint256) {
-        return _claimableExit();
-    }
-
-    function _claimableExit() internal view returns (uint256) {
+    function claimableExit() external view returns (uint256) {
         IporWithdrawRequestInfo memory info = withdrawManager.requestInfo(address(this));
         if (!info.canWithdraw || info.shares == 0) return 0;
         return vault.convertToAssets(info.shares);
@@ -254,7 +251,7 @@ contract IporFusionStrategy is ERC4626Strategy {
         if (value >= BPS) revert InvalidBps(value);
     }
 
-    /// @dev Dust redeem so the PlasmaVault realizes fees and refreshes its cache; on revert the snap uses the cached price.
+    /// @dev Dust redeem so the PlasmaVault realizes fees and refreshes its cache. on revert the snap uses the cached price.
     function _realizeVaultPrice() internal {
         uint256 bal = vault.balanceOf(address(this));
         if (bal == 0) return;
@@ -272,7 +269,7 @@ contract IporFusionStrategy is ERC4626Strategy {
         emit AnchorUpdated(live, block.timestamp);
     }
 
-    /// @dev Move the anchor toward the live price within the time budget; `baseBps` is excluded so repeats cannot walk it.
+    /// @dev Move the anchor toward the live price within the time budget. `baseBps` is excluded so repeats cannot walk it.
     function _moveAnchor() internal {
         uint256 livePps = _liveSharePrice();
         if (livePps == 0) return;
@@ -370,20 +367,23 @@ contract IporFusionStrategy is ERC4626Strategy {
             vault.redeem(shares, address(this), address(this));
         }
 
-        // Checked after the redeem so it reads the realized price; only a print under the floor blocks an exit.
-        uint256 live = _liveSharePrice();
-        (uint256 lower, uint256 upper) = _reportingBounds();
-        if (live < lower) revert PriceOutsideRoom(live, lower, upper);
-
+        _requireAboveFloor();
         _ensureIdleBalance(address(mytAsset), amount);
         TokenUtils.safeApprove(address(mytAsset), msg.sender, amount);
         _moveAnchor();
         return amount;
     }
 
-    /// @dev Net amount a sync exit of `amount` returns after fee, liquidity cap and slippage; a released request counts as idle.
+    /// @dev Run after a vault call that realizes value, so it reads the realized price and a revert undoes the call.
+    function _requireAboveFloor() internal view {
+        uint256 live = _liveSharePrice();
+        (uint256 lower, uint256 upper) = _reportingBounds();
+        if (live < lower) revert PriceOutsideRoom(live, lower, upper);
+    }
+
+    /// @dev Net amount a sync exit of `amount` returns after fee, liquidity cap and slippage; an unclaimed release is not counted.
     function _previewAdjustedWithdraw(uint256 amount) internal view override returns (uint256) {
-        uint256 idleBalance = _idleAssets() + _claimableExit();
+        uint256 idleBalance = _idleAssets();
         if (idleBalance >= amount) return amount;
 
         uint256 fee = currentWithdrawFee();
@@ -416,12 +416,12 @@ contract IporFusionStrategy is ERC4626Strategy {
         return vault.previewRedeem(shareUnit);
     }
 
-    /// @dev Band `_totalValue` reports inside and `allocate`/`deallocate` check against; at least `baseBps` wide.
+    /// @dev Band `_totalValue` reports inside and `allocate`/`deallocate` check against. at least `baseBps` wide.
     function _reportingBounds() internal view returns (uint256 lower, uint256 upper) {
         return _boundsWithMinRoom(baseBps);
     }
 
-    /// @dev Band the anchor may move into; opens only with elapsed time so repeated calls cannot walk it.
+    /// @dev Band the anchor may move into
     function _anchorMoveBounds() internal view returns (uint256 lower, uint256 upper) {
         return _boundsWithMinRoom(0);
     }

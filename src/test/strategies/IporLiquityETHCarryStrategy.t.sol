@@ -737,13 +737,16 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         assertEq(_strategy().pendingExitShares(), pending, "unreleased request untouched by a sync exit");
     }
 
-    function test_previewAdjustedWithdraw_countsReleasedRequestAsIdle() public {
+    /// @dev The preview only promises idle plus sync, so a release counts once it is claimed into idle.
+    function test_previewAdjustedWithdraw_excludesAnUnclaimedRelease() public {
         _allocateDirect(10e18);
         uint256 pending = _requestAndRelease(4e18);
         uint256 claimValue = IERC4626(PLASMA_VAULT).convertToAssets(pending);
 
-        // Fully served by the claim: no fee or slippage haircut.
-        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(claimValue), claimValue, "claimable serves at par");
+        assertLt(IMYTStrategy(strategy).previewAdjustedWithdraw(claimValue), claimValue, "unclaimed release takes the sync haircut");
+
+        _strategy().claimExit();
+        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(claimValue), claimValue, "claimed proceeds serve at par");
     }
 
     /// @dev The window runs from the request. A lapsed window loses nothing: shares stay ours,
@@ -768,9 +771,8 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         assertEq(_strategy().claimableExit(), 0, "needs a fresh release");
     }
 
-    /// @dev A claim moves no value out of the MYT, so a crashed print must not block it; the
-    ///      guard still blocks the following exit until the owner books the print.
-    function test_claimExit_succeedsUnderTheFloor() public {
+    /// @dev A claim realizes value like any exit, so a crashed print blocks it until the owner books the print.
+    function test_claimExit_reverts_underTheFloor_untilTheOwnerBooksThePrint() public {
         _allocateDirect(10e18);
         uint256 pending = _requestAndRelease(4e18);
         uint256 unit = _strategy().shareUnit();
@@ -778,14 +780,18 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         vm.mockCall(PLASMA_VAULT, abi.encodeWithSelector(IERC4626.previewRedeem.selector, unit), abi.encode(crashed));
 
         uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
-        uint256 assets = _strategy().claimExit();
-        assertGt(assets, 0, "claim proceeds under a crashed print");
-        assertEq(_strategy().pendingExitShares(), 0, "request consumed");
-        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore - pending, "requested shares burned");
-
-        vm.prank(vault);
         vm.expectPartialRevert(IporFusionStrategy.PriceOutsideRoom.selector);
-        IMYTStrategy(strategy).deallocate(getVaultParams(), assets + 1e18, "", vault);
+        _strategy().claimExit();
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "revert undoes the claim");
+        assertEq(_strategy().pendingExitShares(), pending, "request still claimable");
+
+        vm.prank(admin);
+        _strategy().acceptPrice(crashed, crashed);
+        uint256 sharesAfterSnap = IERC4626(PLASMA_VAULT).balanceOf(strategy);
+        uint256 assets = _strategy().claimExit();
+        assertGt(assets, 0, "claim proceeds once the print is booked");
+        assertEq(_strategy().pendingExitShares(), 0, "request consumed");
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesAfterSnap - pending, "requested shares burned");
         vm.clearMockedCalls();
     }
 
@@ -805,18 +811,19 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         vm.expectRevert(abi.encodeWithSignature("AccessManagedUnauthorized(address)", strategy));
         _strategy().claimExit();
 
-        // The preview is a view and cannot see the gate, so it still counts the release as idle.
+        // The view still reports the release; the preview never relied on it, so a preview sized exit goes through.
         assertEq(_strategy().claimableExit(), claimValue, "view still reports the release");
-        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(claimValue), claimValue, "preview still counts it at par");
+        uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(claimValue);
+        assertLt(preview, claimValue, "preview sizes the exit to the sync leg");
 
         uint256 realBefore = IMYTStrategy(strategy).realAssets();
         vm.mockCall(vault, abi.encodeWithSelector(IVaultV2.allocation.selector, IMYTStrategy(strategy).adapterId()), abi.encode(realBefore));
-        _deallocateDirect(2e18);
+        _deallocateDirect(preview);
         vm.clearMockedCalls();
 
         assertEq(_strategy().pendingExitShares(), pending, "request left in place");
         assertLt(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "exit served by a sync redeem");
-        assertGe(IERC20(WETH).balanceOf(strategy), 2e18, "exit funded from the sync leg");
+        assertGe(IERC20(WETH).balanceOf(strategy), preview, "exit funded from the sync leg");
     }
 
     /// @dev If the exit amount is more than the claim, it uses the claim first, then redeems the rest.
@@ -828,10 +835,11 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
 
         uint256 remainder = 2e18;
         uint256 amount = claimValue + remainder;
+        // The preview sizes the whole amount to the sync leg; the claim inside the call only makes it cheaper.
         uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(amount);
-        assertGt(preview, claimValue, "preview adds the sync remainder");
-        assertLt(preview, amount, "remainder takes the fee and slippage haircut");
-        assertLe(amount - preview, remainder * 100 / 10_000, "haircut applies to the remainder only");
+        assertGt(preview, claimValue, "preview covers more than the claim");
+        assertLt(preview, amount, "whole amount takes the sync haircut");
+        assertLe(amount - preview, amount * 100 / 10_000, "haircut is bounded");
 
         uint256 realBefore = IMYTStrategy(strategy).realAssets();
         vm.mockCall(vault, abi.encodeWithSelector(IVaultV2.allocation.selector, IMYTStrategy(strategy).adapterId()), abi.encode(realBefore));
@@ -873,26 +881,26 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         return recorded * 1e18 / (1e18 - fee) - recorded;
     }
 
-    /// @dev A new request over a claimable one claims it first, so the release is banked before it is overwritten.
-    function test_requestExit_claimsAReleasedRequestBeforeReplacingIt() public {
+    /// @dev A request never moves funds, so it refuses to overwrite a claimable release rather than claim it; claim first, then request.
+    function test_requestExit_reverts_whileAReleaseIsClaimable() public {
         _allocateDirect(10e18);
         uint256 pending = _requestAndRelease(4e18);
-        uint256 claimValue = IERC4626(PLASMA_VAULT).convertToAssets(pending);
         uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
 
-        vm.expectEmit(false, false, false, false, strategy);
-        emit IporFusionStrategy.ExitClaimed(0, 0);
+        vm.prank(KEEPER);
+        vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.ClaimableExitPending.selector, pending));
+        _strategy().requestExit(2e18);
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "request moved nothing");
+        assertEq(_strategy().pendingExitShares(), pending, "release still claimable");
+
+        _strategy().claimExit();
         vm.prank(KEEPER);
         _strategy().requestExit(2e18);
-
         uint256 newPending = _strategy().pendingExitShares();
-        assertApproxEqRel(IERC20(WETH).balanceOf(strategy), claimValue, 1e14, "released request claimed into idle");
-        assertGt(newPending, 0, "new request recorded");
+        assertGt(newPending, 0, "new request recorded after the claim");
         assertLt(newPending, pending, "new request is the new size");
         assertEq(_strategy().claimableExit(), 0, "new request is not claimable yet");
-        assertEq(IIporWithdrawManager(WITHDRAW_MANAGER).getSharesToRelease(), 0, "old reservation consumed, not carried");
-        uint256 burned = sharesBefore - IERC4626(PLASMA_VAULT).balanceOf(strategy);
-        assertApproxEqRel(burned, pending + _requestFeeShares(newPending), 1e9, "claimed shares plus the new request fee left");
+        assertEq(IIporWithdrawManager(WITHDRAW_MANAGER).getSharesToRelease(), 0, "old reservation consumed by the claim");
     }
 
 
