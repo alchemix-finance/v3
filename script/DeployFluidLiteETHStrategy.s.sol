@@ -27,6 +27,7 @@ contract DeployFluidLiteETHStrategyScript is Script {
         address stETH;
         address withdrawalQueue;
         IMYTStrategy.StrategyParams params;
+        FluidLiteETHStrategy.PriceGuardParams priceGuard;
     }
 
     function defaultParams() public view returns (IMYTStrategy.StrategyParams memory) {
@@ -43,14 +44,36 @@ contract DeployFluidLiteETHStrategyScript is Script {
         });
     }
 
+    /// @dev Calibrated against iETHv2 `LogUpdateExchangePrice` history, blocks 23_561_624..26_154_825
+    ///      (~360 days, 835 updates, +336 bp total). The PPS the guard reads (`previewRedeem`) is the
+    ///      stored `exchangePrice`, which only the Instadapp rebalancer moves; user deposits/withdrawals
+    ///      do not touch it, and it sits flat between updates (median gap 0.3 h, p95 24 h, max 30 d).
+    ///      Realized moves:
+    ///        up:   avg 1.2 bp/day, worst 1 d +4.2 bp, worst single update +4.8 bp,
+    ///              worst 7 d +16.2 bp (2.3/day), worst 30 d +54 bp (1.8/day)
+    ///        down: worst single update -1.9 bp, worst 1 d -0.6 bp, max peak-to-trough 2.2 bp,
+    ///              no 3-day window ever negative
+    ///      baseBps 50:       ~10x the worst up step, ~22x the worst drawdown, and covers a 30-day
+    ///                        stale-mark catch-up at the advertised ~1.5 bp/day.
+    ///      upBpsPerDay 10:   ~2x the worst observed day and ~8x the average, so the anchor tracks live
+    ///                        without owner action up to ~36%/yr; a lagging anchor only clamps NAV down.
+    ///      downBpsPerDay 2:  ~3x the worst observed down day; anything faster goes through `acceptPrice`.
+    ///      maxUpBps 200:     ceiling on NAV over anchor; at realized drift it takes ~165 unpoked days
+    ///                        to reach, and one `poke` then re-anchors (room = min(cap, 10/day * elapsed)).
+    ///      maxDownBps 100:   floor can never sit more than 1% under the anchor regardless of staleness.
+    function defaultPriceGuard() public pure returns (FluidLiteETHStrategy.PriceGuardParams memory) {
+        return FluidLiteETHStrategy.PriceGuardParams({baseBps: 50, upBpsPerDay: 10, downBpsPerDay: 2, maxUpBps: 200, maxDownBps: 100});
+    }
+
     function deployFluidLiteETHStrategy(
         AlchemistCurator curator,
         address targetOwner,
         FluidLiteETHDeployConfig memory config
     ) public returns (address strategyAddr) {
         curator;
-        FluidLiteETHStrategy strategy =
-            new FluidLiteETHStrategy(config.myt, config.params, config.fluidLiteVault, config.stETH, config.withdrawalQueue);
+        FluidLiteETHStrategy strategy = new FluidLiteETHStrategy(
+            config.myt, config.params, config.fluidLiteVault, config.stETH, config.withdrawalQueue, config.priceGuard
+        );
         strategyAddr = address(strategy);
         MYTStrategy(strategyAddr).setKillSwitch(true);
         MYTStrategy(strategyAddr).transferOwnership(targetOwner);
@@ -64,7 +87,8 @@ contract DeployFluidLiteETHStrategyScript is Script {
             fluidLiteVault: FLUID_LITE_ETH_VAULT,
             stETH: STETH,
             withdrawalQueue: LIDO_WITHDRAWAL_QUEUE,
-            params: defaultParams()
+            params: defaultParams(),
+            priceGuard: defaultPriceGuard()
         });
 
         vm.startBroadcast(deployerAddr);

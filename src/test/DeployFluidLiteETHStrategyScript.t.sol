@@ -72,8 +72,10 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
         stETH = makeAddr("stETH");
         withdrawalQueue = makeAddr("withdrawalQueue");
 
-        // Constructor sanity check reads `asset()` from the vault.
+        // Constructor reads `asset()`, `decimals()` and the live share price from the vault.
         vm.mockCall(iETH, abi.encodeWithSignature("asset()"), abi.encode(stETH));
+        vm.mockCall(iETH, abi.encodeWithSignature("decimals()"), abi.encode(uint8(18)));
+        vm.mockCall(iETH, abi.encodeWithSignature("previewRedeem(uint256)", uint256(1e18)), abi.encode(uint256(1e18)));
     }
 
     function test_deployFluidLiteETHStrategy_setsCoreAddresses() public {
@@ -83,7 +85,8 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
             fluidLiteVault: iETH,
             stETH: stETH,
             withdrawalQueue: withdrawalQueue,
-            params: _buildParams("Fluid Lite Mainnet ETH", "FluidLite")
+            params: _buildParams("Fluid Lite Mainnet ETH", "FluidLite"),
+            priceGuard: deployScript.defaultPriceGuard()
         });
 
         address strategyAddr = deployScript.deployFluidLiteETHStrategy(curator, newOwner, config);
@@ -93,6 +96,10 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
         assertEq(address(strategy.iETH()), iETH, "unexpected iETH");
         assertEq(address(strategy.stETH()), stETH, "unexpected stETH");
         assertEq(address(strategy.withdrawalQueue()), withdrawalQueue, "unexpected withdrawal queue");
+        assertEq(strategy.shareUnit(), 1e18, "unexpected share unit");
+        assertEq(strategy.anchorPps(), 1e18, "anchor should be set to the live price at deploy");
+        assertEq(strategy.baseBps(), 50, "unexpected baseBps");
+        assertEq(strategy.downBpsPerDay(), 2, "unexpected downBpsPerDay");
         assertEq(strategy.killSwitch(), true, "kill switch should be enabled");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
         assertEq(curator.adapterToMYT(strategyAddr), address(0), "deploy script should not register with curator");
@@ -112,6 +119,13 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
         assertEq(params.protocol, "FluidLite", "unexpected protocol");
         assertEq(uint8(params.riskClass), uint8(IMYTStrategy.RiskClass.HIGH), "unexpected risk class");
         assertEq(params.globalCap, 0.1e18, "unexpected global cap");
+
+        FluidLiteETHStrategy.PriceGuardParams memory guard = deployScript.defaultPriceGuard();
+        assertEq(guard.baseBps, 50, "unexpected baseBps");
+        assertEq(guard.upBpsPerDay, 10, "unexpected upBpsPerDay");
+        assertEq(guard.downBpsPerDay, 2, "unexpected downBpsPerDay");
+        assertEq(guard.maxUpBps, 200, "unexpected maxUpBps");
+        assertEq(guard.maxDownBps, 100, "unexpected maxDownBps");
     }
 
     function test_run_fork_allocatorCanAllocateAndDeallocateFluidLiteETH() public {

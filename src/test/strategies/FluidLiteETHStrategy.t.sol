@@ -9,7 +9,7 @@ import {IAllocator} from "../../interfaces/IAllocator.sol";
 import {MYTStrategy} from "../../MYTStrategy.sol";
 import {AlchemistAllocator} from "../../AlchemistAllocator.sol";
 import {AlchemistStrategyClassifier} from "../../AlchemistStrategyClassifier.sol";
-import {FluidLiteETHStrategy, IFluidLiteETHVault, ILidoWithdrawalQueue} from "../../strategies/FluidLiteETHStrategy.sol";
+import {FluidLiteETHStrategy, IFluidLiteETHVault, ILidoWithdrawalQueue, IStETH} from "../../strategies/FluidLiteETHStrategy.sol";
 import {TokenUtils} from "../../libraries/TokenUtils.sol";
 import {MockMYTVault} from "../mocks/MockMYTVault.sol";
 
@@ -30,6 +30,11 @@ contract FluidLiteETHStrategyTest is Test {
     uint256 internal constant RELATIVE_CAP = 1e18;
     uint256 internal constant SLIPPAGE_BPS = 100;
     uint256 internal constant FEE_SCALE = 1e6;
+    uint256 internal constant BASE_BPS = 50;
+    uint256 internal constant UP_BPS_PER_DAY = 10;
+    uint256 internal constant DOWN_BPS_PER_DAY = 2;
+    uint256 internal constant MAX_UP_BPS = 200;
+    uint256 internal constant MAX_DOWN_BPS = 100;
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant STETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant IETH = 0xA0D3707c569ff8C87FA923d3823eC5D81c98Be78;
@@ -71,7 +76,7 @@ contract FluidLiteETHStrategyTest is Test {
 
         vm.startPrank(admin);
         IMYTStrategy.StrategyParams memory params = _params();
-        strategy = new FluidLiteETHStrategy(address(vault), params, IETH, STETH, LIDO_WITHDRAWAL_QUEUE);
+        strategy = new FluidLiteETHStrategy(address(vault), params, IETH, STETH, LIDO_WITHDRAWAL_QUEUE, _guard());
         classifier.assignStrategyRiskLevel(uint256(IMYTStrategy(address(strategy)).adapterId()), uint8(params.riskClass));
         vm.stopPrank();
 
@@ -84,13 +89,16 @@ contract FluidLiteETHStrategyTest is Test {
         assertEq(address(strategy.stETH()), STETH, "unexpected stETH");
         assertEq(IFluidLiteETHVault(IETH).asset(), STETH, "iETHv2 asset should be stETH");
         assertEq(address(strategy.withdrawalQueue()), LIDO_WITHDRAWAL_QUEUE, "unexpected queue");
-        assertEq(strategy.maxPpsDropBps(), 50, "unexpected default PPS-drop bound");
+        assertEq(strategy.shareUnit(), 1e18, "iETHv2 has 18 decimals");
+        assertEq(strategy.anchorPps(), IFluidLiteETHVault(IETH).previewRedeem(1e18), "anchor should start at the live price");
+        assertGt(strategy.anchorPps(), 1e18, "iETHv2 PPS should be above 1 at the fork block");
+        assertEq(strategy.baseBps(), BASE_BPS, "unexpected baseBps");
         assertEq(strategy.pendingExitCount(), 0, "no pending exit at deploy");
     }
 
     function test_constructor_reverts_on_asset_mismatch() public {
         vm.expectRevert(bytes("iETH asset != stETH"));
-        new FluidLiteETHStrategy(address(vault), _params(), IETH, WETH, LIDO_WITHDRAWAL_QUEUE);
+        new FluidLiteETHStrategy(address(vault), _params(), IETH, WETH, LIDO_WITHDRAWAL_QUEUE, _guard());
     }
 
     function test_allocate_direct_reverts_noLidoStaking() public {
@@ -116,7 +124,6 @@ contract FluidLiteETHStrategyTest is Test {
         uint256 positionStETH = IFluidLiteETHVault(IETH).previewRedeem(shares);
         assertApproxEqRel(positionStETH, amount, 1e14, "position should track deposit 1:1");
         assertApproxEqRel(IMYTStrategy(address(strategy)).realAssets(), positionStETH, 1e15);
-        assertGt(strategy.lastPps(), 0, "allocation should record the PPS");
     }
 
     function test_allocateWithSwap_reverts_below_par_minOut() public {
@@ -130,9 +137,50 @@ contract FluidLiteETHStrategyTest is Test {
 
         bytes memory txData = abi.encodeCall(MockSwapperForFluidLiteETH.swap, (WETH, STETH, amountIn, shortOut));
 
-        vm.expectRevert();
+        vm.expectPartialRevert(IMYTStrategy.InvalidAmount.selector);
         vm.prank(admin);
         IAllocator(address(allocator)).allocateWithSwap(address(strategy), amountIn, txData);
+    }
+
+    function test_allocateWithSwap_accepts_stEth_at_slippage_floor() public {
+        uint256 amountIn = 10e18;
+        uint256 floorOut = (amountIn * (10_000 - SLIPPAGE_BPS)) / 10_000;
+        // stETH transfers can land 1-2 wei short of the requested amount.
+        uint256 swapOut = floorOut + 2;
+
+        MockSwapperForFluidLiteETH swapper = new MockSwapperForFluidLiteETH();
+        _dealStETH(address(swapper), swapOut);
+        vm.prank(admin);
+        MYTStrategy(address(strategy)).setAllowanceHolder(address(swapper));
+
+        bytes memory txData = abi.encodeCall(MockSwapperForFluidLiteETH.swap, (WETH, STETH, amountIn, swapOut));
+
+        vm.prank(admin);
+        IAllocator(address(allocator)).allocateWithSwap(address(strategy), amountIn, txData);
+
+        uint256 shares = IERC20(IETH).balanceOf(address(strategy));
+        assertGt(shares, 0, "allocation at the floor should land");
+        assertApproxEqAbs(IFluidLiteETHVault(IETH).previewRedeem(shares), floorOut, 4, "position should reflect the discounted fill");
+        assertLt(IMYTStrategy(address(strategy)).realAssets(), amountIn, "swap loss must show up in NAV");
+    }
+
+    function test_allocateWithSwap_reverts_one_wei_below_slippage_floor() public {
+        uint256 amountIn = 10e18;
+        uint256 floorOut = (amountIn * (10_000 - SLIPPAGE_BPS)) / 10_000;
+        uint256 swapOut = floorOut - 1;
+
+        MockSwapperForFluidLiteETH swapper = new MockSwapperForFluidLiteETH();
+        _dealStETH(address(swapper), swapOut);
+        vm.prank(admin);
+        MYTStrategy(address(strategy)).setAllowanceHolder(address(swapper));
+
+        bytes memory txData = abi.encodeCall(MockSwapperForFluidLiteETH.swap, (WETH, STETH, amountIn, swapOut));
+
+        vm.expectPartialRevert(IMYTStrategy.InvalidAmount.selector);
+        vm.prank(admin);
+        IAllocator(address(allocator)).allocateWithSwap(address(strategy), amountIn, txData);
+
+        assertEq(IERC20(IETH).balanceOf(address(strategy)), 0, "failed allocation must not mint shares");
     }
 
     function test_realAssets_includesRawStEthBalance() public {
@@ -141,8 +189,6 @@ contract FluidLiteETHStrategyTest is Test {
         uint256 raw = IERC20(STETH).balanceOf(address(strategy));
         assertApproxEqAbs(IMYTStrategy(address(strategy)).realAssets(), raw, 2, "raw stETH should count at par");
     }
-
-    /* ========== DEALLOCATION ========== */
 
     function test_deallocateWithUnwrapAndSwap_grossesUpVaultFee() public {
         _allocateViaSwap(10e18);
@@ -237,6 +283,59 @@ contract FluidLiteETHStrategyTest is Test {
         IAllocator(address(allocator)).deallocateWithUnwrapAndSwap(address(strategy), 4e18, txData, 8e18);
     }
 
+    function test_deallocateWithUnwrapAndSwap_accepts_stEth_discount_within_slippage() public {
+        _allocateViaSwap(10e18);
+
+        uint256 wethOut = 4e18;
+        uint256 maxStEthIn = (wethOut * 10_000 + (10_000 - SLIPPAGE_BPS) - 1) / (10_000 - SLIPPAGE_BPS);
+        // Sell the whole slippage budget for exactly the shortfall: stETH fills at ~0.99 WETH.
+        uint256 stEthIn = maxStEthIn - 4;
+
+        MockSwapperForFluidLiteETH swapper = new MockSwapperForFluidLiteETH();
+        deal(WETH, address(swapper), wethOut);
+        vm.prank(admin);
+        MYTStrategy(address(strategy)).setAllowanceHolder(address(swapper));
+
+        uint256 realBefore = IMYTStrategy(address(strategy)).realAssets();
+        uint256 positionBefore = IFluidLiteETHVault(IETH).previewRedeem(IERC20(IETH).balanceOf(address(strategy)));
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(address(vault));
+        bytes memory txData = abi.encodeCall(MockSwapperForFluidLiteETH.swap, (STETH, WETH, stEthIn, wethOut));
+
+        vm.prank(admin);
+        IAllocator(address(allocator)).deallocateWithUnwrapAndSwap(address(strategy), wethOut, txData, stEthIn);
+
+        assertEq(IERC20(WETH).balanceOf(address(vault)), vaultWethBefore + wethOut, "vault should receive the full amount");
+        assertLe(IERC20(STETH).balanceOf(address(strategy)), 8, "whole stETH budget should be sold");
+
+        // NAV drops by the WETH paid out, the dex discount on the stETH sold, and iETHv2's withdraw fee on the gross pull.
+        uint256 grossWithdrawn = positionBefore - IFluidLiteETHVault(IETH).previewRedeem(IERC20(IETH).balanceOf(address(strategy)));
+        uint256 vaultFee = IFluidLiteETHVault(IETH).getWithdrawFee(grossWithdrawn);
+        uint256 realAfter = IMYTStrategy(address(strategy)).realAssets();
+        assertGt(realBefore - realAfter, wethOut, "exit must cost more than the WETH paid out");
+        assertApproxEqAbs(realBefore - realAfter, wethOut + (stEthIn - wethOut) + vaultFee, 1e12, "discount and fee should be realized in NAV");
+    }
+
+    function test_deallocateWithUnwrapAndSwap_reverts_when_swap_returns_below_shortfall() public {
+        _allocateViaSwap(10e18);
+
+        uint256 wethOut = 4e18;
+        MockSwapperForFluidLiteETH swapper = new MockSwapperForFluidLiteETH();
+        deal(WETH, address(swapper), wethOut);
+        vm.prank(admin);
+        MYTStrategy(address(strategy)).setAllowanceHolder(address(swapper));
+
+        uint256 sharesBefore = IERC20(IETH).balanceOf(address(strategy));
+        uint256 vaultWethBefore = IERC20(WETH).balanceOf(address(vault));
+        bytes memory txData = abi.encodeCall(MockSwapperForFluidLiteETH.swap, (STETH, WETH, wethOut, wethOut - 1));
+
+        vm.expectRevert(abi.encodeWithSelector(IMYTStrategy.InvalidAmount.selector, wethOut, wethOut - 1));
+        vm.prank(admin);
+        IAllocator(address(allocator)).deallocateWithUnwrapAndSwap(address(strategy), wethOut, txData, wethOut);
+
+        assertEq(IERC20(IETH).balanceOf(address(strategy)), sharesBefore, "failed exit must roll back the vault withdrawal");
+        assertEq(IERC20(WETH).balanceOf(address(vault)), vaultWethBefore, "vault must not receive a partial fill");
+    }
+
     function test_deallocateWithSwap_reverts_useUnwrapPath() public {
         _allocateViaSwap(10e18);
 
@@ -288,20 +387,22 @@ contract FluidLiteETHStrategyTest is Test {
         strategy.withdrawFromVault(1e18);
     }
 
-    function test_withdrawFromVault_reverts_on_pps_drop() public {
+    function test_withdrawFromVault_reverts_below_price_floor() public {
         _allocateViaSwap(10e18);
-        uint256 lastPps = strategy.lastPps();
+        _resetAnchor();
         uint256 sharesBefore = IERC20(IETH).balanceOf(address(strategy));
-        uint256 crashed = (lastPps * 9_000) / 10_000;
-        vm.mockCall(IETH, abi.encodeWithSelector(IFluidLiteETHVault.previewRedeem.selector, uint256(1e18)), abi.encode(crashed));
+        (uint256 lower, uint256 upper) = strategy.priceBounds();
+        uint256 crashed = (strategy.anchorPps() * 9_000) / 10_000;
+        _mockPps(crashed);
 
-        vm.expectRevert(abi.encodeWithSelector(FluidLiteETHStrategy.PpsDropExceeded.selector, lastPps, crashed));
+        vm.expectRevert(abi.encodeWithSelector(FluidLiteETHStrategy.PriceOutsideRoom.selector, crashed, lower, upper));
         vm.prank(admin);
         strategy.withdrawFromVault(1e18);
 
-        assertEq(IERC20(IETH).balanceOf(address(strategy)), sharesBefore, "PPS drop must not redeem shares");
-        assertEq(strategy.pendingExitCount(), 0, "PPS drop must not open a request");
-        assertFalse(strategy.killSwitch(), "PPS guard must not touch the kill switch");
+        assertEq(IERC20(IETH).balanceOf(address(strategy)), sharesBefore, "price drop must roll back the redeem");
+        assertEq(strategy.pendingExitCount(), 0, "price drop must not open a request");
+        assertFalse(strategy.killSwitch(), "price guard must not touch the kill switch");
+        vm.clearMockedCalls();
     }
 
     function test_withdrawFromVault_reverts_when_amount_exceeds_position() public {
@@ -407,6 +508,53 @@ contract FluidLiteETHStrategyTest is Test {
         assertApproxEqRel(IMYTStrategy(address(strategy)).realAssets(), realBefore, 5e14, "NAV should be unchanged across request/finalize/claim");
     }
 
+    function test_claimExits_finalized_below_face_marks_nav_down_at_finalization() public {
+        _allocateViaSwap(10e18);
+
+        uint256 tokenId = _requestExit(4e18);
+        uint256 face = _status(tokenId).amountOfStETH;
+        uint256 realPending = IMYTStrategy(address(strategy)).realAssets();
+
+        // Lido finalizes the batch at 98% of the request's share rate (slashing / negative rebase).
+        _finalizeLidoRequestAtRateBps(tokenId, 9_800);
+
+        uint256 claimable = strategy.claimableExits();
+        assertLt(claimable, face, "below-face finalization must pay less than face");
+        assertApproxEqRel(claimable, (face * 9_800) / 10_000, 1e13, "claimable should follow the finalized share rate");
+
+        uint256 realFinalized = IMYTStrategy(address(strategy)).realAssets();
+        assertApproxEqAbs(realPending - realFinalized, face - claimable, 1e9, "NAV should drop by the haircut at finalization");
+
+        uint256 ethClaimed = strategy.claimExits();
+        assertEq(ethClaimed, claimable, "claim should pay the finalized amount");
+        assertApproxEqAbs(IERC20(WETH).balanceOf(address(strategy)), ethClaimed, 1, "claimed ETH should be wrapped");
+        assertApproxEqAbs(IMYTStrategy(address(strategy)).realAssets(), realFinalized, 1e9, "claim itself must not move NAV");
+    }
+
+    function test_pendingExitValue_caps_at_face_and_marks_down_on_negative_rebase() public {
+        _allocateViaSwap(10e18);
+
+        uint256 tokenId = _requestExit(4e18);
+        ILidoWithdrawalQueue.WithdrawalRequestStatus memory status = _status(tokenId);
+        uint256 face = status.amountOfStETH;
+        uint256 realAtFace = IMYTStrategy(address(strategy)).realAssets();
+
+        // Positive rebase while pending: Lido pays at most face, so NAV must not inflate.
+        vm.mockCall(
+            STETH, abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, status.amountOfShares), abi.encode((face * 103) / 100)
+        );
+        assertApproxEqAbs(IMYTStrategy(address(strategy)).realAssets(), realAtFace, 2, "pending value must cap at face");
+
+        // Negative rebase while pending: the request is now worth less than face.
+        uint256 marked = (face * 97) / 100;
+        vm.mockCall(STETH, abi.encodeWithSelector(IStETH.getPooledEthByShares.selector, status.amountOfShares), abi.encode(marked));
+        assertApproxEqAbs(
+            IMYTStrategy(address(strategy)).realAssets(), realAtFace - (face - marked), 2, "pending value must follow the share rate down"
+        );
+        assertEq(strategy.claimableExits(), 0, "unfinalized request is still not claimable");
+        vm.clearMockedCalls();
+    }
+
     function test_deallocate_direct_autoClaims_finalized_exit() public {
         _allocateViaSwap(10e18);
 
@@ -431,8 +579,6 @@ contract FluidLiteETHStrategyTest is Test {
         vm.prank(admin);
         strategy.claimWithdrawalQueue(99);
     }
-
-    /* ========== PREVIEW ========== */
 
     function test_previewAdjustedWithdraw_is_conservative_and_accounts_for_fee() public {
         _allocateViaSwap(10e18);
@@ -474,8 +620,6 @@ contract FluidLiteETHStrategyTest is Test {
         assertLt(preview, 8e18, "pending request must not inflate instant capacity");
     }
 
-    /* ========== ADMIN / GUARDS ========== */
-
     function test_setKeeper_onlyOwner() public {
         vm.expectRevert();
         vm.prank(operator);
@@ -486,40 +630,238 @@ contract FluidLiteETHStrategyTest is Test {
         assertEq(strategy.keeper(), keeper, "keeper should update");
     }
 
-    function test_setMaxPpsDropBps_bounds_and_onlyOwner() public {
+    function test_setPriceGuard_bounds_and_onlyOwner() public {
+        FluidLiteETHStrategy.PriceGuardParams memory guard = _guard();
+
         vm.expectRevert();
         vm.prank(operator);
-        strategy.setMaxPpsDropBps(10);
+        strategy.setPriceGuard(guard);
 
-        vm.expectRevert(bytes("PPS drop bound too high"));
+        guard.maxDownBps = 10_000;
+        vm.expectRevert(abi.encodeWithSelector(FluidLiteETHStrategy.InvalidBps.selector, 10_000));
         vm.prank(admin);
-        strategy.setMaxPpsDropBps(5001);
+        strategy.setPriceGuard(guard);
 
+        guard.maxDownBps = 300;
         vm.prank(admin);
-        strategy.setMaxPpsDropBps(100);
-        assertEq(strategy.maxPpsDropBps(), 100, "PPS-drop bound should update");
+        strategy.setPriceGuard(guard);
+        assertEq(strategy.maxDownBps(), 300, "guard should update");
     }
 
-    function test_ppsGuard_reverts_allocation_on_pps_drop() public {
+    function test_priceGuard_reverts_allocation_outside_band_both_sides() public {
         _allocateViaSwap(10e18);
-        uint256 lastPps = strategy.lastPps();
-        assertGt(lastPps, 0, "PPS should be recorded");
-
-        uint256 crashed = (lastPps * 9_000) / 10_000; // 10% drop vs 50 bp bound
-        vm.mockCall(IETH, abi.encodeWithSelector(IFluidLiteETHVault.previewRedeem.selector, uint256(1e18)), abi.encode(crashed));
+        _resetAnchor();
+        uint256 anchor = strategy.anchorPps();
+        (uint256 lower, uint256 upper) = strategy.priceBounds();
 
         MockSwapperForFluidLiteETH swapper = new MockSwapperForFluidLiteETH();
-        _dealStETH(address(swapper), 1e18);
+        _dealStETH(address(swapper), 2e18);
         vm.prank(admin);
         MYTStrategy(address(strategy)).setAllowanceHolder(address(swapper));
         bytes memory txData = abi.encodeCall(MockSwapperForFluidLiteETH.swap, (WETH, STETH, 1e18, 1e18));
 
-        vm.expectRevert(abi.encodeWithSelector(FluidLiteETHStrategy.PpsDropExceeded.selector, lastPps, crashed));
+        uint256 crashed = (anchor * 9_000) / 10_000;
+        _mockPps(crashed);
+        vm.expectRevert(abi.encodeWithSelector(FluidLiteETHStrategy.PriceOutsideRoom.selector, crashed, lower, upper));
         vm.prank(admin);
         IAllocator(address(allocator)).allocateWithSwap(address(strategy), 1e18, txData);
 
-        assertFalse(strategy.killSwitch(), "PPS guard must not touch the kill switch");
-        assertEq(strategy.lastPps(), lastPps, "failed check must keep the last good PPS");
+        uint256 pumped = (anchor * 11_000) / 10_000;
+        _mockPps(pumped);
+        vm.expectRevert(abi.encodeWithSelector(FluidLiteETHStrategy.PriceOutsideRoom.selector, pumped, lower, upper));
+        vm.prank(admin);
+        IAllocator(address(allocator)).allocateWithSwap(address(strategy), 1e18, txData);
+
+        assertEq(strategy.anchorPps(), anchor, "rejected prices must not move the anchor");
+        assertFalse(strategy.killSwitch(), "price guard must not touch the kill switch");
+        vm.clearMockedCalls();
+    }
+
+    function test_priceGuard_floor_boundary_on_vault_withdraw() public {
+        _allocateViaSwap(10e18);
+        _resetAnchor();
+        uint256 anchor = strategy.anchorPps();
+        (uint256 lower, uint256 upper) = strategy.priceBounds();
+        assertEq(lower, (anchor * (10_000 - BASE_BPS)) / 10_000, "floor should be baseBps below the anchor at zero elapsed");
+
+        _mockPps(lower - 1);
+        vm.expectRevert(abi.encodeWithSelector(FluidLiteETHStrategy.PriceOutsideRoom.selector, lower - 1, lower, upper));
+        vm.prank(admin);
+        strategy.withdrawFromVault(1e18);
+
+        _mockPps(lower);
+        vm.prank(admin);
+        strategy.withdrawFromVault(1e18);
+        // baseBps room is excluded from anchor travel, so a pass at the floor does not drag the anchor down.
+        assertEq(strategy.anchorPps(), anchor, "anchor must not move by the base room");
+        vm.clearMockedCalls();
+    }
+
+    function test_priceGuard_slowBleed_trips_against_anchor() public {
+        _allocateViaSwap(10e18);
+        _resetAnchor();
+        uint256 anchor = strategy.anchorPps();
+        (uint256 lower, uint256 upper) = strategy.priceBounds();
+
+        // 40 bp down is inside the 50 bp base room.
+        uint256 step1 = (anchor * (10_000 - 40)) / 10_000;
+        _mockPps(step1);
+        vm.prank(admin);
+        strategy.withdrawFromVault(0.5e18);
+        assertEq(strategy.anchorPps(), anchor, "anchor must stay put with no elapsed budget");
+
+        // Another 40 bp is measured against the same anchor, so the cumulative 80 bp trips.
+        uint256 step2 = (step1 * (10_000 - 40)) / 10_000;
+        _mockPps(step2);
+        vm.expectRevert(abi.encodeWithSelector(FluidLiteETHStrategy.PriceOutsideRoom.selector, step2, lower, upper));
+        vm.prank(admin);
+        strategy.withdrawFromVault(0.5e18);
+        vm.clearMockedCalls();
+    }
+
+    /// @dev Replays the worst moves in ~360 days of iETHv2 `exchangePrice` history (see
+    ///      `defaultPriceGuard` in the deploy script) and checks none of them trip the guard or
+    ///      exhaust the anchor budget.
+    function test_priceGuard_absorbs_worst_realized_iETHv2_moves() public {
+        _allocateViaSwap(10e18);
+        _resetAnchor();
+        uint256 anchor = strategy.anchorPps();
+
+        MockSwapperForFluidLiteETH swapper = new MockSwapperForFluidLiteETH();
+        _dealStETH(address(swapper), 3e18);
+        vm.prank(admin);
+        MYTStrategy(address(strategy)).setAllowanceHolder(address(swapper));
+        bytes memory txData = abi.encodeCall(MockSwapperForFluidLiteETH.swap, (WETH, STETH, 1e18, 1e18));
+
+        // Worst 30-day drift (+54 bp) with nobody poking: allocation passes and one touch re-anchors.
+        vm.warp(block.timestamp + 30 days);
+        uint256 after30d = (anchor * (10_000 + 54)) / 10_000;
+        _mockPps(after30d);
+        vm.prank(admin);
+        IAllocator(address(allocator)).allocateWithSwap(address(strategy), 1e18, txData);
+        assertEq(strategy.anchorPps(), after30d, "30 days of up budget should fully absorb a 54 bp lag");
+
+        // Worst single rebalancer update (+4.8 bp) landing right after, with zero elapsed budget.
+        uint256 afterStep = (after30d * (10_000 + 5)) / 10_000;
+        _mockPps(afterStep);
+        vm.prank(admin);
+        IAllocator(address(allocator)).allocateWithSwap(address(strategy), 1e18, txData);
+        assertEq(strategy.anchorPps(), after30d, "zero elapsed: step is absorbed by baseBps, anchor stays");
+
+        // Worst peak-to-trough drawdown (-2.2 bp, rounded up to 3) from the live mark: exits stay open.
+        uint256 afterDraw = (afterStep * (10_000 - 3)) / 10_000;
+        _mockPps(afterDraw);
+        vm.prank(admin);
+        strategy.withdrawFromVault(0.5e18);
+        assertEq(strategy.anchorPps(), after30d, "a drawdown well inside baseBps leaves the anchor alone");
+
+        // A year of realized drift (+336 bp) between touches tops out the per-touch budget, but
+        // allocation still passes once the anchor has been poked back within range.
+        vm.warp(block.timestamp + 365 days);
+        uint256 afterYear = (after30d * (10_000 + 336)) / 10_000;
+        _mockPps(afterYear);
+        strategy.poke();
+        assertEq(strategy.anchorPps(), (after30d * (10_000 + MAX_UP_BPS)) / 10_000, "single poke is capped at maxUpBps");
+        vm.warp(block.timestamp + 14 days);
+        strategy.poke();
+        assertEq(strategy.anchorPps(), afterYear, "two weeks of budget closes the remaining 136 bp");
+        vm.prank(admin);
+        IAllocator(address(allocator)).allocateWithSwap(address(strategy), 1e18, txData);
+        vm.clearMockedCalls();
+    }
+
+    function test_acceptPrice_onlyOwner_and_bounds() public {
+        _allocateViaSwap(10e18);
+        uint256 live = strategy.liveSharePrice();
+
+        vm.expectRevert();
+        vm.prank(operator);
+        strategy.acceptPrice(0, type(uint256).max);
+
+        vm.expectRevert(abi.encodeWithSelector(FluidLiteETHStrategy.PriceOutsideAcceptBounds.selector, live, live + 1, live + 2));
+        vm.prank(admin);
+        strategy.acceptPrice(live + 1, live + 2);
+
+        vm.warp(block.timestamp + 3 days);
+        vm.prank(admin);
+        strategy.acceptPrice(live, live);
+        assertEq(strategy.anchorPps(), live, "anchor should be set to live");
+        assertEq(strategy.anchorTimestamp(), block.timestamp, "anchor timestamp should reset");
+    }
+
+    function test_acceptPrice_unblocks_after_crash_and_books_loss() public {
+        _allocateViaSwap(10e18);
+        _resetAnchor();
+        uint256 realBefore = IMYTStrategy(address(strategy)).realAssets();
+        uint256 crashed = (strategy.anchorPps() * 9_000) / 10_000;
+        _mockPpsRatio(9_000);
+
+        vm.expectPartialRevert(FluidLiteETHStrategy.PriceOutsideRoom.selector);
+        vm.prank(admin);
+        strategy.withdrawFromVault(1e18);
+
+        vm.prank(admin);
+        strategy.acceptPrice(crashed, crashed);
+        assertEq(strategy.anchorPps(), crashed, "owner acceptance should re-anchor at the crashed price");
+
+        // Loss is now fully reported and the vault is usable again.
+        assertApproxEqRel(IMYTStrategy(address(strategy)).realAssets(), (realBefore * 9_000) / 10_000, 1e12, "loss should be booked on accept");
+        vm.prank(admin);
+        strategy.withdrawFromVault(1e18);
+        vm.clearMockedCalls();
+    }
+
+    function test_poke_drifts_anchor_within_time_budget() public {
+        _allocateViaSwap(10e18);
+        _resetAnchor();
+        uint256 anchor = strategy.anchorPps();
+
+        // Live 2% below. Zero elapsed: nothing moves.
+        _mockPps((anchor * 9_800) / 10_000);
+        strategy.poke();
+        assertEq(strategy.anchorPps(), anchor, "no budget at zero elapsed");
+
+        // One day: anchor may fall by downBpsPerDay.
+        vm.warp(block.timestamp + 1 days);
+        strategy.poke();
+        uint256 afterDown = (anchor * (10_000 - DOWN_BPS_PER_DAY)) / 10_000;
+        assertEq(strategy.anchorPps(), afterDown, "anchor should fall by one day of down budget");
+        assertEq(strategy.anchorTimestamp(), block.timestamp, "move should reset the clock");
+
+        // Live 2% above. One day: anchor may rise by upBpsPerDay.
+        _mockPps((afterDown * 10_200) / 10_000);
+        vm.warp(block.timestamp + 1 days);
+        strategy.poke();
+        assertEq(strategy.anchorPps(), (afterDown * (10_000 + UP_BPS_PER_DAY)) / 10_000, "anchor should rise by one day of up budget");
+
+        // Long idle: travel is capped at maxDownBps regardless of elapsed time.
+        uint256 before = strategy.anchorPps();
+        _mockPps(before / 2);
+        vm.warp(block.timestamp + 365 days);
+        strategy.poke();
+        assertEq(strategy.anchorPps(), (before * (10_000 - MAX_DOWN_BPS)) / 10_000, "single update capped at maxDownBps");
+        vm.clearMockedCalls();
+    }
+
+    function test_totalValue_clamps_vault_leg_to_band() public {
+        _allocateViaSwap(10e18);
+        _resetAnchor();
+        uint256 realBefore = IMYTStrategy(address(strategy)).realAssets();
+
+        // 10% crash: NAV reports the floor (baseBps below anchor), not the live mark.
+        _mockPpsRatio(9_000);
+        uint256 expectedFloor = (realBefore * (10_000 - BASE_BPS)) / 10_000;
+        assertApproxEqRel(IMYTStrategy(address(strategy)).realAssets(), expectedFloor, 1e12, "crash should be clamped to the floor");
+
+        // 10% pump: NAV reports the ceiling.
+        _mockPpsRatio(11_000);
+        uint256 expectedCeil = (realBefore * (10_000 + BASE_BPS)) / 10_000;
+        assertApproxEqRel(IMYTStrategy(address(strategy)).realAssets(), expectedCeil, 1e12, "pump should be clamped to the ceiling");
+
+        // Inside the band: live mark passes through unchanged.
+        _mockPpsRatio(9_970);
+        assertApproxEqRel(IMYTStrategy(address(strategy)).realAssets(), (realBefore * 9_970) / 10_000, 1e12, "in-band move reports live");
+        vm.clearMockedCalls();
     }
 
     function test_rescue_reverts_for_protected_tokens() public {
@@ -548,8 +890,6 @@ contract FluidLiteETHStrategyTest is Test {
         assertTrue(strategy.canForceDeallocate(), "owner can enable force deallocate");
     }
 
-    /* ========== HELPERS ========== */
-
     function _params() internal view returns (IMYTStrategy.StrategyParams memory) {
         return IMYTStrategy.StrategyParams({
             owner: admin,
@@ -562,6 +902,22 @@ contract FluidLiteETHStrategyTest is Test {
             additionalIncentives: false,
             slippageBPS: SLIPPAGE_BPS
         });
+    }
+
+    function _guard() internal pure returns (FluidLiteETHStrategy.PriceGuardParams memory) {
+        return FluidLiteETHStrategy.PriceGuardParams({
+            baseBps: BASE_BPS,
+            upBpsPerDay: UP_BPS_PER_DAY,
+            downBpsPerDay: DOWN_BPS_PER_DAY,
+            maxUpBps: MAX_UP_BPS,
+            maxDownBps: MAX_DOWN_BPS
+        });
+    }
+
+    /// @dev Re-anchor at the live price now, so band tests start with zero elapsed budget.
+    function _resetAnchor() internal {
+        vm.prank(admin);
+        strategy.acceptPrice(0, type(uint256).max);
     }
 
     /// @dev Redeem iETHv2 to stETH, then queue that stETH. Mirrors the keeper sequence.
@@ -586,23 +942,53 @@ contract FluidLiteETHStrategyTest is Test {
         IAllocator(address(allocator)).allocateWithSwap(address(strategy), amount, txData);
     }
 
+    /// @dev Pin the iETHv2 PPS the guard reads. Only `previewRedeem(1e18)` is mocked, so
+    ///      position valuation and real withdrawals keep using the live vault.
+    function _mockPps(uint256 pps) internal {
+        vm.mockCall(IETH, abi.encodeWithSelector(IFluidLiteETHVault.previewRedeem.selector, uint256(1e18)), abi.encode(pps));
+    }
+
+    /// @dev Scale both the unit PPS and the strategy's position preview by `ratioBps`, so the
+    ///      live mark and the raw share value move together as they would on a real repricing.
+    function _mockPpsRatio(uint256 ratioBps) internal {
+        vm.clearMockedCalls();
+        uint256 shares = IERC20(IETH).balanceOf(address(strategy));
+        uint256 unit = IFluidLiteETHVault(IETH).previewRedeem(1e18);
+        uint256 raw = IFluidLiteETHVault(IETH).previewRedeem(shares);
+        _mockPps((unit * ratioBps) / 10_000);
+        vm.mockCall(IETH, abi.encodeWithSelector(IFluidLiteETHVault.previewRedeem.selector, shares), abi.encode((raw * ratioBps) / 10_000));
+    }
+
     function _dealStETH(address to, uint256 amount) internal {
         vm.prank(STETH_WHALE);
         require(IERC20(STETH).transfer(to, amount), "stETH deal failed");
     }
 
+    function _status(uint256 requestId) internal view returns (ILidoWithdrawalQueue.WithdrawalRequestStatus memory) {
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = requestId;
+        return ILidoWithdrawalQueue(LIDO_WITHDRAWAL_QUEUE).getWithdrawalStatus(ids)[0];
+    }
+
     /// @dev Lido only finalizes on an oracle report. Tests impersonate stETH (FINALIZE_ROLE) and
     ///      lock the unfinalized ETH so `claimWithdrawal` can pay the strategy.
     function _finalizeLidoRequest(uint256 requestId) internal {
-        uint256[] memory ids = new uint256[](1);
-        ids[0] = requestId;
-        ILidoWithdrawalQueue.WithdrawalRequestStatus memory status =
-            ILidoWithdrawalQueue(LIDO_WITHDRAWAL_QUEUE).getWithdrawalStatus(ids)[0];
+        _finalizeLidoRequestAtShareRate(requestId, type(uint256).max);
+    }
 
-        uint256 ethToLock = status.amountOfStETH;
+    /// @dev Finalize at a fraction of the request's own share rate. Lido caps the payout at
+    ///      `shares * maxShareRate`, so anything below 10_000 bps pays less than face.
+    function _finalizeLidoRequestAtRateBps(uint256 requestId, uint256 rateBps) internal {
+        ILidoWithdrawalQueue.WithdrawalRequestStatus memory status = _status(requestId);
+        uint256 requestShareRate = (status.amountOfStETH * 1e27) / status.amountOfShares;
+        _finalizeLidoRequestAtShareRate(requestId, (requestShareRate * rateBps) / 10_000);
+    }
+
+    function _finalizeLidoRequestAtShareRate(uint256 requestId, uint256 maxShareRate) internal {
+        uint256 ethToLock = _status(requestId).amountOfStETH;
         vm.deal(STETH, ethToLock);
         vm.prank(STETH);
-        ILidoWithdrawalQueueAdmin(LIDO_WITHDRAWAL_QUEUE).finalize{value: ethToLock}(requestId, type(uint256).max);
+        ILidoWithdrawalQueueAdmin(LIDO_WITHDRAWAL_QUEUE).finalize{value: ethToLock}(requestId, maxShareRate);
     }
 
     function _setUpMYT() internal {

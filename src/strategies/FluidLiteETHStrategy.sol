@@ -8,6 +8,7 @@ import {IWETH} from "../interfaces/IWETH.sol";
 
 interface IFluidLiteETHVault {
     function asset() external view returns (address);
+    function decimals() external view returns (uint8);
     function balanceOf(address account) external view returns (uint256);
     function previewRedeem(uint256 shares) external view returns (uint256 assets);
     function maxWithdraw(address owner) external view returns (uint256);
@@ -43,10 +44,10 @@ interface ILidoWithdrawalQueue {
 }
 
 /// @notice WETH -> stETH (dex) -> iETHv2. Sync exit sells stETH. Async exit withdraws stETH, then queues it with Lido.
+/// iETHv2 share price is reported and checked inside a band around the last accepted anchor.
 contract FluidLiteETHStrategy is MYTStrategy {
     uint256 internal constant BPS = 10_000;
     uint256 internal constant FEE_SCALE = 1e6;
-    uint256 public constant MAX_PPS_DROP_BPS = 5000;
     uint256 internal constant STETH_ROUNDING_BUFFER = 2;
 
     IFluidLiteETHVault public immutable iETH;
@@ -55,8 +56,38 @@ contract FluidLiteETHStrategy is MYTStrategy {
     bool public canForceDeallocate = false;
 
     address public keeper;
-    uint256 public maxPpsDropBps = 50;
-    uint256 public lastPps;
+
+    /// @notice One iETHv2 share. Share prices are `previewRedeem` of this unit, in stETH.
+    uint256 public immutable shareUnit;
+
+    /// @notice Last accepted stETH per `shareUnit`.
+    uint256 public anchorPps;
+
+    /// @notice Timestamp of the last anchor update. The travel budget accrues from here.
+    uint256 public anchorTimestamp;
+
+    /// @notice Minimum room around the anchor in bps, open at any elapsed time; the anchor never moves by it.
+    uint256 public baseBps;
+
+    /// @notice How fast the anchor may rise, in bps of the anchor per day.
+    uint256 public upBpsPerDay;
+
+    /// @notice How fast the anchor may fall, in bps of the anchor per day.
+    uint256 public downBpsPerDay;
+
+    /// @notice Largest rise one update may book, however long the anchor has been sitting.
+    uint256 public maxUpBps;
+
+    /// @notice Largest fall one update may book, however long the anchor has been sitting.
+    uint256 public maxDownBps;
+
+    struct PriceGuardParams {
+        uint256 baseBps;
+        uint256 upBpsPerDay;
+        uint256 downBpsPerDay;
+        uint256 maxUpBps;
+        uint256 maxDownBps;
+    }
 
     struct PendingExit {
         uint256 tokenId;
@@ -65,7 +96,8 @@ contract FluidLiteETHStrategy is MYTStrategy {
 
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
     event KeeperUpdated(address indexed keeper);
-    event MaxPpsDropBpsUpdated(uint256 newMaxPpsDropBps);
+    event PriceGuardUpdated(uint256 baseBps, uint256 upBpsPerDay, uint256 downBpsPerDay, uint256 maxUpBps, uint256 maxDownBps);
+    event AnchorUpdated(uint256 anchorPps, uint256 anchorTimestamp);
     event ExitRequested(uint256 indexed tokenId, uint256 stEthAmount);
     event ExitClaimed(uint256 indexed tokenId, uint256 ethClaimed);
 
@@ -73,16 +105,24 @@ contract FluidLiteETHStrategy is MYTStrategy {
     error ExitPending(uint256 tokenId);
     error UnknownExit(uint256 tokenId);
     error NotKeeper(address caller);
-    error PpsDropExceeded(uint256 lastPps, uint256 currentPps);
+    error InvalidBps(uint256 value);
+    error ZeroSharePrice();
+    error PriceOutsideRoom(uint256 livePps, uint256 lower, uint256 upper);
+    error PriceOutsideAcceptBounds(uint256 livePps, uint256 minPps, uint256 maxPps);
 
     modifier onlyKeeperOrOwner() {
         if (msg.sender != keeper && msg.sender != owner()) revert NotKeeper(msg.sender);
         _;
     }
 
-    constructor(address _myt, StrategyParams memory _params, address _iETH, address _stETH, address _withdrawalQueue)
-        MYTStrategy(_myt, _params)
-    {
+    constructor(
+        address _myt,
+        StrategyParams memory _params,
+        address _iETH,
+        address _stETH,
+        address _withdrawalQueue,
+        PriceGuardParams memory _guard
+    ) MYTStrategy(_myt, _params) {
         require(_iETH != address(0), "Zero iETH address");
         require(_stETH != address(0), "Zero stETH address");
         require(_withdrawalQueue != address(0), "Zero withdrawal queue address");
@@ -91,10 +131,13 @@ contract FluidLiteETHStrategy is MYTStrategy {
         iETH = IFluidLiteETHVault(_iETH);
         stETH = IStETH(_stETH);
         withdrawalQueue = ILidoWithdrawalQueue(_withdrawalQueue);
+        shareUnit = 10 ** IFluidLiteETHVault(_iETH).decimals();
+
+        _setPriceGuard(_guard);
+        _acceptLivePrice();
     }
 
     function _allocate(uint256 amount, bytes memory callData) internal override returns (uint256) {
-        _checkPps();
         _ensureIdleBalance(_asset(), amount);
 
         uint256 minStEthOut = (amount * (BPS - params.slippageBPS)) / BPS;
@@ -104,6 +147,13 @@ contract FluidLiteETHStrategy is MYTStrategy {
         require(stEthReceived > 0, "No stETH received");
 
         _depositIntoVault(stEthReceived);
+
+        // Checked after the deposit so it reads the realized price; a revert undoes the deposit.
+        uint256 live = _liveSharePrice();
+        (uint256 lower, uint256 upper) = _reportingBounds();
+        if (live < lower || live > upper) revert PriceOutsideRoom(live, lower, upper);
+
+        _moveAnchor();
         return amount;
     }
 
@@ -137,6 +187,7 @@ contract FluidLiteETHStrategy is MYTStrategy {
         uint256 stEthBalance = stETH.balanceOf(address(this));
         if (stEthBalance < maxStEthIn) {
             _withdrawFromVault(maxStEthIn - stEthBalance);
+            _requireAboveFloor();
         }
 
         uint256 stEthToSwap = stETH.balanceOf(address(this));
@@ -148,6 +199,7 @@ contract FluidLiteETHStrategy is MYTStrategy {
         uint256 receivedAssets = _idleAssets();
         if (receivedAssets < amount) revert InsufficientBalance(amount, receivedAssets);
         TokenUtils.safeApprove(_asset(), msg.sender, amount);
+        _moveAnchor();
         return amount;
     }
 
@@ -175,12 +227,14 @@ contract FluidLiteETHStrategy is MYTStrategy {
 
     function withdrawFromVault(uint256 netStEth) external onlyKeeperOrOwner returns (uint256 stEthReceived) {
         if (netStEth == 0) revert InvalidAmount(1, 0);
-        _checkPps();
 
         uint256 balanceBefore = stETH.balanceOf(address(this));
         _withdrawFromVault(netStEth);
         stEthReceived = stETH.balanceOf(address(this)) - balanceBefore;
         require(stEthReceived >= netStEth, "Insufficient stETH withdrawn");
+
+        _requireAboveFloor();
+        _moveAnchor();
     }
 
     function requestExits(uint256 stEthAmount) external onlyKeeperOrOwner returns (uint256 tokenId) {
@@ -240,8 +294,23 @@ contract FluidLiteETHStrategy is MYTStrategy {
         return _claimExit(false);
     }
 
+    /// @dev The iETHv2 leg is reported at the live price clamped into the band, so a share price move
+    ///      reaches the MYT only as fast as the anchor is allowed to travel, or when the owner accepts it.
     function _totalValue() internal view override returns (uint256) {
-        return _idleAssets() + stETH.balanceOf(address(this)) + iETH.previewRedeem(iETH.balanceOf(address(this))) + _pendingExitValue();
+        uint256 unclamped = _idleAssets() + stETH.balanceOf(address(this)) + _pendingExitValue();
+
+        uint256 shares = iETH.balanceOf(address(this));
+        if (shares == 0) return unclamped;
+
+        uint256 live = _liveSharePrice();
+        uint256 raw = iETH.previewRedeem(shares);
+        if (live == 0 || raw == 0) return unclamped;
+
+        (uint256 lower, uint256 upper) = _reportingBounds();
+        uint256 clamped = live;
+        if (clamped > upper) clamped = upper;
+        if (clamped < lower) clamped = lower;
+        return unclamped + (raw * clamped) / live;
     }
 
     function _idleAssets() internal view override returns (uint256) {
@@ -343,19 +412,106 @@ contract FluidLiteETHStrategy is MYTStrategy {
         emit KeeperUpdated(newKeeper);
     }
 
-    function setMaxPpsDropBps(uint256 newMaxPpsDropBps) external onlyOwner {
-        require(newMaxPpsDropBps <= MAX_PPS_DROP_BPS, "PPS drop bound too high");
-        maxPpsDropBps = newMaxPpsDropBps;
-        emit MaxPpsDropBpsUpdated(newMaxPpsDropBps);
+    function setPriceGuard(PriceGuardParams calldata _guard) external onlyOwner {
+        _setPriceGuard(_guard);
     }
 
-    function _checkPps() internal {
-        uint256 pps = iETH.previewRedeem(1e18);
-        uint256 last = lastPps;
-        if (maxPpsDropBps != 0 && last != 0 && pps < (last * (BPS - maxPpsDropBps)) / BPS) {
-            revert PpsDropExceeded(last, pps);
-        }
-        lastPps = pps;
+    /// @notice Book the live price as the anchor if it lands inside `[minPps, maxPps]`, a band the owner reads off chain.
+    function acceptPrice(uint256 minPps, uint256 maxPps) external onlyOwner {
+        uint256 live = _liveSharePrice();
+        if (live < minPps || live > maxPps) revert PriceOutsideAcceptBounds(live, minPps, maxPps);
+        _acceptLivePrice();
+    }
+
+    /// @notice Move the anchor toward the live price by at most the accrued travel budget.
+    function poke() external {
+        _moveAnchor();
+    }
+
+    /// @notice Live stETH per `shareUnit`.
+    function liveSharePrice() external view returns (uint256) {
+        return _liveSharePrice();
+    }
+
+    /// @notice Floor and ceiling `_totalValue` reports inside, and the band `allocate` must sit inside.
+    function priceBounds() external view returns (uint256 lower, uint256 upper) {
+        return _reportingBounds();
+    }
+
+    function _setPriceGuard(PriceGuardParams memory _guard) internal {
+        _requireBps(_guard.baseBps);
+        _requireBps(_guard.upBpsPerDay);
+        _requireBps(_guard.downBpsPerDay);
+        _requireBps(_guard.maxUpBps);
+        _requireBps(_guard.maxDownBps);
+        baseBps = _guard.baseBps;
+        upBpsPerDay = _guard.upBpsPerDay;
+        downBpsPerDay = _guard.downBpsPerDay;
+        maxUpBps = _guard.maxUpBps;
+        maxDownBps = _guard.maxDownBps;
+        emit PriceGuardUpdated(_guard.baseBps, _guard.upBpsPerDay, _guard.downBpsPerDay, _guard.maxUpBps, _guard.maxDownBps);
+    }
+
+    function _requireBps(uint256 value) internal pure {
+        if (value >= BPS) revert InvalidBps(value);
+    }
+
+    function _acceptLivePrice() internal {
+        uint256 live = _liveSharePrice();
+        if (live == 0) revert ZeroSharePrice();
+        anchorPps = live;
+        anchorTimestamp = block.timestamp;
+        emit AnchorUpdated(live, block.timestamp);
+    }
+
+    /// @dev Move the anchor toward the live price within the time budget. `baseBps` is excluded so repeats cannot walk it.
+    function _moveAnchor() internal {
+        uint256 livePps = _liveSharePrice();
+        if (livePps == 0) return;
+        (uint256 lower, uint256 upper) = _anchorMoveBounds();
+        uint256 nextAnchorPps = livePps;
+        if (nextAnchorPps > upper) nextAnchorPps = upper;
+        if (nextAnchorPps < lower) nextAnchorPps = lower;
+        if (nextAnchorPps == anchorPps) return;
+        anchorPps = nextAnchorPps;
+        anchorTimestamp = block.timestamp;
+        emit AnchorUpdated(nextAnchorPps, block.timestamp);
+    }
+
+    /// @dev Run after a vault call that realizes value, so it reads the realized price and a revert undoes the call.
+    function _requireAboveFloor() internal view {
+        uint256 live = _liveSharePrice();
+        (uint256 lower, uint256 upper) = _reportingBounds();
+        if (live < lower) revert PriceOutsideRoom(live, lower, upper);
+    }
+
+    function _liveSharePrice() internal view returns (uint256) {
+        return iETH.previewRedeem(shareUnit);
+    }
+
+    /// @dev Band `_totalValue` reports inside and vault interactions check against; at least `baseBps` wide.
+    function _reportingBounds() internal view returns (uint256 lower, uint256 upper) {
+        return _boundsWithMinRoom(baseBps);
+    }
+
+    /// @dev Band the anchor may move into.
+    function _anchorMoveBounds() internal view returns (uint256 lower, uint256 upper) {
+        return _boundsWithMinRoom(0);
+    }
+
+    /// @param minRoomBps Room that is open regardless of elapsed time.
+    function _boundsWithMinRoom(uint256 minRoomBps) internal view returns (uint256 lower, uint256 upper) {
+        uint256 elapsed = block.timestamp > anchorTimestamp ? block.timestamp - anchorTimestamp : 0;
+        uint256 upRoom = _room(upBpsPerDay, maxUpBps, elapsed, minRoomBps);
+        uint256 downRoom = _room(downBpsPerDay, maxDownBps, elapsed, minRoomBps);
+        upper = (anchorPps * (BPS + upRoom)) / BPS;
+        lower = (anchorPps * (BPS - downRoom)) / BPS;
+    }
+
+    /// @dev Room in bps: `min(cap, minRoom + perDay * elapsed / 1 day)`.
+    function _room(uint256 perDay, uint256 cap, uint256 elapsed, uint256 minRoomBps) internal pure returns (uint256) {
+        uint256 room = minRoomBps + (perDay * elapsed) / 1 days;
+        return room > cap ? cap : room;
     }
 
     receive() external payable {}
