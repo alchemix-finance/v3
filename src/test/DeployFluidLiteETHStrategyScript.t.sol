@@ -11,13 +11,6 @@ import {FluidLiteETHStrategy} from "../strategies/FluidLiteETHStrategy.sol";
 import {TestERC20} from "./mocks/TestERC20.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
-import {AggregatorV3Interface} from "lib/chainlink-brownie-contracts/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
-
-contract MockOracleForFluidLiteETHDeployTest {
-    function decimals() external pure returns (uint8) {
-        return 18;
-    }
-}
 
 contract MockSwapperForFluidLiteETHDeployTest {
     function swap(address from, address to, uint256 amountIn, uint256 amountOut) external {
@@ -44,7 +37,7 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
     address internal constant MAINNET_WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address internal constant MAINNET_STETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address internal constant MAINNET_IETH = 0xA0D3707c569ff8C87FA923d3823eC5D81c98Be78;
-    address internal constant MAINNET_STETH_ETH_ORACLE = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812;
+    address internal constant MAINNET_LIDO_QUEUE = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1;
     address internal constant CURATOR_ADDR = 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4;
     address internal constant ETH_MYT = 0x29bcfeD246ce37319d94eBa107db90C453D4c43D;
     address internal constant ETH_ALLOCATOR = 0x23a3C27Bb007887FD8CbfEaF323799093a450e7e;
@@ -56,17 +49,16 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
     uint256 internal constant MAINNET_FORK_BLOCK = 26_156_774;
     uint256 internal constant ALLOCATION_AMOUNT = 10e18;
     uint256 internal constant DEALLOCATION_TARGET = 4e18;
-    uint256 internal constant MAX_ORACLE_STALENESS = 24 hours;
 
     DeployFluidLiteETHStrategyScript internal deployScript;
     AlchemistCurator internal curator;
     TestERC20 internal assetToken;
     MockMYTForFluidLiteETHDeployTest internal myt;
-    MockOracleForFluidLiteETHDeployTest internal oracle;
 
     address internal newOwner;
     address internal iETH;
     address internal stETH;
+    address internal withdrawalQueue;
 
     function setUp() public {
         deployScript = new DeployFluidLiteETHStrategyScript();
@@ -74,11 +66,11 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
 
         assetToken = new TestERC20(1_000_000e18, 18);
         myt = new MockMYTForFluidLiteETHDeployTest(address(assetToken));
-        oracle = new MockOracleForFluidLiteETHDeployTest();
 
         newOwner = makeAddr("newOwner");
         iETH = makeAddr("iETH");
         stETH = makeAddr("stETH");
+        withdrawalQueue = makeAddr("withdrawalQueue");
 
         // Constructor sanity check reads `asset()` from the vault.
         vm.mockCall(iETH, abi.encodeWithSignature("asset()"), abi.encode(stETH));
@@ -90,8 +82,7 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
             myt: address(myt),
             fluidLiteVault: iETH,
             stETH: stETH,
-            stEthEthOracle: address(oracle),
-            maxOracleStaleness: MAX_ORACLE_STALENESS,
+            withdrawalQueue: withdrawalQueue,
             params: _buildParams("Fluid Lite Mainnet ETH", "FluidLite")
         });
 
@@ -101,8 +92,7 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
         assertEq(address(strategy.MYT()), address(myt), "unexpected MYT address");
         assertEq(address(strategy.iETH()), iETH, "unexpected iETH");
         assertEq(address(strategy.stETH()), stETH, "unexpected stETH");
-        assertEq(address(strategy.pricedTokenOracle()), address(oracle), "unexpected oracle");
-        assertEq(strategy.MAX_ORACLE_STALENESS(), MAX_ORACLE_STALENESS, "unexpected max oracle staleness");
+        assertEq(address(strategy.withdrawalQueue()), withdrawalQueue, "unexpected withdrawal queue");
         assertEq(strategy.killSwitch(), true, "kill switch should be enabled");
         assertEq(strategy.owner(), newOwner, "unexpected owner");
         assertEq(curator.adapterToMYT(strategyAddr), address(0), "deploy script should not register with curator");
@@ -116,7 +106,7 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
         IMYTStrategy.StrategyParams memory params = deployScript.defaultParams();
         assertEq(deployScript.FLUID_LITE_ETH_VAULT(), MAINNET_IETH, "unexpected iETHv2 address");
         assertEq(deployScript.STETH(), MAINNET_STETH, "unexpected stETH address");
-        assertEq(deployScript.STETH_ETH_ORACLE(), MAINNET_STETH_ETH_ORACLE, "unexpected oracle address");
+        assertEq(deployScript.LIDO_WITHDRAWAL_QUEUE(), MAINNET_LIDO_QUEUE, "unexpected Lido queue address");
         assertEq(deployScript.ethMYT(), ETH_MYT, "unexpected ETH MYT");
         assertEq(params.name, "Fluid Lite Mainnet ETH", "unexpected name");
         assertEq(params.protocol, "FluidLite", "unexpected protocol");
@@ -152,6 +142,7 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
         assertEq(vault.asset(), MAINNET_WETH, "unexpected MYT asset");
         assertEq(address(strategy.iETH()), MAINNET_IETH, "unexpected iETHv2");
         assertEq(address(strategy.stETH()), MAINNET_STETH, "unexpected stETH");
+        assertEq(address(strategy.withdrawalQueue()), MAINNET_LIDO_QUEUE, "unexpected Lido queue");
         assertEq(strategy.owner(), MAINNET_NEW_OWNER, "unexpected strategy owner");
         assertTrue(strategy.killSwitch(), "kill switch should be enabled after deploy");
         assertTrue(vault.isAdapter(strategyAddr), "strategy not registered");
@@ -162,8 +153,6 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
         uint256 strategyId = uint256(strategy.adapterId());
         vm.prank(MAINNET_ALLOCATOR_ADMIN);
         AlchemistStrategyClassifier(ETH_CLASSIFIER).assignStrategyRiskLevel(strategyId, uint8(params.riskClass));
-
-        _mockFreshStEthEthOracle();
 
         uint256 vaultWethBalanceBefore = IERC20(MAINNET_WETH).balanceOf(ETH_MYT);
         deal(MAINNET_WETH, ETH_MYT, vaultWethBalanceBefore + ALLOCATION_AMOUNT);
@@ -220,18 +209,11 @@ contract DeployFluidLiteETHStrategyScriptTest is Test {
         assertLt(IERC20(MAINNET_IETH).balanceOf(strategyAddr), iEthSharesBeforeDeallocate, "iETHv2 shares should be burned");
 
         assertLt(strategy.realAssets(), strategyAssetsAfterAllocate, "strategy assets should decrease");
-        assertLe(IERC20(MAINNET_STETH).balanceOf(strategyAddr), 4, "strategy should not retain stETH beyond rounding");
+        // Swap path withdraws a slippage-grossed stETH amount and sells `stEthToSell`; the unused buffer stays loose.
+        uint256 leftover = IERC20(MAINNET_STETH).balanceOf(strategyAddr);
+        uint256 maxStEthIn = (deallocationAmount * 10_000 + (10_000 - params.slippageBPS) - 1) / (10_000 - params.slippageBPS);
+        assertApproxEqAbs(leftover, maxStEthIn - stEthToSell, 4, "unused slippage buffer should remain as loose stETH");
         assertGt(IERC20(MAINNET_WETH).balanceOf(ETH_MYT), vaultWethBeforeDeallocate, "vault did not receive WETH back");
-    }
-
-    function _mockFreshStEthEthOracle() internal {
-        (uint80 roundId, int256 answer, uint256 startedAt,, uint80 answeredInRound) =
-            AggregatorV3Interface(MAINNET_STETH_ETH_ORACLE).latestRoundData();
-        vm.mockCall(
-            MAINNET_STETH_ETH_ORACLE,
-            abi.encodeWithSelector(AggregatorV3Interface.latestRoundData.selector),
-            abi.encode(roundId, answer, startedAt, block.timestamp, answeredInRound)
-        );
     }
 
     function _buildParams(string memory name, string memory protocol) internal view returns (IMYTStrategy.StrategyParams memory) {

@@ -19,15 +19,13 @@ contract DeployFluidLiteETHStrategyScript is Script {
     address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address public constant STETH = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
     address public constant FLUID_LITE_ETH_VAULT = 0xA0D3707c569ff8C87FA923d3823eC5D81c98Be78; // iETHv2
-    address public constant STETH_ETH_ORACLE = 0x86392dC19c0b719886221c78AB11eb8Cf5c52812; // Chainlink stETH/ETH
-    uint256 public constant MAX_ORACLE_STALENESS = 24 hours;
+    address public constant LIDO_WITHDRAWAL_QUEUE = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1;
 
     struct FluidLiteETHDeployConfig {
         address myt;
         address fluidLiteVault;
         address stETH;
-        address stEthEthOracle;
-        uint256 maxOracleStaleness;
+        address withdrawalQueue;
         IMYTStrategy.StrategyParams params;
     }
 
@@ -51,14 +49,8 @@ contract DeployFluidLiteETHStrategyScript is Script {
         FluidLiteETHDeployConfig memory config
     ) public returns (address strategyAddr) {
         curator;
-        FluidLiteETHStrategy strategy = new FluidLiteETHStrategy(
-            config.myt,
-            config.params,
-            config.fluidLiteVault,
-            config.stETH,
-            config.stEthEthOracle,
-            config.maxOracleStaleness
-        );
+        FluidLiteETHStrategy strategy =
+            new FluidLiteETHStrategy(config.myt, config.params, config.fluidLiteVault, config.stETH, config.withdrawalQueue);
         strategyAddr = address(strategy);
         MYTStrategy(strategyAddr).setKillSwitch(true);
         MYTStrategy(strategyAddr).transferOwnership(targetOwner);
@@ -71,8 +63,7 @@ contract DeployFluidLiteETHStrategyScript is Script {
             myt: ethMYT,
             fluidLiteVault: FLUID_LITE_ETH_VAULT,
             stETH: STETH,
-            stEthEthOracle: STETH_ETH_ORACLE,
-            maxOracleStaleness: MAX_ORACLE_STALENESS,
+            withdrawalQueue: LIDO_WITHDRAWAL_QUEUE,
             params: defaultParams()
         });
 

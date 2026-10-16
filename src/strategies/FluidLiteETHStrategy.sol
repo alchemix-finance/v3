@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {OraclePricedSwapStrategy} from "./OraclePricedSwapStrategy.sol";
+import {MYTStrategy} from "../MYTStrategy.sol";
 import {TokenUtils} from "../libraries/TokenUtils.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IWETH} from "../interfaces/IWETH.sol";
 
-/// @dev Minimal surface of the Fluid Lite iETHv2 vault.
 interface IFluidLiteETHVault {
     function asset() external view returns (address);
     function balanceOf(address account) external view returns (uint256);
@@ -13,98 +13,154 @@ interface IFluidLiteETHVault {
     function maxWithdraw(address owner) external view returns (uint256);
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
     function withdraw(uint256 assets, address receiver, address owner) external returns (uint256 shares);
-    /// @notice Percentage withdraw fee, scaled to 1e6 (1% == 10_000).
     function withdrawalFeePercentage() external view returns (uint256);
-    /// @notice Absolute minimum withdraw fee in stETH.
     function withdrawFeeAbsoluteMin() external view returns (uint256);
-    /// @notice max(percentage fee, absolute minimum) for a given stETH withdrawal.
     function getWithdrawFee(uint256 stETHAmount) external view returns (uint256);
 }
 
-/**
- * @title FluidLiteETHStrategy
- * @notice Allocates WETH into the Fluid Lite iETHv2 vault (leveraged stETH/weETH loop) via stETH.
- *
- * Allocation (swap only):
- *  - WETH -> stETH on a dex (oracle-bounded), deposit stETH into iETHv2.
- *
- * Deallocation (unwrapAndSwap only):
- *  - withdraw stETH from iETHv2 (grossed up for the vault's withdraw fee), then stETH -> WETH on a dex.
- */
-contract FluidLiteETHStrategy is OraclePricedSwapStrategy {
+interface IStETH is IERC20 {
+    function getPooledEthByShares(uint256 sharesAmount) external view returns (uint256);
+}
+
+interface ILidoWithdrawalQueue {
+    struct WithdrawalRequestStatus {
+        uint256 amountOfStETH;
+        uint256 amountOfShares;
+        address owner;
+        uint256 timestamp;
+        bool isFinalized;
+        bool isClaimed;
+    }
+
+    function MIN_STETH_WITHDRAWAL_AMOUNT() external view returns (uint256);
+    function MAX_STETH_WITHDRAWAL_AMOUNT() external view returns (uint256);
+    function requestWithdrawals(uint256[] calldata amounts, address owner) external returns (uint256[] memory requestIds);
+    function getWithdrawalStatus(uint256[] calldata requestIds) external view returns (WithdrawalRequestStatus[] memory statuses);
+    function getLastCheckpointIndex() external view returns (uint256);
+    function findCheckpointHints(uint256[] calldata requestIds, uint256 firstIndex, uint256 lastIndex) external view returns (uint256[] memory hintIds);
+    function getClaimableEther(uint256[] calldata requestIds, uint256[] calldata hints) external view returns (uint256[] memory claimableEthValues);
+    function claimWithdrawal(uint256 requestId) external;
+}
+
+/// @notice WETH -> stETH (dex) -> iETHv2. Sync exit sells stETH. Async exit withdraws stETH, then queues it with Lido.
+contract FluidLiteETHStrategy is MYTStrategy {
+    uint256 internal constant BPS = 10_000;
     uint256 internal constant FEE_SCALE = 1e6;
-    /// @dev Lido stETH transfers can under deliver by 1-2 wei. request slightly more to still clear `minStETHOut`.
+    uint256 public constant MAX_PPS_DROP_BPS = 5000;
     uint256 internal constant STETH_ROUNDING_BUFFER = 2;
 
     IFluidLiteETHVault public immutable iETH;
-    IERC20 public immutable stETH;
+    IStETH public immutable stETH;
+    ILidoWithdrawalQueue public immutable withdrawalQueue;
+    bool public canForceDeallocate = false;
 
-    constructor(
-        address _myt,
-        StrategyParams memory _params,
-        address _iETH,
-        address _stETH,
-        address _stEthEthOracle,
-        uint256 _maxOracleStaleness
-    ) OraclePricedSwapStrategy(_myt, _params, _stEthEthOracle, _maxOracleStaleness) {
+    address public keeper;
+    uint256 public maxPpsDropBps = 50;
+    uint256 public lastPps;
+
+    struct PendingExit {
+        uint256 tokenId;
+    }
+    PendingExit internal _pendingExit;
+
+    event CanForceDeallocateUpdated(bool newCanForceDeallocate);
+    event KeeperUpdated(address indexed keeper);
+    event MaxPpsDropBpsUpdated(uint256 newMaxPpsDropBps);
+    event ExitRequested(uint256 indexed tokenId, uint256 stEthAmount);
+    event ExitClaimed(uint256 indexed tokenId, uint256 ethClaimed);
+
+    error NoPendingExit();
+    error ExitPending(uint256 tokenId);
+    error UnknownExit(uint256 tokenId);
+    error NotKeeper(address caller);
+    error PpsDropExceeded(uint256 lastPps, uint256 currentPps);
+
+    modifier onlyKeeperOrOwner() {
+        if (msg.sender != keeper && msg.sender != owner()) revert NotKeeper(msg.sender);
+        _;
+    }
+
+    constructor(address _myt, StrategyParams memory _params, address _iETH, address _stETH, address _withdrawalQueue)
+        MYTStrategy(_myt, _params)
+    {
         require(_iETH != address(0), "Zero iETH address");
         require(_stETH != address(0), "Zero stETH address");
+        require(_withdrawalQueue != address(0), "Zero withdrawal queue address");
         require(IFluidLiteETHVault(_iETH).asset() == _stETH, "iETH asset != stETH");
 
         iETH = IFluidLiteETHVault(_iETH);
-        stETH = IERC20(_stETH);
+        stETH = IStETH(_stETH);
+        withdrawalQueue = ILidoWithdrawalQueue(_withdrawalQueue);
     }
 
-    /// @dev Direct allocation is intentionally unsupported: the base `_allocate(uint256)` reverts
-    ///      `ActionNotSupported`, so WETH only enters through the oracle bounded swap path.
-    function _afterAllocationSwap(uint256 oracleTokenReceived) internal override {
-        _depositIntoVault(oracleTokenReceived);
+    function _allocate(uint256 amount, bytes memory callData) internal override returns (uint256) {
+        _checkPps();
+        _ensureIdleBalance(_asset(), amount);
+
+        uint256 minStEthOut = (amount * (BPS - params.slippageBPS)) / BPS;
+        if (minStEthOut == 0) minStEthOut = 1;
+
+        uint256 stEthReceived = dexSwap(address(stETH), _asset(), amount, minStEthOut, callData);
+        require(stEthReceived > 0, "No stETH received");
+
+        _depositIntoVault(stEthReceived);
+        return amount;
     }
 
-    function _depositIntoVault(uint256 stETHAmount) internal {
-        TokenUtils.safeApprove(address(stETH), address(iETH), stETHAmount);
-        uint256 sharesReceived = iETH.deposit(stETHAmount, address(this));
+    function _depositIntoVault(uint256 stEthAmount) internal {
+        TokenUtils.safeApprove(address(stETH), address(iETH), stEthAmount);
+        uint256 sharesReceived = iETH.deposit(stEthAmount, address(this));
         TokenUtils.safeApprove(address(stETH), address(iETH), 0);
         require(sharesReceived > 0, "No iETHv2 received");
     }
 
-    /// @dev One-hop swap path is disabled: it cannot account for the vault's withdraw fee or idle liquidity.
-    function _deallocate(uint256, bytes memory) internal pure override returns (uint256) {
-        revert ActionNotSupported();
+    function _deallocate(uint256 amount) internal override returns (uint256) {
+        _settleMaturedExit();
+        uint256 idleBalance = _idleAssets();
+        require(idleBalance >= amount, "Insufficient WETH available");
+        TokenUtils.safeApprove(_asset(), msg.sender, amount);
+        return amount;
     }
 
-    function _prepareOracleTokenForSwap(uint256) internal pure override returns (uint256) {
-        revert ActionNotSupported();
-    }
+    function _deallocate(uint256 amount, bytes memory callData, uint256 minIntermediateOutAmount) internal override returns (uint256) {
+        _settleMaturedExit();
+        uint256 idleBalance = _idleAssets();
+        if (idleBalance >= amount) {
+            TokenUtils.safeApprove(_asset(), msg.sender, amount);
+            return amount;
+        }
+        uint256 shortfall = amount - idleBalance;
 
-    function _prepareIntermediateForSwap(uint256 maxOracleTokenIn, uint256 minStETHOut)
-        internal
-        override
-        returns (address sellToken, uint256 sellAmount)
-    {
-        require(minStETHOut > 0, "Invalid intermediate amount");
-        require(minStETHOut <= maxOracleTokenIn, "Intermediate exceeds max oracle token in");
+        uint256 maxStEthIn = _roundUpMulDiv(shortfall, BPS, BPS - params.slippageBPS);
+        require(minIntermediateOutAmount <= maxStEthIn, "Intermediate exceeds max stETH in");
 
-        uint256 stETHBefore = stETH.balanceOf(address(this));
-
-        // Any raw stETH already held is sold first. only the remainder is pulled from the vault.
-        if (stETHBefore < minStETHOut) {
-            uint256 needed = minStETHOut - stETHBefore;
-            uint256 grossRequest = _grossUpForWithdrawFee(needed) + STETH_ROUNDING_BUFFER;
-
-            require(grossRequest <= maxOracleTokenIn, "Fee pushes request over max");
-            require(grossRequest <= iETH.maxWithdraw(address(this)), "Insufficient iETHv2 balance");
-            require(grossRequest <= stETH.balanceOf(address(iETH)), "Vault idle stETH too low");
-
-            iETH.withdraw(grossRequest, address(this), address(this));
+        uint256 stEthBalance = stETH.balanceOf(address(this));
+        if (stEthBalance < maxStEthIn) {
+            _withdrawFromVault(maxStEthIn - stEthBalance);
         }
 
-        sellAmount = stETH.balanceOf(address(this));
-        require(sellAmount >= minStETHOut, "Insufficient intermediate out");
-        sellToken = address(stETH);
+        uint256 stEthToSwap = stETH.balanceOf(address(this));
+        if (stEthToSwap > maxStEthIn) stEthToSwap = maxStEthIn;
+        require(stEthToSwap > 0, "No stETH to swap");
+        require(stEthToSwap >= minIntermediateOutAmount, "Insufficient intermediate out");
+
+        dexSwap(_asset(), address(stETH), stEthToSwap, shortfall, callData);
+        uint256 receivedAssets = _idleAssets();
+        if (receivedAssets < amount) revert InsufficientBalance(amount, receivedAssets);
+        TokenUtils.safeApprove(_asset(), msg.sender, amount);
+        return amount;
     }
 
-    /// @dev Smallest `gross` such that `gross - getWithdrawFee(gross) >= net`.
+    function _withdrawFromVault(uint256 netStEth) internal {
+        uint256 gross = _grossUpForWithdrawFee(netStEth) + STETH_ROUNDING_BUFFER;
+        uint256 maxFromVault = iETH.maxWithdraw(address(this));
+        uint256 vaultIdle = stETH.balanceOf(address(iETH));
+        if (gross > maxFromVault) gross = maxFromVault;
+        if (gross > vaultIdle) gross = vaultIdle;
+        require(gross > 0, "No iETHv2 available");
+        iETH.withdraw(gross, address(this), address(this));
+    }
+
     function _grossUpForWithdrawFee(uint256 net) internal view returns (uint256 gross) {
         uint256 feePct = iETH.withdrawalFeePercentage();
         require(feePct < FEE_SCALE, "Invalid withdraw fee");
@@ -117,34 +173,190 @@ contract FluidLiteETHStrategy is OraclePricedSwapStrategy {
         require(gross - iETH.getWithdrawFee(gross) >= net, "Withdraw fee gross-up failed");
     }
 
-    function _oracleToken() internal view override returns (address) {
-        return address(stETH);
+    function withdrawFromVault(uint256 netStEth) external onlyKeeperOrOwner returns (uint256 stEthReceived) {
+        if (netStEth == 0) revert InvalidAmount(1, 0);
+        _checkPps();
+
+        uint256 balanceBefore = stETH.balanceOf(address(this));
+        _withdrawFromVault(netStEth);
+        stEthReceived = stETH.balanceOf(address(this)) - balanceBefore;
+        require(stEthReceived >= netStEth, "Insufficient stETH withdrawn");
     }
 
-    function _positionBalance() internal view override returns (uint256) {
-        return stETH.balanceOf(address(this)) + iETH.previewRedeem(iETH.balanceOf(address(this)));
+    function requestExits(uint256 stEthAmount) external onlyKeeperOrOwner returns (uint256 tokenId) {
+        if (stEthAmount == 0) revert InvalidAmount(1, 0);
+        _settleMaturedExit();
+        if (_pendingExit.tokenId != 0) revert ExitPending(_pendingExit.tokenId);
+
+        require(stETH.balanceOf(address(this)) >= stEthAmount, "Insufficient stETH");
+        require(stEthAmount >= withdrawalQueue.MIN_STETH_WITHDRAWAL_AMOUNT(), "Below queue minimum");
+        require(stEthAmount <= withdrawalQueue.MAX_STETH_WITHDRAWAL_AMOUNT(), "Amount exceeds queue limits");
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = stEthAmount;
+        TokenUtils.safeApprove(address(stETH), address(withdrawalQueue), stEthAmount);
+        tokenId = withdrawalQueue.requestWithdrawals(amounts, address(this))[0];
+        TokenUtils.safeApprove(address(stETH), address(withdrawalQueue), 0);
+
+        _pendingExit = PendingExit({tokenId: tokenId});
+
+        emit ExitRequested(tokenId, stEthAmount);
     }
 
-    /// @dev Like the base, but also deducts the vault withdraw fee and clamps to the vault's idle stETH,
-    ///      since withdrawals beyond that buffer revert inside iETHv2.
+    function claimExits() external returns (uint256 ethClaimed) {
+        return _claimExit(false);
+    }
+
+    /// @dev tolerant decides whether a failed Lido claim aborts the caller or is ignored.
+    /// In the case of `_settleMaturedExit`, the claim is a side task there, 
+    /// so a failure returns 0 and the main action continues.
+    function _claimExit(bool tolerant) internal returns (uint256 ethClaimed) {
+        uint256 tokenId = _pendingExit.tokenId;
+        if (tokenId == 0) revert NoPendingExit();
+
+        uint256 ethBefore = address(this).balance;
+        if (tolerant) {
+            try withdrawalQueue.claimWithdrawal(tokenId) {} catch { return 0; }
+        } else {
+            withdrawalQueue.claimWithdrawal(tokenId);
+        }
+        ethClaimed = address(this).balance - ethBefore;
+
+        delete _pendingExit;
+        if (ethClaimed > 0) IWETH(_asset()).deposit{value: ethClaimed}();
+        emit ExitClaimed(tokenId, ethClaimed);
+    }
+
+    function _settleMaturedExit() internal {
+        uint256 tokenId = _pendingExit.tokenId;
+        if (tokenId == 0) return;
+        ILidoWithdrawalQueue.WithdrawalRequestStatus memory status = _requestStatus(tokenId);
+        if (status.isClaimed || !status.isFinalized) return;
+        _claimExit(true);
+    }
+
+    function _claimWithdrawalQueue(uint256 positionId) internal override returns (uint256) {
+        if (positionId != _pendingExit.tokenId) revert UnknownExit(positionId);
+        return _claimExit(false);
+    }
+
+    function _totalValue() internal view override returns (uint256) {
+        return _idleAssets() + stETH.balanceOf(address(this)) + iETH.previewRedeem(iETH.balanceOf(address(this))) + _pendingExitValue();
+    }
+
+    function _idleAssets() internal view override returns (uint256) {
+        return TokenUtils.safeBalanceOf(_asset(), address(this));
+    }
+
+    function _pendingExitValue() internal view returns (uint256) {
+        uint256 tokenId = _pendingExit.tokenId;
+        if (tokenId == 0) return 0;
+        ILidoWithdrawalQueue.WithdrawalRequestStatus memory status = _requestStatus(tokenId);
+        if (status.isClaimed) return 0;
+        if (status.isFinalized) return _claimableEther(tokenId);
+
+        uint256 current = stETH.getPooledEthByShares(status.amountOfShares);
+        return current < status.amountOfStETH ? current : status.amountOfStETH;
+    }
+
     function _previewAdjustedWithdraw(uint256 amount) internal view override returns (uint256) {
         uint256 idleBalance = _idleAssets();
-        if (amount <= idleBalance) return amount;
+        uint256 fromIdle = amount <= idleBalance ? amount : idleBalance;
+        if (fromIdle == amount) {
+            return amount;
+        }
 
-        uint256 remaining = amount - idleBalance;
+        uint256 remaining = amount - fromIdle;
 
-        uint256 rawStETH = stETH.balanceOf(address(this));
         uint256 vaultValue = iETH.previewRedeem(iETH.balanceOf(address(this)));
-        uint256 vaultLiquidity = stETH.balanceOf(address(iETH));
-        uint256 fromVault = vaultValue < vaultLiquidity ? vaultValue : vaultLiquidity;
-        uint256 netFromVault = fromVault - iETH.getWithdrawFee(fromVault);
+        uint256 vaultIdle = stETH.balanceOf(address(iETH));
+        uint256 fromVault = vaultValue < vaultIdle ? vaultValue : vaultIdle;
+        uint256 positionValue = stETH.balanceOf(address(this)) + fromVault - iETH.getWithdrawFee(fromVault);
 
-        uint256 maxAsset = _oracleTokenToAsset(rawStETH + netFromVault);
-        uint256 fundableFromPosition = remaining <= maxAsset ? remaining : maxAsset;
-        return idleBalance + (fundableFromPosition * (10_000 - params.slippageBPS)) / 10_000;
+        uint256 fundableFromPosition = remaining <= positionValue ? remaining : positionValue;
+        return fromIdle + (fundableFromPosition * (BPS - params.slippageBPS)) / BPS;
+    }
+
+    function _asset() internal view returns (address) {
+        return MYT.asset();
+    }
+
+    function _requestStatus(uint256 tokenId) internal view returns (ILidoWithdrawalQueue.WithdrawalRequestStatus memory) {
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = tokenId;
+        return withdrawalQueue.getWithdrawalStatus(ids)[0];
+    }
+
+    
+    /// @dev Returns the amount of claimable Ether for a given withdrawal request tokenId.
+    function _claimableEther(uint256 tokenId) internal view returns (uint256) {
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = tokenId;
+        uint256[] memory hints = withdrawalQueue.findCheckpointHints(ids, 1, withdrawalQueue.getLastCheckpointIndex());
+        return withdrawalQueue.getClaimableEther(ids, hints)[0];
+    }
+
+    function _roundUpMulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256) {
+        return (x * y + denominator - 1) / denominator;
+    }
+
+    function pendingExitCount() external view returns (uint256) {
+        return _pendingExit.tokenId == 0 ? 0 : 1;
+    }
+
+    function pendingExit() external view returns (PendingExit memory) {
+        return _pendingExit;
+    }
+
+    function isPendingExit(uint256 tokenId) external view returns (bool) {
+        return _pendingExit.tokenId == tokenId;
+    }
+
+    function claimableExits() external view returns (uint256) {
+        uint256 tokenId = _pendingExit.tokenId;
+        if (tokenId == 0) return 0;
+        ILidoWithdrawalQueue.WithdrawalRequestStatus memory status = _requestStatus(tokenId);
+        if (status.isClaimed || !status.isFinalized) return 0;
+        return _claimableEther(tokenId);
+    }
+
+    function _canForceDeallocate() internal view override returns (bool) {
+        return canForceDeallocate;
     }
 
     function _isProtectedToken(address token) internal view override returns (bool) {
-        return token == _asset() || token == address(stETH) || token == address(iETH);
+        return token == _asset() || token == address(stETH) || token == address(iETH) || token == address(withdrawalQueue);
     }
+
+    function onERC721Received(address, address, uint256, bytes calldata) external view returns (bytes4) {
+        require(msg.sender == address(withdrawalQueue), "Unexpected NFT sender");
+        return this.onERC721Received.selector;
+    }
+
+    function setCanForceDeallocate(bool canForceDeallocate_) external onlyOwner {
+        canForceDeallocate = canForceDeallocate_;
+        emit CanForceDeallocateUpdated(canForceDeallocate_);
+    }
+
+    function setKeeper(address newKeeper) external onlyOwner {
+        keeper = newKeeper;
+        emit KeeperUpdated(newKeeper);
+    }
+
+    function setMaxPpsDropBps(uint256 newMaxPpsDropBps) external onlyOwner {
+        require(newMaxPpsDropBps <= MAX_PPS_DROP_BPS, "PPS drop bound too high");
+        maxPpsDropBps = newMaxPpsDropBps;
+        emit MaxPpsDropBpsUpdated(newMaxPpsDropBps);
+    }
+
+    function _checkPps() internal {
+        uint256 pps = iETH.previewRedeem(1e18);
+        uint256 last = lastPps;
+        if (maxPpsDropBps != 0 && last != 0 && pps < (last * (BPS - maxPpsDropBps)) / BPS) {
+            revert PpsDropExceeded(last, pps);
+        }
+        lastPps = pps;
+    }
+
+    receive() external payable {}
 }
