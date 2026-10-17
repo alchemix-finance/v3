@@ -19,8 +19,19 @@ interface IMidasDepositVault {
     function minAmount() external view returns (uint256);
 }
 
+enum MidasRequestStatus {
+    Pending,
+    Processed,
+    Canceled
+}
+
 interface IMidasRedemptionVault {
     function redeemInstant(address tokenOut, uint256 amountMTokenIn, uint256 minReceiveAmount) external;
+    function redeemRequest(address tokenOut, uint256 amountMTokenIn) external returns (uint256 requestId);
+    function redeemRequests(uint256 id)
+        external
+        view
+        returns (address sender, address tokenOut, MidasRequestStatus status, uint256 amountMToken, uint256 mTokenRate, uint256 tokenOutRate);
     function tokensConfig(address token) external view returns (address dataFeed, uint256 fee, uint256 allowance, bool stable);
     function instantFee() external view returns (uint256);
     function instantDailyLimit() external view returns (uint256);
@@ -30,13 +41,16 @@ interface IMidasRedemptionVault {
 
 /**
  * @title Re7ETHMidasStrategy
- * @notice Allocates WETH into the Re7ETH tokenized fund (Midas) on Optimism via instant mint/redeem.
+ * @notice Allocates WETH into the Re7ETH tokenized fund (Midas) on Optimism via instant mint/redeem,
+ *         with a keeper-driven `redeemRequest` exit that Midas settles by pushing WETH to the strategy.
  * @dev Positions are priced from the aggregator's `latestRoundData()` with own staleness and deviation
- *      guards.
+ *      guards. Unhealthy prints are rejected and valuation holds `lastNav`; `lastNav` only moves on an
+ *      in-band print or an owner `acceptNav()`.
  */
 contract Re7ETHMidasStrategy is MYTStrategy {
     uint256 internal constant BPS = 10_000;
     uint256 internal constant WAD = 1e18;
+    uint256 internal constant NO_EXIT = type(uint256).max;
 
     address public immutable weth;
     address public immutable re7ETH;
@@ -55,12 +69,25 @@ contract Re7ETHMidasStrategy is MYTStrategy {
 
     bool public canForceDeallocate;
 
+    address public keeper;
+    /// @dev Midas request id of the current exit; `NO_EXIT` when none. Midas ids start at 0.
+    uint256 public pendingExitId = NO_EXIT;
+
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
     event AggregatorUpdated(address indexed newAggregator, uint8 decimals);
     event NavSynced(uint256 nav);
     event MaxNavStalenessUpdated(uint256 newMaxNavStaleness);
     event MaxNavDeviationBPSUpdated(uint256 newMaxNavDeviationBPS);
     event NavAccepted(uint256 previousNav, uint256 newNav);
+    event KeeperUpdated(address indexed keeper);
+    /// @dev `mTokenPending` is what Midas escrowed, net of its request fee.
+    event ExitRequested(uint256 indexed requestId, uint256 mTokenRequested, uint256 mTokenPending);
+    event ExitCleared(uint256 indexed requestId, MidasRequestStatus status);
+
+    modifier onlyKeeperOrOwner() {
+        require(msg.sender == keeper || msg.sender == owner(), "Not keeper");
+        _;
+    }
 
     constructor(address _myt, StrategyParams memory _params, address _re7ETH, address _depositVault, address _redemptionVault, address _dataFeed)
         MYTStrategy(_myt, _params)
@@ -119,6 +146,47 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         emit NavAccepted(previous, lastNav);
     }
 
+    function setKeeper(address keeper_) external onlyOwner {
+        keeper = keeper_;
+        emit KeeperUpdated(keeper_);
+    }
+
+    /// @notice Queue a Midas redemption worth about `wethAmount` at `lastNav`. Settlement price is set by
+    ///         Midas at approval, so no NAV guard applies here; one request may be open at a time.
+    function requestExit(uint256 wethAmount) external onlyKeeperOrOwner returns (uint256 requestId) {
+        if (wethAmount == 0) revert InvalidAmount(1, 0);
+        require(_exitEscrowMTokens() == 0, "Exit pending");
+
+        uint256 mTokenIn = (wethAmount * WAD + lastNav - 1) / lastNav;
+        uint256 mTokenBalance = _positionBalance();
+        if (mTokenIn > mTokenBalance) mTokenIn = mTokenBalance;
+        require(mTokenIn > 0, "No Re7ETH to request");
+
+        TokenUtils.safeApprove(re7ETH, address(redemptionVault), mTokenIn);
+        requestId = redemptionVault.redeemRequest(weth, mTokenIn);
+        TokenUtils.safeApprove(re7ETH, address(redemptionVault), 0);
+
+        pendingExitId = requestId;
+        (,,, uint256 pending,,) = redemptionVault.redeemRequests(requestId);
+        emit ExitRequested(requestId, mTokenIn, pending);
+    }
+
+    /// @notice Release the exit slot once Midas has settled or cancelled it. A cancelled request's mTokens
+    ///         are returned by Midas off-chain and keep being valued until the owner clears it.
+    function clearExit() external onlyOwner {
+        uint256 id = pendingExitId;
+        require(id != NO_EXIT, "No exit");
+        (,, MidasRequestStatus status,,,) = redemptionVault.redeemRequests(id);
+        require(status != MidasRequestStatus.Pending, "Exit pending");
+        pendingExitId = NO_EXIT;
+        emit ExitCleared(id, status);
+    }
+
+    /// @notice Re7ETH escrowed at Midas for the current exit, still valued as position.
+    function pendingExitMTokens() external view returns (uint256) {
+        return _exitEscrowMTokens();
+    }
+
     /// @dev Midas enforces a minimum mint, amounts below it revert here.
     function _allocate(uint256 amount) internal override returns (uint256) {
         _ensureIdleBalance(weth, amount);
@@ -162,7 +230,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     }
 
     function _totalValue() internal view override returns (uint256) {
-        uint256 mTokenBalance = _positionBalance();
+        uint256 mTokenBalance = _positionBalance() + _exitEscrowMTokens();
         if (mTokenBalance == 0) return _idleAssets();
 
         (uint256 nav, bool healthy) = _readNav();
@@ -276,6 +344,14 @@ contract Re7ETHMidasStrategy is MYTStrategy {
 
     function _positionBalance() internal view returns (uint256) {
         return TokenUtils.safeBalanceOf(re7ETH, address(this));
+    }
+
+    /// @dev Escrow of the current exit while it is Pending or Canceled. Processed means the WETH already landed.
+    function _exitEscrowMTokens() internal view returns (uint256) {
+        uint256 id = pendingExitId;
+        if (id == NO_EXIT) return 0;
+        (,, MidasRequestStatus status, uint256 amountMToken,,) = redemptionVault.redeemRequests(id);
+        return status == MidasRequestStatus.Processed ? 0 : amountMToken;
     }
 
     function _netAssetsForGrossMToken(uint256 grossMToken, uint256 feeBps) internal view returns (uint256) {

@@ -3,12 +3,24 @@ pragma solidity 0.8.28;
 
 import "../BaseStrategyTest.sol";
 import {E2EInvariantStrategyTest} from "../base/E2EInvariantStrategyTest.sol";
-import {Re7ETHMidasStrategy, IMidasDataFeed, IMidasDepositVault, IMidasRedemptionVault} from "../../strategies/Re7ETHMidasStrategy.sol";
+import {Re7ETHMidasStrategy, IMidasDataFeed, IMidasDepositVault, IMidasRedemptionVault, MidasRequestStatus} from "../../strategies/Re7ETHMidasStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
 interface IAggregatorV3Tiny {
     function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80);
+}
+
+interface IMidasRedemptionVaultAdmin {
+    function accessControl() external view returns (address);
+    function vaultRole() external view returns (bytes32);
+    function requestRedeemer() external view returns (address);
+    function approveRequest(uint256 requestId, uint256 newMTokenRate) external;
+    function rejectRequest(uint256 requestId) external;
+}
+
+interface IMidasAccessControl {
+    function hasRole(bytes32 role, address account) external view returns (bool);
 }
 
 library Re7ETHMidasAddresses {
@@ -18,6 +30,7 @@ library Re7ETHMidasAddresses {
     address internal constant REDEMPTION_VAULT = 0x06a7Fa6DAA7BC7fD66a7EEFCE54475b456B4B5B4;
     address internal constant DATA_FEED = 0x7f6136358088c629ef6b6dF5ECf2180074073e84;
     address internal constant AGGREGATOR = 0x7b1047B1563fFbF7361c881b6f7EDB1521e5C238;
+    address internal constant MIDAS_ADMIN = address(0xAD3115);
     uint256 internal constant FORK_BLOCK = 158_100_000;
     uint256 internal constant REDEMPTION_LIQUIDITY = 100_000e18;
 }
@@ -108,6 +121,26 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
 
     function _fundRedemptionVault(uint256 amount) internal {
         deal(Re7ETHMidasAddresses.WETH, Re7ETHMidasAddresses.REDEMPTION_VAULT, amount);
+    }
+
+    /// @dev Midas settles requests by pulling WETH from `requestRedeemer`; the vault admin role is mocked onto MIDAS_ADMIN.
+    function _setupMidasAdmin() internal {
+        IMidasRedemptionVaultAdmin rv = IMidasRedemptionVaultAdmin(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        vm.mockCall(
+            rv.accessControl(), abi.encodeWithSelector(IMidasAccessControl.hasRole.selector, rv.vaultRole(), Re7ETHMidasAddresses.MIDAS_ADMIN), abi.encode(true)
+        );
+        deal(Re7ETHMidasAddresses.WETH, rv.requestRedeemer(), Re7ETHMidasAddresses.REDEMPTION_LIQUIDITY);
+    }
+
+    function _approveExit(uint256 requestId) internal {
+        uint256 rate = _nav();
+        vm.prank(Re7ETHMidasAddresses.MIDAS_ADMIN);
+        IMidasRedemptionVaultAdmin(Re7ETHMidasAddresses.REDEMPTION_VAULT).approveRequest(requestId, rate);
+    }
+
+    function _rejectExit(uint256 requestId) internal {
+        vm.prank(Re7ETHMidasAddresses.MIDAS_ADMIN);
+        IMidasRedemptionVaultAdmin(Re7ETHMidasAddresses.REDEMPTION_VAULT).rejectRequest(requestId);
     }
 
     function _nav() internal view returns (uint256) {
@@ -267,10 +300,6 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         IMYTStrategy(strategy).deallocate(abi.encode(p), 1e17, "", address(vault));
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // Preview
-    // ---------------------------------------------------------------------------------------------
-
     function test_previewAdjustedWithdraw_appliesFeeAndSlippage() public {
         _allocateDirect(3e18);
         uint256 realAssets = IMYTStrategy(strategy).realAssets();
@@ -323,10 +352,6 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         assertLe(preview, (minRedeem * _nav()) / 1e18, "preview should not exceed headroom value");
         vm.clearMockedCalls();
     }
-
-    // ---------------------------------------------------------------------------------------------
-    // Oracle health
-    // ---------------------------------------------------------------------------------------------
 
     function test_staleNav_failsSoftInValuation_failsHardInExecution() public {
         _allocateDirect(1e18);
@@ -479,6 +504,140 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         vm.expectRevert("Invalid deviation");
         s.setMaxNavDeviationBPS(10_000);
         vm.stopPrank();
+    }
+
+    function test_requestExit_accessAndSizing() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _allocateDirect(2e18);
+        uint256 position = IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(strategy);
+        uint256 valueBefore = IMYTStrategy(strategy).realAssets();
+
+        vm.prank(address(0xBEEF));
+        vm.expectRevert("Not keeper");
+        s.requestExit(1e18);
+
+        vm.prank(admin);
+        s.setKeeper(address(0xBEEF));
+
+        vm.prank(address(0xBEEF));
+        vm.expectRevert(abi.encodeWithSelector(IMYTStrategy.InvalidAmount.selector, 1, 0));
+        s.requestExit(0);
+
+        // Sized at lastNav, rounded up.
+        uint256 expectedMTokens = (1e18 * 1e18 + s.lastNav() - 1) / s.lastNav();
+        vm.prank(address(0xBEEF));
+        uint256 id = s.requestExit(1e18);
+
+        assertEq(s.pendingExitId(), id, "request id not stored");
+        assertEq(IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(strategy), position - expectedMTokens, "mTokens not escrowed");
+        (address sender,, MidasRequestStatus status, uint256 amountMToken,,) = IMidasRedemptionVault(Re7ETHMidasAddresses.REDEMPTION_VAULT).redeemRequests(id);
+        assertEq(sender, strategy, "request sender");
+        assertEq(uint8(status), uint8(MidasRequestStatus.Pending), "request should be pending");
+        assertEq(s.pendingExitMTokens(), amountMToken, "escrow view");
+
+        // Escrow is still valued; no dip on request.
+        assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), valueBefore, 1e9, "value should hold through request");
+
+        // Only one open request at a time.
+        vm.prank(admin);
+        vm.expectRevert("Exit pending");
+        s.requestExit(0.1e18);
+    }
+
+    function test_requestExit_capsAtPosition() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _allocateDirect(1e18);
+        uint256 position = IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(strategy);
+
+        vm.prank(admin);
+        s.requestExit(100e18);
+
+        assertEq(IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(strategy), 0, "whole position should be escrowed");
+        assertEq(s.pendingExitMTokens(), position, "escrow should equal position (zero request fee)");
+    }
+
+    function test_requestExit_belowMidasMinimumReverts() public {
+        _allocateDirect(1e18);
+        vm.prank(admin);
+        vm.expectRevert("RV: amount < min");
+        Re7ETHMidasStrategy(strategy).requestExit(1);
+    }
+
+    function test_requestExit_doesNotRequireHealthyNav() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _allocateDirect(1e18);
+        vm.warp(block.timestamp + 8 days);
+        _refreshFeed(block.timestamp - 8 days);
+
+        vm.prank(admin);
+        uint256 id = s.requestExit(0.5e18);
+        assertEq(s.pendingExitId(), id, "request should go through on stale NAV");
+    }
+
+    function test_exit_settlesIntoIdle() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _setupMidasAdmin();
+        _allocateDirect(2e18);
+        uint256 valueBefore = IMYTStrategy(strategy).realAssets();
+
+        vm.prank(admin);
+        uint256 id = s.requestExit(1e18);
+        uint256 escrow = s.pendingExitMTokens();
+
+        _approveExit(id);
+
+        uint256 idle = IERC20(Re7ETHMidasAddresses.WETH).balanceOf(strategy);
+        assertApproxEqAbs(idle, (escrow * _nav()) / 1e18, 1e9, "settled WETH should land as idle");
+        assertEq(s.pendingExitMTokens(), 0, "processed request should not be counted");
+        assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), valueBefore, 1e9, "value should hold through settlement");
+
+        // Settled WETH is served by the normal deallocate path, no Midas call needed.
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), idle, "", address(vault));
+
+        // Slot is free for the next request without clearing.
+        vm.prank(admin);
+        s.requestExit(0.5e18);
+    }
+
+    function test_exit_rejectedKeepsEscrowUntilCleared() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _setupMidasAdmin();
+        _allocateDirect(1e18);
+        uint256 valueBefore = IMYTStrategy(strategy).realAssets();
+
+        vm.prank(admin);
+        uint256 id = s.requestExit(0.5e18);
+
+        vm.prank(admin);
+        vm.expectRevert("Exit pending");
+        s.clearExit();
+
+        _rejectExit(id);
+
+        // Midas returns cancelled mTokens off-chain; keep valuing the receivable until the owner clears it.
+        assertGt(s.pendingExitMTokens(), 0, "cancelled escrow should still be counted");
+        assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), valueBefore, 1e9, "value should hold through rejection");
+
+        vm.prank(admin);
+        vm.expectRevert("Exit pending");
+        s.requestExit(0.1e18);
+
+        vm.prank(address(0xBEEF));
+        vm.expectRevert();
+        s.clearExit();
+
+        vm.prank(admin);
+        vm.expectEmit(true, true, true, true, strategy);
+        emit Re7ETHMidasStrategy.ExitCleared(id, MidasRequestStatus.Canceled);
+        s.clearExit();
+
+        assertEq(s.pendingExitMTokens(), 0, "cleared escrow should not be counted");
+        assertEq(s.pendingExitId(), type(uint256).max, "slot should be free");
+
+        vm.prank(admin);
+        vm.expectRevert("No exit");
+        s.clearExit();
     }
 
     function test_realAssets_tracksNavIncrease() public {
