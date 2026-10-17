@@ -582,7 +582,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
 
         // Protocol fee only applies to the earmarked portion of the repayment.
-        uint256 feeAmount = earmarkedRepaidToYield * protocolFee / BPS;
+        uint256 feeAmount = _calculateProtocolFee(earmarkedRepaidToYield);
         if (feeAmount > account.collateralBalance) {
             revert IllegalState();
         } else {
@@ -712,7 +712,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
         // Use the effective redeemed amount everywhere downstream
         uint256 collRedeemed  = convertDebtTokensToYield(effectiveRedeemed);
-        uint256 feeCollateral = collRedeemed * protocolFee / BPS;
+        uint256 feeCollateral = _calculateProtocolFee(collRedeemed);
 
         _totalRedeemedDebt += effectiveRedeemed;
         _totalRedeemedSharesOut += collRedeemed;
@@ -960,7 +960,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         uint256 creditToYield = _subCollateralBalance(convertDebtTokensToYield(credit), accountId);
 
         // Collect as much protocol fee as the remaining collateral can support.
-        uint256 targetProtocolFee = creditToYield * protocolFee / BPS;
+        uint256 targetProtocolFee = _calculateProtocolFee(creditToYield);
         uint256 protocolFeeTotal = _subCollateralBalance(targetProtocolFee, accountId);
 
 
@@ -1234,6 +1234,14 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     /// @return feeInYield The fee in yield tokens to be sent to the liquidator.
     function _calculateRepaymentFee(uint256 repaidAmountInYield) internal view returns (uint256 feeInYield) {
         return repaidAmountInYield * repaymentFee / BPS;
+    }
+
+    /// @dev Rounds protocol fees up so dust-sized repayments cannot avoid fees by splitting calls.
+    function _calculateProtocolFee(uint256 amountInYield) internal view returns (uint256) {
+        if (amountInYield == 0 || protocolFee == 0) {
+            return 0;
+        }
+        return FixedPointMath.mulDivUp(amountInYield, protocolFee, BPS);
     }
 
     /// @dev Returns max yield-fee removable while remaining strictly healthy (> lower bound).
