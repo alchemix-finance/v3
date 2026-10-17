@@ -5,6 +5,7 @@ import "../BaseStrategyTest.sol";
 import {E2EInvariantStrategyTest} from "../base/E2EInvariantStrategyTest.sol";
 import {Re7ETHMidasStrategy, IMidasDataFeed, IMidasDepositVault, IMidasRedemptionVault, MidasRequestStatus} from "../../strategies/Re7ETHMidasStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
+import {Test} from "forge-std/Test.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
 interface IAggregatorV3Tiny {
@@ -640,6 +641,219 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         s.clearExit();
     }
 
+    function test_aggregatorRevert_holdsLastNavAndBlocksExecution() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _allocateDirect(1e18);
+        uint256 healthyValue = IMYTStrategy(strategy).realAssets();
+
+        vm.mockCallRevert(
+            Re7ETHMidasAddresses.AGGREGATOR,
+            abi.encodeWithSelector(IAggregatorV3Tiny.latestRoundData.selector),
+            abi.encodeWithSignature("Error(string)", "feed down")
+        );
+
+        assertEq(IMYTStrategy(strategy).realAssets(), healthyValue, "reverting feed should hold lastNav");
+        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(1e18), 0, "no idle, nothing previewable");
+
+        vm.expectRevert("NAV unhealthy");
+        s.pokeNav();
+
+        deal(Re7ETHMidasAddresses.WETH, strategy, 0.5e18);
+        vm.prank(vault);
+        vm.expectRevert("NAV unhealthy");
+        IMYTStrategy(strategy).allocate(getVaultParams(), 0.5e18, "", address(vault));
+
+        vm.prank(vault);
+        vm.expectRevert("NAV unhealthy");
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 1e18, "", address(vault));
+
+        // acceptNav cannot bypass a dead feed either.
+        vm.prank(admin);
+        vm.expectRevert("feed down");
+        s.acceptNav();
+
+        vm.clearMockedCalls();
+        _refreshFeed(block.timestamp);
+        s.pokeNav();
+        assertApproxEqRel(IMYTStrategy(strategy).realAssets(), healthyValue + 0.5e18, 1e12, "value should recover with the feed");
+    }
+
+    function test_malformedPrints_areUnhealthy() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _allocateDirect(1e18);
+        uint256 healthyValue = IMYTStrategy(strategy).realAssets();
+
+        int256[3] memory answers = [int256(0), int256(-1), feedAnswer];
+        uint256[3] memory updatedAts = [block.timestamp, block.timestamp, uint256(0)];
+        for (uint256 i = 0; i < 3; i++) {
+            _mockPrint(answers[i], updatedAts[i]);
+            assertEq(IMYTStrategy(strategy).realAssets(), healthyValue, "malformed print should hold lastNav");
+            vm.expectRevert("NAV unhealthy");
+            s.pokeNav();
+        }
+
+        // A print from the future is rejected too.
+        _mockPrint(feedAnswer, block.timestamp + 1);
+        assertEq(IMYTStrategy(strategy).realAssets(), healthyValue, "future print should hold lastNav");
+        vm.expectRevert("NAV unhealthy");
+        s.pokeNav();
+        vm.prank(admin);
+        vm.expectRevert("Invalid NAV");
+        s.acceptNav();
+    }
+
+    function test_previewAdjustedWithdraw_cappedByTokenAllowance() public {
+        _allocateDirect(3e18);
+        IMidasRedemptionVault rv = IMidasRedemptionVault(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        (address feed, uint256 fee,, bool stable) = rv.tokensConfig(Re7ETHMidasAddresses.WETH);
+        uint256 minRedeem = rv.minAmount();
+        uint256 feeBps = _redeemFeeBps();
+
+        // Allowance below one minimum redeem zeroes the preview.
+        uint256 belowMin = (minRedeem * _nav()) / 1e18 - 1;
+        _mockTokenConfig(feed, fee, belowMin, stable);
+        assertEq(IMYTStrategy(strategy).previewAdjustedWithdraw(1e18), 0, "sub-minimum allowance should zero the preview");
+
+        // Otherwise the net-of-fee allowance bounds it, and that amount must execute.
+        _mockTokenConfig(feed, fee, 0.5e18, stable);
+        uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(3e18);
+        uint256 expected = (0.5e18 - (0.5e18 * feeBps) / 10_000) * (10_000 - 50) / 10_000;
+        assertApproxEqRel(preview, expected, 1e12, "preview should cap at net allowance");
+        vm.clearMockedCalls();
+        _refreshFeed(block.timestamp);
+
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), preview, "", address(vault));
+        assertGe(IERC20(Re7ETHMidasAddresses.WETH).balanceOf(strategy), preview, "preview should be honoured");
+    }
+
+    function test_deallocate_grossesUpForHigherFees() public {
+        _allocateDirect(4e18);
+        IMidasRedemptionVault rv = IMidasRedemptionVault(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        (address feed,, uint256 allowance, bool stable) = rv.tokensConfig(Re7ETHMidasAddresses.WETH);
+
+        // 100 bps token fee + 200 bps instant fee as seen by the strategy; Midas itself still charges the real fee.
+        _mockTokenConfig(feed, 100, allowance, stable);
+        vm.mockCall(Re7ETHMidasAddresses.REDEMPTION_VAULT, abi.encodeWithSelector(IMidasRedemptionVault.instantFee.selector), abi.encode(200));
+
+        uint256 target = 1e18;
+        // The fee is paid by the position, not the delivered amount: a partial preview only nets slippage,
+        // while a full-position preview nets the combined fee.
+        assertApproxEqRel(IMYTStrategy(strategy).previewAdjustedWithdraw(target), (target * (10_000 - 50)) / 10_000, 1e12, "partial preview");
+        uint256 realAssets = IMYTStrategy(strategy).realAssets();
+        uint256 expectedFull = ((realAssets * (10_000 - 300)) / 10_000) * (10_000 - 50) / 10_000;
+        assertApproxEqRel(IMYTStrategy(strategy).previewAdjustedWithdraw(realAssets), expectedFull, 1e12, "full preview should net the combined fee");
+
+        uint256 mBefore = IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(strategy);
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), target, "", address(vault));
+        uint256 burned = mBefore - IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(strategy);
+
+        uint256 netMTokens = (target * 1e18 + _nav() - 1) / _nav();
+        uint256 expectedBurned = (netMTokens * 10_000 + (10_000 - 300) - 1) / (10_000 - 300);
+        assertApproxEqRel(burned, expectedBurned, 1e12, "burn should gross up for the combined fee");
+        assertGe(IERC20(Re7ETHMidasAddresses.WETH).balanceOf(strategy), target, "idle must cover the request");
+        vm.clearMockedCalls();
+    }
+
+    function test_deallocate_cannotRedeemEscrowedExit() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _allocateDirect(2e18);
+
+        vm.prank(admin);
+        s.requestExit(1.5e18);
+        uint256 remaining = IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(strategy);
+        assertGt(remaining, 0, "some position should remain");
+
+        // Preview only promises what the un-escrowed position can serve.
+        uint256 preview = IMYTStrategy(strategy).previewAdjustedWithdraw(2e18);
+        assertLe(preview, (remaining * _nav()) / 1e18, "preview must exclude escrow");
+
+        // Asking for more than the remaining position reverts rather than touching escrow.
+        vm.prank(vault);
+        vm.expectRevert();
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 1e18, "", address(vault));
+
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), preview, "", address(vault));
+    }
+
+    function test_exit_valuesMidasRecordedAmountNotRequested() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _allocateDirect(2e18);
+        uint256 valueBefore = IMYTStrategy(strategy).realAssets();
+
+        vm.prank(admin);
+        uint256 id = s.requestExit(1e18);
+        uint256 recorded = s.pendingExitMTokens();
+
+        // Simulate Midas having taken a 1% request fee: the escrow is what Midas recorded, net of fee.
+        uint256 net = (recorded * 99) / 100;
+        vm.mockCall(
+            Re7ETHMidasAddresses.REDEMPTION_VAULT,
+            abi.encodeWithSelector(IMidasRedemptionVault.redeemRequests.selector, id),
+            abi.encode(strategy, Re7ETHMidasAddresses.WETH, MidasRequestStatus.Pending, net, _nav(), 1e18)
+        );
+        assertEq(s.pendingExitMTokens(), net, "escrow should follow Midas's record");
+        assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), valueBefore - ((recorded - net) * _nav()) / 1e18, 1e9, "fee should be reflected in value");
+        vm.clearMockedCalls();
+        _refreshFeed(block.timestamp);
+    }
+
+    function test_allocate_revertsWhenNothingMinted() public {
+        deal(Re7ETHMidasAddresses.WETH, strategy, 1e18);
+        vm.mockCall(Re7ETHMidasAddresses.DEPOSIT_VAULT, abi.encodeWithSelector(IMidasDepositVault.depositInstant.selector), "");
+
+        vm.prank(vault);
+        vm.expectRevert("No Re7ETH received");
+        IMYTStrategy(strategy).allocate(getVaultParams(), 1e18, "", address(vault));
+        vm.clearMockedCalls();
+    }
+
+    function test_constructor_revertsOnBadVenueState() public {
+        IMYTStrategy.StrategyParams memory params = getStrategyConfig();
+
+        vm.mockCall(Re7ETHMidasAddresses.DATA_FEED, abi.encodeWithSelector(IMidasDataFeed.getDataInBase18.selector), abi.encode(uint256(0)));
+        vm.expectRevert("Invalid NAV");
+        new Re7ETHMidasStrategy(
+            vault,
+            params,
+            Re7ETHMidasAddresses.RE7_ETH,
+            Re7ETHMidasAddresses.DEPOSIT_VAULT,
+            Re7ETHMidasAddresses.REDEMPTION_VAULT,
+            Re7ETHMidasAddresses.DATA_FEED
+        );
+        vm.clearMockedCalls();
+
+        _mockTokenConfig(address(0), 0, 0, true);
+        vm.expectRevert("WETH not redeemable");
+        new Re7ETHMidasStrategy(
+            vault,
+            params,
+            Re7ETHMidasAddresses.RE7_ETH,
+            Re7ETHMidasAddresses.DEPOSIT_VAULT,
+            Re7ETHMidasAddresses.REDEMPTION_VAULT,
+            Re7ETHMidasAddresses.DATA_FEED
+        );
+        vm.clearMockedCalls();
+    }
+
+    function _mockPrint(int256 answer, uint256 updatedAt) internal {
+        vm.mockCall(
+            Re7ETHMidasAddresses.AGGREGATOR,
+            abi.encodeWithSelector(IAggregatorV3Tiny.latestRoundData.selector),
+            abi.encode(feedRoundId, answer, updatedAt, updatedAt, feedRoundId)
+        );
+    }
+
+    function _mockTokenConfig(address feed, uint256 fee, uint256 allowance, bool stable) internal {
+        vm.mockCall(
+            Re7ETHMidasAddresses.REDEMPTION_VAULT,
+            abi.encodeWithSelector(IMidasRedemptionVault.tokensConfig.selector, Re7ETHMidasAddresses.WETH),
+            abi.encode(feed, fee, allowance, stable)
+        );
+    }
+
     function test_realAssets_tracksNavIncrease() public {
         _allocateDirect(1e18);
         uint256 before = IMYTStrategy(strategy).realAssets();
@@ -720,8 +934,93 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
     }
 }
 
+/// @dev Drives the privileged exit lifecycle under fuzz: request as owner, settle as the (mocked) Midas admin.
+contract Re7ETHMidasExitHandler is Test {
+    Re7ETHMidasStrategy internal immutable strategy;
+    address internal immutable strategyOwner;
+    uint256 internal immutable nav;
+
+    uint256 public requests;
+    uint256 public approvals;
+    uint256 public rejections;
+
+    constructor(address _strategy, address _owner, uint256 _nav) {
+        strategy = Re7ETHMidasStrategy(_strategy);
+        strategyOwner = _owner;
+        nav = _nav;
+    }
+
+    function requestExit(uint256 seed) external {
+        if (strategy.pendingExitMTokens() != 0) return;
+        uint256 minAmount = IMidasRedemptionVault(Re7ETHMidasAddresses.REDEMPTION_VAULT).minAmount();
+        uint256 position = IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(address(strategy));
+        if (position < minAmount * 4) return;
+
+        uint256 mTokens = bound(seed, minAmount * 2, position / 2);
+        vm.prank(strategyOwner);
+        strategy.requestExit((mTokens * nav) / 1e18);
+        requests++;
+    }
+
+    function settleExit(uint256 seed) external {
+        uint256 id = strategy.pendingExitId();
+        if (id == type(uint256).max) return;
+        (,, MidasRequestStatus status, uint256 amount,,) = IMidasRedemptionVault(Re7ETHMidasAddresses.REDEMPTION_VAULT).redeemRequests(id);
+        if (status != MidasRequestStatus.Pending) return;
+
+        IMidasRedemptionVaultAdmin rv = IMidasRedemptionVaultAdmin(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        if (seed % 4 == 0) {
+            vm.prank(Re7ETHMidasAddresses.MIDAS_ADMIN);
+            rv.rejectRequest(id);
+            // Midas returns cancelled escrow off-chain; mirror that before the owner clears the slot.
+            vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+            IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(address(strategy), amount);
+            vm.prank(strategyOwner);
+            strategy.clearExit();
+            rejections++;
+        } else {
+            vm.prank(Re7ETHMidasAddresses.MIDAS_ADMIN);
+            rv.approveRequest(id, nav);
+            approvals++;
+        }
+    }
+}
+
 contract Re7ETHMidasInvariantTest is E2EInvariantStrategyTest {
     uint256 internal navSnapshot;
+    Re7ETHMidasExitHandler internal exitHandler;
+
+    function setUp() public override {
+        super.setUp();
+        exitHandler = new Re7ETHMidasExitHandler(realStrategy, admin, navSnapshot);
+        bytes4[] memory selectors = new bytes4[](2);
+        selectors[0] = exitHandler.requestExit.selector;
+        selectors[1] = exitHandler.settleExit.selector;
+        targetContract(address(exitHandler));
+        targetSelector(FuzzSelector({addr: address(exitHandler), selectors: selectors}));
+    }
+
+    /// @dev The slot only ever holds a live or settled request. a cancelled one is cleared as soon as its escrow returns.
+    function invariant_exitSlotConsistent() public view {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(realStrategy);
+        uint256 id = s.pendingExitId();
+        if (id == type(uint256).max) {
+            assertEq(s.pendingExitMTokens(), 0, "no slot, no escrow");
+            return;
+        }
+        (address sender,, MidasRequestStatus status, uint256 amount,,) = IMidasRedemptionVault(Re7ETHMidasAddresses.REDEMPTION_VAULT).redeemRequests(id);
+        assertEq(sender, realStrategy, "slot must be ours");
+        assertTrue(status != MidasRequestStatus.Canceled, "cancelled slot should be cleared");
+        assertEq(s.pendingExitMTokens(), status == MidasRequestStatus.Pending ? amount : 0, "escrow follows status");
+    }
+
+    /// @dev Escrow is never double counted: the position plus pending escrow at NAV equals value minus idle.
+    function invariant_escrowAccountedOnce() public view {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(realStrategy);
+        uint256 mTokens = IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(realStrategy) + s.pendingExitMTokens();
+        uint256 idle = IERC20(Re7ETHMidasAddresses.WETH).balanceOf(realStrategy);
+        assertApproxEqAbs(IMYTStrategy(realStrategy).realAssets(), idle + (mTokens * navSnapshot) / 1e18, 1e9, "escrow accounting");
+    }
 
     function getRpcUrl() internal override returns (string memory) {
         return vm.envString("OPTIMISM_RPC_URL");
@@ -780,6 +1079,13 @@ contract Re7ETHMidasInvariantTest is E2EInvariantStrategyTest {
         // The deviation guard stays active (the pinned print never moves).
         vm.prank(admin);
         Re7ETHMidasStrategy(strategy_).setMaxNavStaleness(36_500 days);
+
+        // Request settlement pulls WETH from Midas's `requestRedeemer` under the vault admin role.
+        IMidasRedemptionVaultAdmin rv = IMidasRedemptionVaultAdmin(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        vm.mockCall(
+            rv.accessControl(), abi.encodeWithSelector(IMidasAccessControl.hasRole.selector, rv.vaultRole(), Re7ETHMidasAddresses.MIDAS_ADMIN), abi.encode(true)
+        );
+        deal(Re7ETHMidasAddresses.WETH, rv.requestRedeemer(), Re7ETHMidasAddresses.REDEMPTION_LIQUIDITY);
     }
 
     /// @dev Midas rejects mints below `minAmount` mTokens; size fuzzed allocations above it (2x for slippage rounding).
