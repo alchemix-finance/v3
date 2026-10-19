@@ -42,10 +42,7 @@ interface IMidasRedemptionVault {
 /**
  * @title Re7ETHMidasStrategy
  * @notice Allocates WETH into the Re7ETH tokenized fund (Midas) on Optimism via instant mint/redeem,
- *         with a keeper-driven `redeemRequest` exit that Midas settles by pushing WETH to the strategy.
- * @dev Positions are priced from the aggregator's `latestRoundData()` with own staleness and deviation
- *      guards. Unhealthy prints are rejected and valuation holds `lastNav`; `lastNav` only moves on an
- *      in-band print or an owner `acceptNav()`.
+ *         using a keeper to exit via `redeemRequest`.
  */
 contract Re7ETHMidasStrategy is MYTStrategy {
     uint256 internal constant BPS = 10_000;
@@ -70,7 +67,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     bool public canForceDeallocate;
 
     address public keeper;
-    /// @dev Midas request id of the current exit; `NO_EXIT` when none. Midas ids start at 0.
+    /// @dev Midas request id of the current exit. `NO_EXIT` when none. Midas ids start at 0.
     uint256 public pendingExitId = NO_EXIT;
 
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
@@ -134,7 +131,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         emit MaxNavDeviationBPSUpdated(maxNavDeviationBPS_);
     }
 
-    /// @notice Permissionless cache refresh; only accepts a healthy print.
+    /// @notice Permissionless cache refresh. only accepts a healthy print.
     function pokeNav() external {
         _syncNav();
     }
@@ -151,8 +148,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         emit KeeperUpdated(keeper_);
     }
 
-    /// @notice Queue a Midas redemption worth about `wethAmount` at `lastNav`. Settlement price is set by
-    ///         Midas at approval, so no NAV guard applies here; one request may be open at a time.
+    /// @notice Queue a Midas redemption worth about `wethAmount` at `lastNav`.
     function requestExit(uint256 wethAmount) external onlyKeeperOrOwner returns (uint256 requestId) {
         if (wethAmount == 0) revert InvalidAmount(1, 0);
         require(_exitEscrowMTokens() == 0, "Exit pending");
@@ -171,8 +167,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         emit ExitRequested(requestId, mTokenIn, pending);
     }
 
-    /// @notice Release the exit slot once Midas has settled or cancelled it. A cancelled request's mTokens
-    ///         are returned by Midas off-chain and keep being valued until the owner clears it.
+    /// @notice Release the exit slot once Midas has settled or cancelled it. 
     function clearExit() external onlyOwner {
         uint256 id = pendingExitId;
         require(id != NO_EXIT, "No exit");
@@ -257,8 +252,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     }
 
     /// @dev WETH withdrawable right now via `redeemInstant`, net of fees and bounded by the redemption
-    ///      vault's liquidity, daily limit and token allowance. Any bound below one minimum size redeem
-    ///      means nothing is withdrawable.
+    ///      vault's liquidity, daily limit and token allowance. 
     function _instantRedeemableAssets() internal view returns (uint256) {
         uint256 minRedeem = redemptionVault.minAmount();
         uint256 mTokenBalance = _positionBalance();
