@@ -91,6 +91,7 @@ contract IporFusionStrategy is ERC4626Strategy {
     error NotKeeper(address caller);
     error NoClaimableExit();
     error ClaimableExitPending(uint256 shares);
+    error ExitRequestPending(uint256 shares, uint256 windowEnd);
 
     event WithdrawManagerUpdated(address indexed withdrawManager);
     event MaxWithdrawFeeUpdated(uint256 maxWithdrawFee);
@@ -158,11 +159,16 @@ contract IporFusionStrategy is ERC4626Strategy {
         _moveAnchor();
     }
 
-    /// @notice Schedule an exit worth about `wethAmount` at the WithdrawManager; replaces an unreleased request, refuses to overwrite a claimable one.
-    function requestExit(uint256 wethAmount) external onlyKeeperOrOwner {
+    /// @notice Schedule an exit worth about `wethAmount`. A waiting request is only overwritten (and its fee paid again) when `replace` is set.
+    function requestExit(uint256 wethAmount, bool replace) external onlyKeeperOrOwner {
         if (wethAmount == 0) revert InvalidAmount(1, 0);
         IporWithdrawRequestInfo memory current = withdrawManager.requestInfo(address(this));
-        if (current.canWithdraw && current.shares > 0) revert ClaimableExitPending(current.shares);
+        if (current.shares > 0) {
+            if (current.canWithdraw) revert ClaimableExitPending(current.shares);
+            if (!replace && block.timestamp <= current.endWithdrawWindowTimestamp) {
+                revert ExitRequestPending(current.shares, current.endWithdrawWindowTimestamp);
+            }
+        }
 
         uint256 shares = vault.convertToShares(wethAmount);
         shares = _mulDivUp(shares, BPS + redeemBufferBps, BPS);

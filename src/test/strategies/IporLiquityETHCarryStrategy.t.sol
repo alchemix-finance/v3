@@ -618,7 +618,7 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         vm.prank(admin);
         _strategy().setKeeper(KEEPER);
         vm.prank(KEEPER);
-        _strategy().requestExit(wethAmount);
+        _strategy().requestExit(wethAmount, false);
         pending = _strategy().pendingExitShares();
         assertGt(pending, 0, "request recorded");
         vm.warp(block.timestamp + 1);
@@ -629,10 +629,10 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
     function test_requestExit_onlyKeeperOrOwner() public {
         _allocateDirect(10e18);
         vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.NotKeeper.selector, address(this)));
-        _strategy().requestExit(1e18);
+        _strategy().requestExit(1e18, false);
 
         vm.prank(admin);
-        _strategy().requestExit(1e18);
+        _strategy().requestExit(1e18, false);
         assertGt(_strategy().pendingExitShares(), 0, "owner can request");
         assertGt(_strategy().exitWindowEnd(), block.timestamp, "window runs from the request");
         assertEq(_strategy().claimableExit(), 0, "nothing claimable before a release");
@@ -644,7 +644,7 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         uint256 valueBefore = IMYTStrategy(strategy).realAssets();
 
         vm.prank(admin);
-        _strategy().requestExit(4e18);
+        _strategy().requestExit(4e18, false);
 
         uint256 fee = IIporWithdrawManager(WITHDRAW_MANAGER).getRequestFee();
         if (fee == 0) {
@@ -683,7 +683,7 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         _strategy().claimExit();
 
         vm.prank(admin);
-        _strategy().requestExit(1e18);
+        _strategy().requestExit(1e18, false);
         vm.expectRevert(IporFusionStrategy.NoClaimableExit.selector);
         _strategy().claimExit();
     }
@@ -726,7 +726,7 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
     function test_deallocate_leavesUnreleasedRequestAlone() public {
         _allocateDirect(10e18);
         vm.prank(admin);
-        _strategy().requestExit(4e18);
+        _strategy().requestExit(4e18, false);
         uint256 pending = _strategy().pendingExitShares();
 
         uint256 realBefore = IMYTStrategy(strategy).realAssets();
@@ -765,7 +765,7 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         assertEq(IIporWithdrawManager(WITHDRAW_MANAGER).getSharesToRelease(), pending, "stale reservation persists until the next release");
 
         vm.prank(KEEPER);
-        _strategy().requestExit(4e18);
+        _strategy().requestExit(4e18, false);
         assertEq(_strategy().exitWindowEnd(), block.timestamp + window, "new request restarts the window");
         // The new request postdates the old release, so it is not claimable until the Alpha releases again.
         assertEq(_strategy().claimableExit(), 0, "needs a fresh release");
@@ -854,17 +854,23 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
         assertEq(IIporWithdrawManager(WITHDRAW_MANAGER).getSharesToRelease(), 0, "reservation consumed");
     }
 
-    /// @dev A new request replaces a live unreleased one outright, the recorded size is the new size, not the sum.
-    function test_requestExit_replacesALiveRequest() public {
+    /// @dev A waiting request is only overwritten with `replace`. the plain call refuses so a retry cannot pay the fee twice.
+    function test_requestExit_replacesALiveRequestOnlyWhenAsked() public {
         _allocateDirect(10e18);
         vm.prank(admin);
-        _strategy().requestExit(4e18);
+        _strategy().requestExit(4e18, false);
         uint256 first = _strategy().pendingExitShares();
+        uint256 windowEnd = _strategy().exitWindowEnd();
         uint256 sharesBefore = IERC4626(PLASMA_VAULT).balanceOf(strategy);
 
         vm.warp(block.timestamp + 1 hours);
         vm.prank(admin);
-        _strategy().requestExit(2e18);
+        vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.ExitRequestPending.selector, first, windowEnd));
+        _strategy().requestExit(2e18, false);
+        assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "refused retry pays no fee");
+
+        vm.prank(admin);
+        _strategy().requestExit(2e18, true);
         uint256 second = _strategy().pendingExitShares();
 
         assertLt(second, first, "smaller request recorded");
@@ -889,13 +895,16 @@ contract IporLiquityETHCarryStrategyTest is BaseStrategyTest {
 
         vm.prank(KEEPER);
         vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.ClaimableExitPending.selector, pending));
-        _strategy().requestExit(2e18);
+        _strategy().requestExit(2e18, false);
+        vm.prank(KEEPER);
+        vm.expectRevert(abi.encodeWithSelector(IporFusionStrategy.ClaimableExitPending.selector, pending));
+        _strategy().requestExit(2e18, true);
         assertEq(IERC4626(PLASMA_VAULT).balanceOf(strategy), sharesBefore, "request moved nothing");
         assertEq(_strategy().pendingExitShares(), pending, "release still claimable");
 
         _strategy().claimExit();
         vm.prank(KEEPER);
-        _strategy().requestExit(2e18);
+        _strategy().requestExit(2e18, false);
         uint256 newPending = _strategy().pendingExitShares();
         assertGt(newPending, 0, "new request recorded after the claim");
         assertLt(newPending, pending, "new request is the new size");
