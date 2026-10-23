@@ -380,3 +380,31 @@ Notes:
   This path is liquidity-dependent and reverts if instant redemption is unavailable.
 4. `deallocateWithSwap()` remains useful as the market exit path when the operator prefers to sell `weETH -> WETH` rather than rely on the redemption manager.
 
+
+
+### `Re7ETHMidasStrategy`
+
+Supported allocator paths:
+
+- `allocate()`
+- `deallocate()`
+
+Allocator notes:
+
+1. `allocate()` mints `Re7ETH` via the Midas deposit vault at posted NAV.
+  Swap paths are not supported. Allocations below the Midas minimum mint (`depositVault.minAmount()`) revert.
+2. `deallocate()` serves idle `WETH` first, then redeems instantly via the Midas redemption vault.
+  Instant redemption charges 30 bps, shares a global 5,000 Re7ETH/day limit, and depends on the vault's own `WETH` balance.
+3. Size `deallocate()` from `previewAdjustedWithdraw(amount)`.
+  It nets fee and slippage and caps at liquidity, daily limit and allowance. `0` means nothing is instantly redeemable.
+4. When the NAV feed is stale or out of band, `allocate()` reverts `NAV unhealthy`, and so does any `deallocate()` that must redeem `Re7ETH` (one covered by idle `WETH` still works).
+  Try `pokeNav()`. If that reverts, stop and escalate to the owner.
+
+Keeper notes:
+
+1. `requestExit(wethAmount)` queues a Midas redemption when instant liquidity is short. One request open at a time.
+2. Midas settles off-chain (~2 NAV updates) by sending `WETH` to the strategy. It lands as idle. a plain `deallocate()` then pulls it. Track with `pendingExitMTokens()`.
+3. If Midas rejects, confirm `Re7ETH` was returned before the owner calls `clearExit()`.
+4. Call `pokeNav()` at least as often as Midas posts NAV so the deviation band is not crossed by accrued yield.
+5. Owner-only: `acceptNav`, `setMaxNavStaleness`, `setMaxNavDeviationBPS`, `setAggregator`, `setKeeper`, `clearExit`.
+
