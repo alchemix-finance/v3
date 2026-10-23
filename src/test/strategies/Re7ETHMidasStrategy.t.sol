@@ -641,6 +641,74 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         s.clearExit();
     }
 
+    /// @dev Regression: once Midas rejects a request and returns the escrow, the returned
+    ///      mTokens are counted twice (wallet + escrow) until the slot is cleared; the
+    ///      keeper must be able to clear it without waiting for the owner.
+    function test_exit_cancelledRefundClearedByKeeper() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _setupMidasAdmin();
+        _allocateDirect(1e18);
+        uint256 valueBefore = IMYTStrategy(strategy).realAssets();
+
+        vm.startPrank(admin);
+        s.setKeeper(address(0xBEEF));
+        uint256 id = s.requestExit(0.5e18);
+        vm.stopPrank();
+
+        uint256 escrow = s.pendingExitMTokens();
+        _rejectExit(id);
+
+        // Midas returns the cancelled escrow; the returned tokens are now in the wallet
+        // AND still counted as escrow — the double-count window.
+        vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(strategy, escrow);
+        assertApproxEqAbs(
+            IMYTStrategy(strategy).realAssets(), valueBefore + (escrow * _nav()) / 1e18, 1e9, "double-count window"
+        );
+
+        vm.prank(address(0xBEEF));
+        vm.expectEmit(true, true, true, true, strategy);
+        emit Re7ETHMidasStrategy.ExitCleared(id, MidasRequestStatus.Canceled);
+        s.clearExit();
+        assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), valueBefore, 1e9, "value restored after clear");
+    }
+
+    /// @dev Canceled slots are keeper-clearable; Pending and Processed slots are not.
+    function test_clearExit_access() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _setupMidasAdmin();
+        _allocateDirect(1e18);
+
+        vm.prank(admin);
+        s.setKeeper(address(0xBEEF));
+
+        vm.prank(admin);
+        uint256 id = s.requestExit(0.5e18);
+
+        // Pending: nobody may clear.
+        vm.prank(address(0xBEEF));
+        vm.expectRevert("Exit pending");
+        s.clearExit();
+
+        // Canceled: keeper or owner, nobody else.
+        _rejectExit(id);
+        vm.prank(address(0xCAFE));
+        vm.expectRevert("Not keeper");
+        s.clearExit();
+        vm.prank(address(0xBEEF));
+        s.clearExit();
+
+        // Processed: owner-only again.
+        vm.prank(admin);
+        uint256 settledId = s.requestExit(0.5e18);
+        _approveExit(settledId);
+        vm.prank(address(0xBEEF));
+        vm.expectRevert("Not owner");
+        s.clearExit();
+        vm.prank(admin);
+        s.clearExit();
+    }
+
     function test_aggregatorRevert_holdsLastNavAndBlocksExecution() public {
         Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
         _allocateDirect(1e18);
@@ -972,10 +1040,10 @@ contract Re7ETHMidasExitHandler is Test {
         if (seed % 4 == 0) {
             vm.prank(Re7ETHMidasAddresses.MIDAS_ADMIN);
             rv.rejectRequest(id);
-            // Midas returns cancelled escrow off-chain; mirror that before the owner clears the slot.
+            // Midas returns cancelled escrow off-chain; mirror that, then clear as the
+            // keeper so the returned escrow is never double-counted.
             vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
             IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(address(strategy), amount);
-            vm.prank(strategyOwner);
             strategy.clearExit();
             rejections++;
         } else {
@@ -993,6 +1061,9 @@ contract Re7ETHMidasInvariantTest is E2EInvariantStrategyTest {
     function setUp() public override {
         super.setUp();
         exitHandler = new Re7ETHMidasExitHandler(realStrategy, admin, navSnapshot);
+        // The handler drives the full keeper lifecycle: request as owner, clear cancelled slots itself.
+        vm.prank(admin);
+        Re7ETHMidasStrategy(realStrategy).setKeeper(address(exitHandler));
         bytes4[] memory selectors = new bytes4[](2);
         selectors[0] = exitHandler.requestExit.selector;
         selectors[1] = exitHandler.settleExit.selector;

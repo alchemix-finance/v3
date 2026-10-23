@@ -167,12 +167,16 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         emit ExitRequested(requestId, mTokenIn, pending);
     }
 
-    /// @notice Release the exit slot once Midas has settled or cancelled it. 
-    function clearExit() external onlyOwner {
+    function clearExit() external {
         uint256 id = pendingExitId;
         require(id != NO_EXIT, "No exit");
         (,, MidasRequestStatus status,,,) = redemptionVault.redeemRequests(id);
         require(status != MidasRequestStatus.Pending, "Exit pending");
+        if (status == MidasRequestStatus.Canceled) {
+            require(msg.sender == keeper || msg.sender == owner(), "Not keeper");
+        } else {
+            require(msg.sender == owner(), "Not owner");
+        }
         pendingExitId = NO_EXIT;
         emit ExitCleared(id, status);
     }
@@ -341,6 +345,8 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     }
 
     /// @dev Escrow of the current exit while it is Pending or Canceled. Processed means the WETH already landed.
+    ///      A Canceled escrow stays counted until the slot is cleared — even once Midas
+    ///      has returned it to the wallet — hence the keeper-clearable `clearExit()`.
     function _exitEscrowMTokens() internal view returns (uint256) {
         uint256 id = pendingExitId;
         if (id == NO_EXIT) return 0;
