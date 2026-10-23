@@ -609,6 +609,17 @@ contract FluidLiteETHStrategyTest is Test {
         assertEq(IMYTStrategy(address(strategy)).previewAdjustedWithdraw(5e18), 5e18, "idle covers request");
     }
 
+    function test_previewAdjustedWithdraw_clamps_fee_above_deliverable() public {
+        _allocateViaSwap(10e18);
+
+        // Simulates a Fluid vault with a non-zero withdrawFeeAbsoluteMin (zero on mainnet today):
+        // fee exceeding the deliverable stETH must clamp to zero, not underflow (Panic 0x11).
+        vm.mockCall(IETH, IFluidLiteETHVault.getWithdrawFee.selector, abi.encode(1e30));
+
+        uint256 preview = IMYTStrategy(address(strategy)).previewAdjustedWithdraw(8e18);
+        assertEq(preview, 0, "fee above deliverable must clamp position value to zero");
+    }
+
     function test_previewAdjustedWithdraw_excludes_pending_queue_request() public {
         _allocateViaSwap(10e18);
 

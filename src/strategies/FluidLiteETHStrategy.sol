@@ -340,7 +340,8 @@ contract FluidLiteETHStrategy is MYTStrategy {
         uint256 vaultValue = iETH.previewRedeem(iETH.balanceOf(address(this)));
         uint256 vaultIdle = stETH.balanceOf(address(iETH));
         uint256 fromVault = vaultValue < vaultIdle ? vaultValue : vaultIdle;
-        uint256 positionValue = stETH.balanceOf(address(this)) + fromVault - iETH.getWithdrawFee(fromVault);
+        uint256 fee = iETH.getWithdrawFee(fromVault);
+        uint256 positionValue = stETH.balanceOf(address(this)) + (fromVault > fee ? fromVault - fee : 0);
 
         uint256 fundableFromPosition = remaining <= positionValue ? remaining : positionValue;
         return fromIdle + (fundableFromPosition * (BPS - params.slippageBPS)) / BPS;
