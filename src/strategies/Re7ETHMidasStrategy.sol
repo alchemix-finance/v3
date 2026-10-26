@@ -69,6 +69,9 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     address public keeper;
     /// @dev Midas request id of the current exit. `NO_EXIT` when none. Midas ids start at 0.
     uint256 public pendingExitId = NO_EXIT;
+    /// @dev Re7ETH the strategy expects to hold excluding any returned escrow, maintained only while an exit is open.
+    ///      Gates keeper clearing only, valuation never reads it.
+    uint256 public positionExEscrow;
 
     event CanForceDeallocateUpdated(bool newCanForceDeallocate);
     event AggregatorUpdated(address indexed newAggregator, uint8 decimals);
@@ -151,6 +154,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     /// @notice Queue a Midas redemption worth about `wethAmount` at `lastNav`.
     function requestExit(uint256 wethAmount) external onlyKeeperOrOwner returns (uint256 requestId) {
         if (wethAmount == 0) revert InvalidAmount(1, 0);
+        _settleReturnedExit();
         require(_exitEscrowMTokens() == 0, "Exit pending");
 
         uint256 mTokenIn = (wethAmount * WAD + lastNav - 1) / lastNav;
@@ -163,22 +167,49 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         TokenUtils.safeApprove(re7ETH, address(redemptionVault), 0);
 
         pendingExitId = requestId;
+        _syncPositionExEscrow();
         (,,, uint256 pending,,) = redemptionVault.redeemRequests(requestId);
         emit ExitRequested(requestId, mTokenIn, pending);
     }
 
+    /// @notice Free the exit slot. Owner may clear any settled request. the keeper may clear a cancelled one
+    ///         only once the escrow is back in the strategy.
     function clearExit() external {
         uint256 id = pendingExitId;
         require(id != NO_EXIT, "No exit");
-        (,, MidasRequestStatus status,,,) = redemptionVault.redeemRequests(id);
+        (,, MidasRequestStatus status, uint256 amountMToken,,) = redemptionVault.redeemRequests(id);
         require(status != MidasRequestStatus.Pending, "Exit pending");
-        if (status == MidasRequestStatus.Canceled) {
-            require(msg.sender == keeper || msg.sender == owner(), "Not keeper");
-        } else {
-            require(msg.sender == owner(), "Not owner");
+        if (msg.sender != owner()) {
+            require(msg.sender == keeper, "Not keeper");
+            require(status == MidasRequestStatus.Canceled, "Not owner");
+            require(_escrowReturned(amountMToken), "Escrow not returned");
         }
+        _clearExit(id, status);
+    }
+
+    function _clearExit(uint256 id, MidasRequestStatus status) internal {
         pendingExitId = NO_EXIT;
         emit ExitCleared(id, status);
+    }
+
+    function _escrowReturned(uint256 amountMToken) internal view returns (bool) {
+        return _positionBalance() >= positionExEscrow + amountMToken;
+    }
+
+    /// @dev Reset the keeper's baseline to the current balance after the strategy mints or burns Re7ETH.
+    ///      Callers run `_settleReturnedExit` first, so any returned escrow has already closed the slot
+    ///      and the balance read here contains none of it.
+    function _syncPositionExEscrow() internal {
+        if (pendingExitId != NO_EXIT) positionExEscrow = _positionBalance();
+    }
+
+    /// @dev Clears a cancelled exit whose escrow is provably back, so the strategy's own moves never
+    ///      consume returned escrow before it is recognised.
+    function _settleReturnedExit() internal {
+        uint256 id = pendingExitId;
+        if (id == NO_EXIT) return;
+        (,, MidasRequestStatus status, uint256 amountMToken,,) = redemptionVault.redeemRequests(id);
+        if (status == MidasRequestStatus.Canceled && _escrowReturned(amountMToken)) _clearExit(id, status);
     }
 
     /// @notice Re7ETH escrowed at Midas for the current exit, still valued as position.
@@ -189,6 +220,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     /// @dev Midas enforces a minimum mint, amounts below it revert here.
     function _allocate(uint256 amount) internal override returns (uint256) {
         _ensureIdleBalance(weth, amount);
+        _settleReturnedExit();
         _syncNav();
 
         uint256 minMTokenOut = _assetToMTokenDown((amount * (BPS - params.slippageBPS)) / BPS);
@@ -198,6 +230,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         depositVault.depositInstant(weth, amount, minMTokenOut, bytes32(0));
         TokenUtils.safeApprove(weth, address(depositVault), 0);
         require(_positionBalance() > mTokenBefore, "No Re7ETH received");
+        _syncPositionExEscrow();
 
         return amount;
     }
@@ -206,6 +239,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         uint256 idleBalance = _idleAssets();
 
         if (idleBalance < amount) {
+            _settleReturnedExit();
             _syncNav();
             uint256 shortfall = amount - idleBalance;
 
@@ -219,6 +253,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
             TokenUtils.safeApprove(re7ETH, address(redemptionVault), mTokenIn);
             redemptionVault.redeemInstant(weth, mTokenIn, shortfall);
             TokenUtils.safeApprove(re7ETH, address(redemptionVault), 0);
+            _syncPositionExEscrow();
 
             idleBalance = _idleAssets();
             if (idleBalance < amount) revert InsufficientBalance(amount, idleBalance);
@@ -256,7 +291,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     }
 
     /// @dev WETH withdrawable right now via `redeemInstant`, net of fees and bounded by the redemption
-    ///      vault's liquidity, daily limit and token allowance. 
+    ///      vault's liquidity, daily limit and token allowance.
     function _instantRedeemableAssets() internal view returns (uint256) {
         uint256 minRedeem = redemptionVault.minAmount();
         uint256 mTokenBalance = _positionBalance();

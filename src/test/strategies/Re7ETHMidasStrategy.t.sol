@@ -662,9 +662,7 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         // AND still counted as escrow — the double-count window.
         vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
         IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(strategy, escrow);
-        assertApproxEqAbs(
-            IMYTStrategy(strategy).realAssets(), valueBefore + (escrow * _nav()) / 1e18, 1e9, "double-count window"
-        );
+        assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), valueBefore + (escrow * _nav()) / 1e18, 1e9, "double-count window");
 
         vm.prank(address(0xBEEF));
         vm.expectEmit(true, true, true, true, strategy);
@@ -690,11 +688,25 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         vm.expectRevert("Exit pending");
         s.clearExit();
 
-        // Canceled: keeper or owner, nobody else.
+        // Canceled: keeper may clear only once the escrow is back. owner may clear regardless.
+        uint256 escrow = s.pendingExitMTokens();
         _rejectExit(id);
         vm.prank(address(0xCAFE));
         vm.expectRevert("Not keeper");
         s.clearExit();
+
+        vm.prank(address(0xBEEF));
+        vm.expectRevert("Escrow not returned");
+        s.clearExit();
+
+        vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(strategy, escrow - 1);
+        vm.prank(address(0xBEEF));
+        vm.expectRevert("Escrow not returned");
+        s.clearExit();
+
+        vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(strategy, 1);
         vm.prank(address(0xBEEF));
         s.clearExit();
 
@@ -707,6 +719,101 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         s.clearExit();
         vm.prank(admin);
         s.clearExit();
+
+        // Canceled with a short return: keeper blocked, owner may still write it off.
+        vm.prank(admin);
+        uint256 shortId = s.requestExit(0.2e18);
+        _rejectExit(shortId);
+        vm.prank(address(0xBEEF));
+        vm.expectRevert("Escrow not returned");
+        s.clearExit();
+        vm.prank(admin);
+        s.clearExit();
+    }
+
+    /// @dev Mints and burns between request and clear must not let the keeper clear early (allocate) or lock it out (deallocate).
+    /// @dev Once a cancelled escrow is back, the next allocate / deallocate / request clears the slot itself.
+    function test_exit_returnedEscrowSettlesOnOwnMoves() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _setupMidasAdmin();
+
+        // deallocate
+        _allocateDirect(2e18);
+        vm.prank(admin);
+        uint256 id = s.requestExit(0.5e18);
+        uint256 escrow = s.pendingExitMTokens();
+        _rejectExit(id);
+        vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(strategy, escrow);
+        uint256 trueValue = (IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(strategy) * _nav()) / 1e18;
+        assertGt(IMYTStrategy(strategy).realAssets(), trueValue, "double counted before settle");
+
+        vm.prank(vault);
+        vm.expectEmit(true, true, true, true, strategy);
+        emit Re7ETHMidasStrategy.ExitCleared(id, MidasRequestStatus.Canceled);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 0.3e18, "", address(vault));
+        assertEq(s.pendingExitId(), type(uint256).max, "deallocate should settle the slot");
+
+        // allocate
+        vm.prank(admin);
+        id = s.requestExit(0.5e18);
+        escrow = s.pendingExitMTokens();
+        _rejectExit(id);
+        vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(strategy, escrow);
+        vm.expectEmit(true, true, true, true, strategy);
+        emit Re7ETHMidasStrategy.ExitCleared(id, MidasRequestStatus.Canceled);
+        _allocateDirect(0.5e18);
+        assertEq(s.pendingExitId(), type(uint256).max, "allocate should settle the slot");
+
+        // requestExit
+        vm.prank(admin);
+        id = s.requestExit(0.5e18);
+        escrow = s.pendingExitMTokens();
+        _rejectExit(id);
+        vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(strategy, escrow);
+        vm.prank(admin);
+        uint256 newId = s.requestExit(0.2e18);
+        assertEq(s.pendingExitId(), newId, "request should settle the old slot and open a new one");
+
+        // Not settled while the escrow is still out.
+        _rejectExit(newId);
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 0.1e18, "", address(vault));
+        assertEq(s.pendingExitId(), newId, "unreturned escrow must not be settled");
+    }
+
+    function test_clearExit_keeperProofTracksOwnMoves() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _setupMidasAdmin();
+        _allocateDirect(2e18);
+        vm.prank(admin);
+        s.setKeeper(address(0xBEEF));
+
+        vm.prank(admin);
+        uint256 id = s.requestExit(0.5e18);
+        uint256 escrow = s.pendingExitMTokens();
+        _rejectExit(id);
+
+        // Allocating more than the escrow must not satisfy the proof.
+        _allocateDirect(1e18);
+        vm.prank(address(0xBEEF));
+        vm.expectRevert("Escrow not returned");
+        s.clearExit();
+
+        // Deallocating afterwards must not lock the keeper out once the escrow does return.
+        vm.prank(vault);
+        IMYTStrategy(strategy).deallocate(getVaultParams(), 0.7e18, "", address(vault));
+        vm.prank(address(0xBEEF));
+        vm.expectRevert("Escrow not returned");
+        s.clearExit();
+
+        vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
+        IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(strategy, escrow);
+        vm.prank(address(0xBEEF));
+        s.clearExit();
+        assertEq(s.pendingExitId(), type(uint256).max, "cleared");
     }
 
     function test_aggregatorRevert_holdsLastNavAndBlocksExecution() public {
@@ -1011,6 +1118,8 @@ contract Re7ETHMidasExitHandler is Test {
     uint256 public requests;
     uint256 public approvals;
     uint256 public rejections;
+    uint256 public keeperClears;
+    uint256 public ownerClears;
 
     constructor(address _strategy, address _owner, uint256 _nav) {
         strategy = Re7ETHMidasStrategy(_strategy);
@@ -1040,11 +1149,18 @@ contract Re7ETHMidasExitHandler is Test {
         if (seed % 4 == 0) {
             vm.prank(Re7ETHMidasAddresses.MIDAS_ADMIN);
             rv.rejectRequest(id);
-            // Midas returns cancelled escrow off-chain; mirror that, then clear as the
-            // keeper so the returned escrow is never double-counted.
+            // Midas returns cancelled escrow off-chain; mirror that, then clear as the keeper. If a simulated
+            // external loss has pushed the balance under the keeper's proof, fall back to the owner.
             vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
             IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(address(strategy), amount);
-            strategy.clearExit();
+            if (IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(address(strategy)) >= strategy.positionExEscrow() + amount) {
+                strategy.clearExit();
+                keeperClears++;
+            } else {
+                vm.prank(strategyOwner);
+                strategy.clearExit();
+                ownerClears++;
+            }
             rejections++;
         } else {
             vm.prank(Re7ETHMidasAddresses.MIDAS_ADMIN);
