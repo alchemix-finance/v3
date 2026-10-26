@@ -48,6 +48,8 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     uint256 internal constant BPS = 10_000;
     uint256 internal constant WAD = 1e18;
     uint256 internal constant NO_EXIT = type(uint256).max;
+    /// @dev Matches the Midas data feed's own 30 day health check.
+    uint256 public constant MAX_NAV_STALENESS = 30 days;
 
     address public immutable weth;
     address public immutable re7ETH;
@@ -83,6 +85,8 @@ contract Re7ETHMidasStrategy is MYTStrategy {
     /// @dev `mTokenPending` is what Midas escrowed, net of its request fee.
     event ExitRequested(uint256 indexed requestId, uint256 mTokenRequested, uint256 mTokenPending);
     event ExitCleared(uint256 indexed requestId, MidasRequestStatus status);
+    /// @dev Owner dropped a cancelled exit from valuation before its escrow came back.
+    event ExitWrittenOff(uint256 indexed requestId, uint256 amountMToken);
 
     modifier onlyKeeperOrOwner() {
         require(msg.sender == keeper || msg.sender == owner(), "Not keeper");
@@ -124,6 +128,7 @@ contract Re7ETHMidasStrategy is MYTStrategy {
 
     function setMaxNavStaleness(uint256 maxNavStaleness_) external onlyOwner {
         require(maxNavStaleness_ > 0, "Zero staleness");
+        require(maxNavStaleness_ <= MAX_NAV_STALENESS, "Staleness too high");
         maxNavStaleness = maxNavStaleness_;
         emit MaxNavStalenessUpdated(maxNavStaleness_);
     }
@@ -172,19 +177,30 @@ contract Re7ETHMidasStrategy is MYTStrategy {
         emit ExitRequested(requestId, mTokenIn, pending);
     }
 
-    /// @notice Free the exit slot. Owner may clear any settled request. the keeper may clear a cancelled one
-    ///         only once the escrow is back in the strategy.
+    /// @notice Free the exit slot. Owner clears a processed request. keeper or owner clears a cancelled one
+    ///         once the escrow is back in the strategy.
     function clearExit() external {
         uint256 id = pendingExitId;
         require(id != NO_EXIT, "No exit");
         (,, MidasRequestStatus status, uint256 amountMToken,,) = redemptionVault.redeemRequests(id);
         require(status != MidasRequestStatus.Pending, "Exit pending");
-        if (msg.sender != owner()) {
-            require(msg.sender == keeper, "Not keeper");
-            require(status == MidasRequestStatus.Canceled, "Not owner");
+        if (status == MidasRequestStatus.Canceled) {
+            require(msg.sender == keeper || msg.sender == owner(), "Not keeper");
             require(_escrowReturned(amountMToken), "Escrow not returned");
+        } else {
+            require(msg.sender == owner(), "Not owner");
         }
         _clearExit(id, status);
+    }
+
+    /// @notice Drop a cancelled exit whose escrow has not come back. Valuation falls by the escrowed amount.
+    function writeOffExit() external onlyOwner {
+        uint256 id = pendingExitId;
+        require(id != NO_EXIT, "No exit");
+        (,, MidasRequestStatus status, uint256 amountMToken,,) = redemptionVault.redeemRequests(id);
+        require(status == MidasRequestStatus.Canceled, "Not cancelled");
+        _clearExit(id, status);
+        emit ExitWrittenOff(id, amountMToken);
     }
 
     function _clearExit(uint256 id, MidasRequestStatus status) internal {

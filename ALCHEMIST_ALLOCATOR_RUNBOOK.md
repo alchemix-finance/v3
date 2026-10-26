@@ -404,7 +404,7 @@ Keeper notes:
 
 1. `requestExit(wethAmount)` queues a Midas redemption when instant liquidity is short. One request open at a time.
 2. Midas settles off-chain (~2 NAV updates) by sending `WETH` to the strategy. It lands as idle. a plain `deallocate()` then pulls it. Track with `pendingExitMTokens()`.
-3. If Midas rejects, the keeper bot should call `clearExit()` once the strategy's `Re7ETH` balance shows the escrow has returned. The contract refuses a keeper clear before then. a short or disputed return needs the owner.
+3. If Midas rejects, the keeper bot should call `clearExit()` once the strategy's `Re7ETH` balance shows the escrow has returned. The contract refuses any clear before then. a short or disputed return needs the owner's `writeOffExit()`.
 4. Call `pokeNav()` at least as often as Midas posts NAV so the deviation band is not crossed by accrued yield.
-5. Owner-only: `acceptNav`, `setMaxNavStaleness`, `setMaxNavDeviationBPS`, `setAggregator`, `setKeeper`, `clearExit`.
+5. Owner-only: `acceptNav`, `setMaxNavStaleness`, `setMaxNavDeviationBPS`, `setAggregator`, `setKeeper`, `writeOffExit`, `clearExit` on a processed request.
 

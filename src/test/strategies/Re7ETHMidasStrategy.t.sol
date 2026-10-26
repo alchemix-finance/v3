@@ -5,7 +5,7 @@ import "../BaseStrategyTest.sol";
 import {E2EInvariantStrategyTest} from "../base/E2EInvariantStrategyTest.sol";
 import {Re7ETHMidasStrategy, IMidasDataFeed, IMidasDepositVault, IMidasRedemptionVault, MidasRequestStatus} from "../../strategies/Re7ETHMidasStrategy.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
-import {Test} from "forge-std/Test.sol";
+import {Test, stdStorage, StdStorage} from "forge-std/Test.sol";
 import {IVaultV2} from "lib/vault-v2/src/interfaces/IVaultV2.sol";
 
 interface IAggregatorV3Tiny {
@@ -502,6 +502,11 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
 
         vm.expectRevert("Zero staleness");
         s.setMaxNavStaleness(0);
+        uint256 cap = s.MAX_NAV_STALENESS();
+        vm.expectRevert("Staleness too high");
+        s.setMaxNavStaleness(cap + 1);
+        s.setMaxNavStaleness(cap);
+        assertEq(s.maxNavStaleness(), 30 days, "cap should be accepted");
         vm.expectRevert("Invalid deviation");
         s.setMaxNavDeviationBPS(10_000);
         vm.stopPrank();
@@ -616,8 +621,9 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
 
         _rejectExit(id);
 
-        // Midas returns cancelled mTokens off-chain; keep valuing the receivable until the owner clears it.
-        assertGt(s.pendingExitMTokens(), 0, "cancelled escrow should still be counted");
+        // Midas returns cancelled mTokens off-chain; keep valuing the receivable until it is back or written off.
+        uint256 escrow = s.pendingExitMTokens();
+        assertGt(escrow, 0, "cancelled escrow should still be counted");
         assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), valueBefore, 1e9, "value should hold through rejection");
 
         vm.prank(admin);
@@ -628,17 +634,53 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         vm.expectRevert();
         s.clearExit();
 
+        // Owner cannot silently clear an unreturned escrow; the write-off is explicit.
         vm.prank(admin);
-        vm.expectEmit(true, true, true, true, strategy);
-        emit Re7ETHMidasStrategy.ExitCleared(id, MidasRequestStatus.Canceled);
+        vm.expectRevert("Escrow not returned");
         s.clearExit();
 
-        assertEq(s.pendingExitMTokens(), 0, "cleared escrow should not be counted");
+        vm.prank(admin);
+        vm.expectEmit(true, true, true, true, strategy);
+        emit Re7ETHMidasStrategy.ExitWrittenOff(id, escrow);
+        s.writeOffExit();
+
+        assertEq(s.pendingExitMTokens(), 0, "written-off escrow should not be counted");
         assertEq(s.pendingExitId(), type(uint256).max, "slot should be free");
+        assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), valueBefore - (escrow * _nav()) / 1e18, 1e9, "value drops by the escrow");
 
         vm.prank(admin);
         vm.expectRevert("No exit");
         s.clearExit();
+        vm.prank(admin);
+        vm.expectRevert("No exit");
+        s.writeOffExit();
+    }
+
+    function test_writeOffExit_onlyCancelledAndOwner() public {
+        Re7ETHMidasStrategy s = Re7ETHMidasStrategy(strategy);
+        _setupMidasAdmin();
+        _allocateDirect(1e18);
+
+        vm.startPrank(admin);
+        s.setKeeper(address(0xBEEF));
+        uint256 id = s.requestExit(0.5e18);
+        vm.expectRevert("Not cancelled");
+        s.writeOffExit();
+        vm.stopPrank();
+
+        _rejectExit(id);
+        vm.prank(address(0xBEEF));
+        vm.expectRevert();
+        s.writeOffExit();
+        vm.prank(admin);
+        s.writeOffExit();
+
+        vm.prank(admin);
+        uint256 settledId = s.requestExit(0.2e18);
+        _approveExit(settledId);
+        vm.prank(admin);
+        vm.expectRevert("Not cancelled");
+        s.writeOffExit();
     }
 
     /// @dev Regression: once Midas rejects a request and returns the escrow, the returned
@@ -688,7 +730,7 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         vm.expectRevert("Exit pending");
         s.clearExit();
 
-        // Canceled: keeper may clear only once the escrow is back. owner may clear regardless.
+        // Canceled: keeper or owner may clear only once the escrow is back.
         uint256 escrow = s.pendingExitMTokens();
         _rejectExit(id);
         vm.prank(address(0xCAFE));
@@ -720,7 +762,7 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         vm.prank(admin);
         s.clearExit();
 
-        // Canceled with a short return: keeper blocked, owner may still write it off.
+        // Canceled with a short return: nobody may clear, owner must write it off.
         vm.prank(admin);
         uint256 shortId = s.requestExit(0.2e18);
         _rejectExit(shortId);
@@ -728,7 +770,10 @@ contract Re7ETHMidasStrategyTest is BaseStrategyTest {
         vm.expectRevert("Escrow not returned");
         s.clearExit();
         vm.prank(admin);
+        vm.expectRevert("Escrow not returned");
         s.clearExit();
+        vm.prank(admin);
+        s.writeOffExit();
     }
 
     /// @dev Mints and burns between request and clear must not let the keeper clear early (allocate) or lock it out (deallocate).
@@ -1119,7 +1164,7 @@ contract Re7ETHMidasExitHandler is Test {
     uint256 public approvals;
     uint256 public rejections;
     uint256 public keeperClears;
-    uint256 public ownerClears;
+    uint256 public writeOffs;
 
     constructor(address _strategy, address _owner, uint256 _nav) {
         strategy = Re7ETHMidasStrategy(_strategy);
@@ -1150,7 +1195,7 @@ contract Re7ETHMidasExitHandler is Test {
             vm.prank(Re7ETHMidasAddresses.MIDAS_ADMIN);
             rv.rejectRequest(id);
             // Midas returns cancelled escrow off-chain; mirror that, then clear as the keeper. If a simulated
-            // external loss has pushed the balance under the keeper's proof, fall back to the owner.
+            // external loss has pushed the balance under the proof, the owner writes it off.
             vm.prank(Re7ETHMidasAddresses.REDEMPTION_VAULT);
             IERC20(Re7ETHMidasAddresses.RE7_ETH).transfer(address(strategy), amount);
             if (IERC20(Re7ETHMidasAddresses.RE7_ETH).balanceOf(address(strategy)) >= strategy.positionExEscrow() + amount) {
@@ -1158,8 +1203,8 @@ contract Re7ETHMidasExitHandler is Test {
                 keeperClears++;
             } else {
                 vm.prank(strategyOwner);
-                strategy.clearExit();
-                ownerClears++;
+                strategy.writeOffExit();
+                writeOffs++;
             }
             rejections++;
         } else {
@@ -1171,6 +1216,8 @@ contract Re7ETHMidasExitHandler is Test {
 }
 
 contract Re7ETHMidasInvariantTest is E2EInvariantStrategyTest {
+    using stdStorage for StdStorage;
+
     uint256 internal navSnapshot;
     Re7ETHMidasExitHandler internal exitHandler;
 
@@ -1262,10 +1309,9 @@ contract Re7ETHMidasInvariantTest is E2EInvariantStrategyTest {
         deal(Re7ETHMidasAddresses.WETH, Re7ETHMidasAddresses.REDEMPTION_VAULT, Re7ETHMidasAddresses.REDEMPTION_LIQUIDITY);
 
         // The strategy reads the aggregator directly, whose on-fork print has a fixed timestamp; the
-        // handler's raw warps would trip the 7-day staleness guard, so relax it for the fuzz campaign.
-        // The deviation guard stays active (the pinned print never moves).
-        vm.prank(admin);
-        Re7ETHMidasStrategy(strategy_).setMaxNavStaleness(36_500 days);
+        // handler's raw warps would trip the staleness guard, so disable it for the fuzz campaign by writing
+        // past the setter's cap. The deviation guard stays active (the pinned print never moves).
+        stdstore.target(strategy_).sig("maxNavStaleness()").checked_write(36_500 days);
 
         // Request settlement pulls WETH from Midas's `requestRedeemer` under the vault admin role.
         IMidasRedemptionVaultAdmin rv = IMidasRedemptionVaultAdmin(Re7ETHMidasAddresses.REDEMPTION_VAULT);
