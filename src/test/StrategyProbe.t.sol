@@ -42,12 +42,12 @@ contract ProbeStrategy {
         revertDeallocate = onDeallocate;
     }
 
-    function onAllocate(uint256 amount) external {
+    function onAllocate(uint256 amount) external virtual {
         require(!revertAllocate, "venue");
         realAssets += amount;
     }
 
-    function onDeallocate(uint256 amount) external {
+    function onDeallocate(uint256 amount) external virtual {
         require(!revertDeallocate, "venue");
         realAssets -= amount;
     }
@@ -104,6 +104,38 @@ contract ProbeAllocator {
         ProbeStrategy(adapter).onDeallocate(amount);
         token.move(adapter, vault, amount);
         ProbeVault(vault).book(ProbeStrategy(adapter).adapterId(), -int256(amount));
+    }
+}
+
+/// @dev Venue that, once armed, calls back into the probe from inside a leg.
+///      Stands in for third-party code running under a whitelisted poker.
+contract ReenteringStrategy is ProbeStrategy {
+    StrategyProbe public probe;
+    bytes public reenterCall;
+    bytes public lastRevert;
+
+    constructor(bytes32 id) ProbeStrategy(id) {}
+
+    function arm(StrategyProbe _probe, bytes calldata call) external {
+        probe = _probe;
+        reenterCall = call;
+    }
+
+    function onAllocate(uint256 amount) external override {
+        realAssets += amount;
+        _reenter();
+    }
+
+    function onDeallocate(uint256 amount) external override {
+        realAssets -= amount;
+        _reenter();
+    }
+
+    function _reenter() internal {
+        if (reenterCall.length == 0) return;
+        (bool ok, bytes memory ret) = address(probe).call(reenterCall);
+        require(!ok, "reentered");
+        lastRevert = ret;
     }
 }
 
@@ -420,5 +452,77 @@ contract StrategyProbeResetTest is Test {
 
         assertEq(probe.nextLeg(address(strat)), 4, "leg 4 still pending");
         assertEq(strat.realAssets(), LARGE, "deallocate rolled back with it");
+    }
+
+    // ---- reentrancy -----------------------------------------------------------
+
+    function _reenteringSetup() internal returns (ReenteringStrategy venue) {
+        venue = new ReenteringStrategy(keccak256("venue"));
+        vault.setAdapter(address(venue), true);
+        probe.setPoker(address(venue), true); // worst case: the venue is also a whitelisted poker
+    }
+
+    /// @dev Without the guard the inner call would run leg 2 before leg 1 has
+    ///      written heldInStrategy / nextLeg, and the outer leg would then
+    ///      overwrite them.
+    function test_runNextLeg_blocksReentrantLeg() public {
+        ReenteringStrategy venue = _reenteringSetup();
+        venue.arm(probe, abi.encodeCall(probe.runNextLeg, (address(venue))));
+
+        vm.prank(poker);
+        (uint8 leg,) = probe.runNextLeg(address(venue));
+
+        assertEq(leg, 1);
+        assertEq(bytes4(venue.lastRevert()), StrategyProbe.Reentrancy.selector);
+        assertEq(probe.nextLeg(address(venue)), 2, "exactly one leg ran");
+        (, uint256 held,,,,,) = probe.openLadders(address(venue));
+        assertEq(held, SMALL);
+    }
+
+    function test_runNextLeg_blocksReentrantLegOnOtherAdapter() public {
+        ReenteringStrategy venue = _reenteringSetup();
+        venue.arm(probe, abi.encodeCall(probe.runNextLeg, (address(strat))));
+
+        vm.prank(poker);
+        probe.runNextLeg(address(venue));
+
+        assertEq(bytes4(venue.lastRevert()), StrategyProbe.Reentrancy.selector);
+        assertEq(probe.nextLeg(address(strat)), 0, "other ladder never opened");
+    }
+
+    /// @dev `reset` calls the liquidity adapter; a reentering liquidity adapter
+    ///      must not be able to drive a leg while the reset is mid-flight.
+    function test_reset_blocksReentrantLeg() public {
+        ReenteringStrategy venue = _reenteringSetup();
+        // make the reentering venue the liquidity adapter, funded like liq
+        venue.setRealAssets(LIQ_START);
+        token.set(address(venue), LIQ_START);
+        vault.setLiquidityAdapter(address(venue));
+
+        _leg(); // raises SMALL from venue, allocates to strat
+        _leg(); // SMALL back to vault idle
+        strat.setRevert(true, false);
+        vm.expectRevert("venue");
+        _leg(); // stalled at 3, SMALL idle, idleRaised SMALL
+
+        venue.arm(probe, abi.encodeCall(probe.runNextLeg, (address(strat))));
+        probe.reset(address(strat));
+
+        assertEq(bytes4(venue.lastRevert()), StrategyProbe.Reentrancy.selector);
+        _assertCleared();
+        assertEq(venue.realAssets(), LIQ_START, "idle returned");
+    }
+
+    /// @dev The guard releases: the next honest call goes through.
+    function test_nonReentrant_releasesAfterCall() public {
+        ReenteringStrategy venue = _reenteringSetup();
+        venue.arm(probe, abi.encodeCall(probe.runNextLeg, (address(venue))));
+
+        vm.prank(poker);
+        probe.runNextLeg(address(venue));
+        vm.prank(poker);
+        (uint8 leg,) = probe.runNextLeg(address(venue));
+
+        assertEq(leg, 2);
     }
 }

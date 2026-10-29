@@ -117,6 +117,7 @@ contract StrategyProbe {
     address public owner;                          // the deployer, then the Safe after the two-step transfer
     address public pendingOwner;
     bool public paused;
+    bool private _entered;                         // reentrancy guard: venue code runs inside every leg
     mapping(address => bool) public pokers;        // whitelist, set by the owner
     mapping(address => bool) public ladderCompleted;     // adapter → ladder finished, probe locked out until the Safe resets
     mapping(address => Ladder) public openLadders;     // adapter → ladder in progress
@@ -171,10 +172,18 @@ contract StrategyProbe {
     error IdleUnavailable(uint256 needed, uint256 vaultIdle, address liquidityAdapter);
     error RealAssetsMismatch(uint8 leg, uint256 expected, int256 got);
     error RealAssetsLost(uint256 realAssetsAtOpen, uint256 realAssetsNow);
+    error Reentrancy();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
         _;
+    }
+
+    modifier nonReentrant() {
+        if (_entered) revert Reentrancy();
+        _entered = true;
+        _;
+        _entered = false;
     }
 
     modifier onlyPoker() {
@@ -248,7 +257,7 @@ contract StrategyProbe {
     /// @notice Re-arm the probe on `adapter`: returns the raised idle, then clears a
     ///         completed or stalled ladder. Anything still in the strategy stays there.
     ///         Atomic: if the return reverts nothing changes; retry or `forceReset`.
-    function reset(address adapter) external onlyOwner {
+    function reset(address adapter) external onlyOwner nonReentrant {
         Ladder memory l = _snapshot(adapter);
         uint256 returned = l.idleRaised > 0 ? _returnIdle(l.idleRaised) : 0;
         _reset(adapter, l, returned, false);
@@ -278,7 +287,7 @@ contract StrategyProbe {
     ///         after the fourth. `nextLeg(adapter)` says where it stands;
     ///         no call can execute any leg other than the next one. A leg
     ///         that reverts leaves the ladder where it was: retry later.
-    function runNextLeg(address adapter) external onlyPoker returns (uint8 leg, uint256 residual) {
+    function runNextLeg(address adapter) external onlyPoker nonReentrant returns (uint8 leg, uint256 residual) {
         Ladder storage l = openLadders[adapter];
         if (l.nextLeg == 0) _openLadder(adapter);
         leg = openLadders[adapter].nextLeg;
