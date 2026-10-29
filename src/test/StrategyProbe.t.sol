@@ -240,7 +240,7 @@ contract StrategyProbeResetTest is Test {
     ///      clamped to what is there and the event says so.
     function test_reset_clampsReturnToVaultIdle() public {
         uint16 bufferBps = 100;
-        probe.setAdapterOverrides(address(strat), 0, bufferBps);
+        probe.setAdapterOverrides(address(strat), uint16(TOL_BPS), bufferBps);
         uint256 leftInStrategy = SMALL * bufferBps / 10_000;
 
         _leg();
@@ -404,6 +404,45 @@ contract StrategyProbeResetTest is Test {
         vm.prank(poker);
         vm.expectRevert(StrategyProbe.NotOwner.selector);
         probe.forceReset(address(strat));
+    }
+
+    // ---- overrides: stored 0 is a real value, not "use default" --------------
+
+    function test_overrides_unsetUsesDefaults() public view {
+        assertEq(probe.toleranceBps(address(strat)), TOL_BPS);
+        assertEq(probe.exitBufferBps(address(strat)), 0);
+        (uint16 t, uint16 b, bool set) = probe.overrides(address(strat));
+        assertEq(t, 0);
+        assertEq(b, 0);
+        assertFalse(set);
+    }
+
+    function test_overrides_zeroIsHonored() public {
+        StrategyProbe p = new StrategyProbe(address(allocator), SMALL, LARGE, TOL_BPS, 50);
+        assertEq(p.exitBufferBps(address(strat)), 50, "default buffer");
+
+        p.setAdapterOverrides(address(strat), 0, 0);
+        assertEq(p.toleranceBps(address(strat)), 0);
+        assertEq(p.exitBufferBps(address(strat)), 0);
+
+        p.setAdapterOverrides(address(strat), uint16(TOL_BPS), 0);
+        assertEq(p.toleranceBps(address(strat)), TOL_BPS);
+        assertEq(p.exitBufferBps(address(strat)), 0, "zero buffer sticks, not the default 50");
+    }
+
+    function test_overrides_zeroExitBufferDeallocatesInFull() public {
+        StrategyProbe p = new StrategyProbe(address(allocator), SMALL, LARGE, TOL_BPS, 50);
+        p.setPoker(poker, true);
+        p.setAdapterOverrides(address(strat), uint16(TOL_BPS), 0);
+        allocator.setOperator(address(p), true);
+
+        vm.prank(poker);
+        p.runNextLeg(address(strat));
+        vm.prank(poker);
+        p.runNextLeg(address(strat));
+
+        assertEq(strat.realAssets(), 0, "no dust left behind");
+        assertEq(token.balanceOf(address(vault)), SMALL);
     }
 
     // ---- leg 4 shares the same return path -----------------------------------

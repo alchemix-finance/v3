@@ -99,8 +99,8 @@ contract StrategyProbe {
     uint256 public immutable EXIT_BUFFER_BPS;
 
     struct AdapterOverrides {
-        uint16 toleranceBps;         // 0 = TOLERANCE_BPS
-        uint16 exitBufferBps;      // 0 = EXIT_BUFFER_BPS
+        uint16 toleranceBps;
+        uint16 exitBufferBps;
         bool set;
     }
 
@@ -225,12 +225,12 @@ contract StrategyProbe {
 
     function toleranceBps(address adapter) public view returns (uint256) {
         AdapterOverrides memory t = overrides[adapter];
-        return (t.set && t.toleranceBps != 0) ? t.toleranceBps : TOLERANCE_BPS;
+        return t.set ? t.toleranceBps : TOLERANCE_BPS;
     }
 
     function exitBufferBps(address adapter) public view returns (uint256) {
         AdapterOverrides memory t = overrides[adapter];
-        return (t.set && t.exitBufferBps != 0) ? t.exitBufferBps : EXIT_BUFFER_BPS;
+        return t.set ? t.exitBufferBps : EXIT_BUFFER_BPS;
     }
 
     /// @notice Emergency stop: any poker may pause, only the owner may unpause.
