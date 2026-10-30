@@ -70,7 +70,9 @@ interface IERC20Lite {
  *         - legs run strictly in order 1 → 4; there is no way to skip one;
  *         - ONE ladder per strategy, ever: once leg 4 closes (or a ladder
  *           stalls) the probe refuses every further allocate / deallocate
- *           on that adapter until the owner (the Safe) calls `reset(adapter)`;
+ *           on that adapter until the owner (the Safe) calls `reset(adapter)`
+ *           (returns the raised idle, then clears) or `forceReset(adapter)`
+ *           (clears only, for when the return itself cannot go through);
  *         - the Safe keeps the kill switch: `setOperator(probe, false)`.
  *
  *         Direct-mechanism adapters only (Aave, Euler, Yearn, Morpho, Fluid,
@@ -97,8 +99,8 @@ contract StrategyProbe {
     uint256 public immutable EXIT_BUFFER_BPS;
 
     struct AdapterOverrides {
-        uint16 toleranceBps;         // 0 = TOLERANCE_BPS
-        uint16 exitBufferBps;      // 0 = EXIT_BUFFER_BPS
+        uint16 toleranceBps;
+        uint16 exitBufferBps;
         bool set;
     }
 
@@ -115,6 +117,7 @@ contract StrategyProbe {
     address public owner;                          // the deployer, then the Safe after the two-step transfer
     address public pendingOwner;
     bool public paused;
+    bool private _entered;                         // reentrancy guard: venue code runs inside every leg
     mapping(address => bool) public pokers;        // whitelist, set by the owner
     mapping(address => bool) public ladderCompleted;     // adapter → ladder finished, probe locked out until the Safe resets
     mapping(address => Ladder) public openLadders;     // adapter → ladder in progress
@@ -143,7 +146,21 @@ contract StrategyProbe {
         uint256 idleReturnedToLiquidityAdapter,
         uint256 realAssetsResidual  // adapter.realAssets() after − before the ladder (dust + accrual)
     );
-    event LadderReset(address indexed adapter, bool wasCompleted, uint8 atLeg, uint256 heldInStrategy, uint256 idleReturned);
+    event IdleReturned(
+        address indexed liquidityAdapter,
+        uint256 idleRaised,        // what the ladder raised from the liquidity adapter
+        uint256 returned,          // what went back: min(idleRaised, vault idle now)
+        int256 realAssetsDelta     // liquidity adapter realAssets after − before (reported, not judged)
+    );
+    event LadderReset(
+        address indexed adapter,
+        bool wasCompleted,
+        uint8 atLeg,
+        uint256 heldInStrategy,    // still in the strategy: vault money in a registered adapter
+        uint256 idleRaised,        // what the ladder raised from the liquidity adapter
+        uint256 idleReturned,      // what this call put back (0 on a forceReset)
+        bool forced
+    );
 
     error NotOwner();
     error NotPoker();
@@ -155,10 +172,18 @@ contract StrategyProbe {
     error IdleUnavailable(uint256 needed, uint256 vaultIdle, address liquidityAdapter);
     error RealAssetsMismatch(uint8 leg, uint256 expected, int256 got);
     error RealAssetsLost(uint256 realAssetsAtOpen, uint256 realAssetsNow);
+    error Reentrancy();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
         _;
+    }
+
+    modifier nonReentrant() {
+        if (_entered) revert Reentrancy();
+        _entered = true;
+        _;
+        _entered = false;
     }
 
     modifier onlyPoker() {
@@ -200,12 +225,12 @@ contract StrategyProbe {
 
     function toleranceBps(address adapter) public view returns (uint256) {
         AdapterOverrides memory t = overrides[adapter];
-        return (t.set && t.toleranceBps != 0) ? t.toleranceBps : TOLERANCE_BPS;
+        return t.set ? t.toleranceBps : TOLERANCE_BPS;
     }
 
     function exitBufferBps(address adapter) public view returns (uint256) {
         AdapterOverrides memory t = overrides[adapter];
-        return (t.set && t.exitBufferBps != 0) ? t.exitBufferBps : EXIT_BUFFER_BPS;
+        return t.set ? t.exitBufferBps : EXIT_BUFFER_BPS;
     }
 
     /// @notice Emergency stop: any poker may pause, only the owner may unpause.
@@ -229,24 +254,29 @@ contract StrategyProbe {
         emit OwnerUpdated(owner);
     }
 
-    /// @notice Re-arm the probe on `adapter`: clears the one-ladder lock after
-    ///         a completed run, or abandons a stalled ladder (e.g. a venue that
-    ///         will not release the small leg). Raised idle goes back to the
-    ///         liquidity adapter when the vault holds it; whatever is still
-    ///         allocated to the adapter stays there — vault money in a
-    ///         registered strategy.
-    function reset(address adapter) external onlyOwner {
-        Ladder memory l = openLadders[adapter];
-        bool wasDone = ladderCompleted[adapter];
-        if (l.nextLeg == 0 && !wasDone) revert NothingToReset(adapter);
-        uint256 returned;
-        if (l.idleRaised > 0) {
-            address liq = vault.liquidityAdapter();
-            uint256 idle = asset.balanceOf(address(vault));
-            returned = l.idleRaised < idle ? l.idleRaised : idle;
-            if (liq != address(0) && returned > 0) allocator.allocate(liq, returned);
-        }
-        emit LadderReset(adapter, wasDone, l.nextLeg, l.heldInStrategy, returned);
+    /// @notice Re-arm the probe on `adapter`: returns the raised idle, then clears a
+    ///         completed or stalled ladder. Anything still in the strategy stays there.
+    ///         Atomic: if the return reverts nothing changes; retry or `forceReset`.
+    function reset(address adapter) external onlyOwner nonReentrant {
+        Ladder memory l = _snapshot(adapter);
+        uint256 returned = l.idleRaised > 0 ? _returnIdle(l.idleRaised) : 0;
+        _reset(adapter, l, returned, false);
+    }
+
+    /// @notice `reset` without the idle return: no external calls, so it can only revert
+    ///         NothingToReset. The raised idle stays in the vault; see `LadderReset`.
+    function forceReset(address adapter) external onlyOwner {
+        Ladder memory l = _snapshot(adapter);
+        _reset(adapter, l, 0, true);
+    }
+
+    function _snapshot(address adapter) internal view returns (Ladder memory l) {
+        l = openLadders[adapter];
+        if (l.nextLeg == 0 && !ladderCompleted[adapter]) revert NothingToReset(adapter);
+    }
+
+    function _reset(address adapter, Ladder memory l, uint256 returned, bool forced) internal {
+        emit LadderReset(adapter, ladderCompleted[adapter], l.nextLeg, l.heldInStrategy, l.idleRaised, returned, forced);
         delete openLadders[adapter];
         ladderCompleted[adapter] = false;
     }
@@ -257,7 +287,7 @@ contract StrategyProbe {
     ///         after the fourth. `nextLeg(adapter)` says where it stands;
     ///         no call can execute any leg other than the next one. A leg
     ///         that reverts leaves the ladder where it was: retry later.
-    function runNextLeg(address adapter) external onlyPoker returns (uint8 leg, uint256 residual) {
+    function runNextLeg(address adapter) external onlyPoker nonReentrant returns (uint8 leg, uint256 residual) {
         Ladder storage l = openLadders[adapter];
         if (l.nextLeg == 0) _openLadder(adapter);
         leg = openLadders[adapter].nextLeg;
@@ -306,14 +336,8 @@ contract StrategyProbe {
         Ladder memory l = openLadders[adapter];
         bytes32 id = IMYTStrategyLite(adapter).adapterId();
         // return the idle raised from the liquidity adapter, bounded by what
-        // the vault holds now
-        // (the buffers may have left a little in the strategy)
-        uint256 returned;
-        if (l.idleRaised > 0) {
-            uint256 idle = asset.balanceOf(address(vault));
-            returned = l.idleRaised < idle ? l.idleRaised : idle;
-            if (returned > 0) allocator.allocate(vault.liquidityAdapter(), returned);
-        }
+        // the vault holds now (the buffers may have left a little in the strategy)
+        uint256 returned = l.idleRaised > 0 ? _returnIdle(l.idleRaised) : 0;
         // what the adapter physically holds now vs before leg 1. Atomic: only
         // share-rounding dust. Stepwise across blocks: dust plus the interest
         // the venue accrued meanwhile. Either way the vault must not have
@@ -364,5 +388,19 @@ contract StrategyProbe {
         if (liq == address(0) || liq == target) revert IdleUnavailable(needed, idle, liq);
         idleRaised = needed - idle;
         allocator.deallocate(liq, idleRaised);
+    }
+
+    /// @dev Mirror of `_raiseIdle`: return min(idleRaised, vault idle) to the liquidity
+    ///      adapter. Reported, never judged; returns 0 when there is no liquidity adapter.
+    function _returnIdle(uint256 idleRaised) internal returns (uint256 returned) {
+        address liq = vault.liquidityAdapter();
+        if (liq == address(0)) return 0;
+        uint256 idle = asset.balanceOf(address(vault));
+        returned = idleRaised < idle ? idleRaised : idle;
+        if (returned == 0) return 0;
+        uint256 realBefore = IMYTStrategyLite(liq).realAssets();
+        allocator.allocate(liq, returned);
+        int256 dReal = int256(IMYTStrategyLite(liq).realAssets()) - int256(realBefore);
+        emit IdleReturned(liq, idleRaised, returned, dReal);
     }
 }
