@@ -221,7 +221,9 @@ abstract contract E2EInvariantEnv is Test {
             protocolFeeReceiver: protocolFeeReceiver,
             liquidatorFee: 300,
             repaymentFee: 100,
-            myt: address(vault)
+            myt: address(vault),
+            debtReferenceToken: vault.asset(),
+            collateralPriceOracle: address(0)
         });
 
         proxyAlchemist =

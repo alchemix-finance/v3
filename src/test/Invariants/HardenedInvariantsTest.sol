@@ -772,6 +772,9 @@ contract HardenedInvariantHandler is Test {
     }
 }
 
+/// @dev VaultV2 caches assets in transient storage; separate handler calls must
+/// execute in separate transactions so yield and losses update its share price.
+/// forge-config: default.isolate = true
 contract HardenedInvariantsTest is InvariantsTest {
     uint256 internal constant DEPLOY_MIN_COLLATERALIZATION = 1_111_111_111_111_111_111;
     uint256 internal constant DEPLOY_COLLATERALIZATION_LOWER_BOUND = 1_052_631_578_950_000_000;
@@ -827,6 +830,55 @@ contract HardenedInvariantsTest is InvariantsTest {
         handlerSelectors[12] = handler.mine.selector;
 
         targetSelector(FuzzSelector({addr: address(handler), selectors: handlerSelectors}));
+
+        _warmUpCriticalPaths();
+    }
+
+    /// @dev Random call selection cannot guarantee an unhealthy position before
+    /// the coverage gate. Seed real economic paths, then fuzz the normal handlers.
+    function _warmUpCriticalPaths() internal {
+        handler.simulateYield(100);
+        handler.depositCollateral(1000e18, 0);
+        uint256 tokenId = _tokenId(targetSenders()[0]);
+        handler.borrowCollateral(alchemist.getMaxBorrowable(tokenId) * 999 / 1000, 0);
+        handler.repayDebtViaBurn(1e18, 0);
+        _assertWarmUpAccounting();
+
+        // Four existing 2% loss operations make this high-LTV position
+        // liquidatable while the protocol still has enough backing.
+        for (uint256 i; i < 4; ++i) handler.simulateValueLoss(200);
+        _assertWarmUpAccounting();
+        handler.triggerLiquidation(0);
+        assertGt(handler.ghostLiquidationSuccesses(), 0, "warm-up must execute a real liquidation");
+        _assertWarmUpAccounting();
+
+        handler.transmuterStake(10e18, 0);
+        handler.transmuterClaim(0);
+        handler.pokeAll();
+        _assertWarmUpAccounting();
+        assertGt(handler.ghostDeposits(), 0, "warm-up deposit skipped");
+        assertGt(handler.ghostBorrows(), 0, "warm-up borrow skipped");
+        assertGt(handler.ghostBurnRepays(), 0, "warm-up burn skipped");
+        assertGt(handler.ghostYieldEvents(), 0, "warm-up yield skipped");
+        assertGt(handler.ghostValueLossEvents(), 0, "warm-up loss skipped");
+        assertGt(handler.ghostStakes(), 0, "warm-up stake skipped");
+        assertGt(handler.ghostClaims(), 0, "warm-up claim skipped");
+        assertGt(handler.ghostPokeCalls(), 0, "warm-up poke skipped");
+        assertGt(vault.balanceOf(vault.performanceFeeRecipient()), 0, "warm-up must crystallize performance fees");
+    }
+
+    function _assertWarmUpAccounting() internal {
+        invariantStorageDebtConsistency();
+        invariantPerPositionSanity();
+        invariantMYTTokenAccounting();
+        invariantPokeIdempotent();
+        invariantSyntheticsBalance();
+        invariantNoOrphanedEarmarks();
+        invariantSharePriceNonZero();
+        invariantFeeRecipientSharesBounded();
+        invariantLiquidationAccounting();
+        invariantGhostMirrorsProtocolTotals();
+        invariantTransmuterLockedBoundedBySupply();
     }
 
     // this is just to rate-limit the state changing functions, we cannot realistically expect 100k liquidations in a row...

@@ -34,6 +34,9 @@ import {ITestYieldToken} from "../../interfaces/test/ITestYieldToken.sol";
 ///   - C5: Recovery works (net positive yield → no bad debt)
 ///   - C6: Synthetics balance (totalSyntheticsIssued >= transmuter.totalLocked)
 ///   - C7: cumulativeEarmarked <= totalDebt
+/// @dev VaultV2 caches assets in transient storage; separate handler calls must
+/// execute in separate transactions so yield and losses update its share price.
+/// forge-config: default.isolate = true
 contract CrucibleTest is InvariantsTest {
 
     // ═══════ Ghost tracking ═══════
@@ -57,6 +60,7 @@ contract CrucibleTest is InvariantsTest {
     bool public recoverySinceLastStress; // successful recovery checkpoint still current for C5
 
     uint256 public totalHandlerCalls;
+    uint256 internal pristineFixtureSnapshot;
 
     uint256 internal constant MAX_TEST_VALUE = 1e28;
     bytes4 internal constant ILLEGAL_STATE_SELECTOR = bytes4(keccak256("IllegalState()"));
@@ -83,12 +87,59 @@ contract CrucibleTest is InvariantsTest {
         selectors.push(this.recoverFromLoss.selector);
 
         super.setUp();
+        pristineFixtureSnapshot = vm.snapshotState();
+        _warmUpStressPaths();
     }
 
     // ═══════════════════════════════════════════════════════════════
     //  HELPERS (from HardenedInvariantsTest — duplicated here for
     //  standalone operation without inheriting that test suite)
     // ═══════════════════════════════════════════════════════════════
+
+    /// @dev Establish a real cascade before the random suffix: random deposits
+    /// can otherwise leave enough idle vault cash to insulate all positions from
+    /// the strategy-only losses used by this harness.
+    function _warmUpStressPaths() internal {
+        this.accrueYield(50);
+        this.depositCollateral(1000e18, 0);
+        this.depositCollateral(1000e18, 1);
+        address[] memory actors = targetSenders();
+        this.borrowCollateral(alchemist.getMaxBorrowable(_getTokenId(actors[0])) * 999 / 1000, 0);
+        this.borrowCollateral(alchemist.getMaxBorrowable(_getTokenId(actors[1])) * 999 / 1000, 1);
+        uint256 debtBeforeRepayment = alchemist.totalDebt();
+        this.repayDebt(1e18, 0);
+        assertLt(alchemist.totalDebt(), debtBeforeRepayment, "warm-up repay skipped");
+        _assertWarmUpAccounting();
+
+        this.realizeLargeValueLoss(800);
+        _assertWarmUpAccounting();
+        this.cascadeLiquidations();
+        assertGe(liquidationSuccesses, 2, "warm-up must liquidate both positions");
+        assertGt(cascadingLiquidationRounds, 0, "warm-up must execute a real cascade");
+        _assertWarmUpAccounting();
+
+        uint256 lockedBeforeStake = transmuterLogic.totalLocked();
+        this.transmuterStake(10e18, 0);
+        assertGt(transmuterLogic.totalLocked(), lockedBeforeStake, "warm-up stake skipped");
+        uint256 lockedBeforeClaim = transmuterLogic.totalLocked();
+        this.transmuterClaim(0);
+        assertLt(transmuterLogic.totalLocked(), lockedBeforeClaim, "warm-up claim skipped");
+        _assertWarmUpAccounting();
+        assertGt(yieldAccruals, 0, "warm-up yield skipped");
+        assertGt(totalLossRealized, 0, "warm-up loss skipped");
+        assertGt(vault.balanceOf(vault.performanceFeeRecipient()), 0, "warm-up must crystallize performance fees");
+    }
+
+    function _assertWarmUpAccounting() internal {
+        invariantDebtConsistency();
+        invariantSharePriceNonZero();
+        invariantFeeRecipientSharesBounded();
+        invariantBadDebtBounded();
+        invariantPostLiquidationHealth();
+        invariantRecoveryWorks();
+        invariantSyntheticsBalance();
+        invariantNoOrphanedEarmarks();
+    }
 
     /// @dev Returns first tokenId for `user`, or 0 if no position NFT.
     function _getTokenId(address user) internal view returns (uint256) {
@@ -629,6 +680,7 @@ contract CrucibleTest is InvariantsTest {
     // ═══════════════════════════════════════════════════════════════
 
     function test_Regression_LiquidationClamp_PreventsUnderflow() public {
+        assertTrue(vm.revertToState(pristineFixtureSnapshot));
         this.depositCollateral(2005632228859, 32050235932314973874844605524603652259934571675798953);
         this.transmuterClaimDuringBadDebt(
             115792089237316195423570985008687907853269984665640564039457584007913129639932,
@@ -644,6 +696,7 @@ contract CrucibleTest is InvariantsTest {
     }
 
     function test_Regression_BadDebtClaimLossCollateralDriftWithinTolerance() public {
+        assertTrue(vm.revertToState(pristineFixtureSnapshot));
         this.depositCollateral(52442825112839348585061025984960103989962694978198461973028259411208, 3);
         this.transmuterClaimDuringBadDebt(3468, 4387425010760926899844490068);
         this.depositCollateral(8052470305035150090755704148969369914834259484690729, 200);
@@ -656,6 +709,7 @@ contract CrucibleTest is InvariantsTest {
     }
 
     function test_Regression_RecoveryInvariant_IgnoresStaleRecoveryAfterLaterStress() public {
+        assertTrue(vm.revertToState(pristineFixtureSnapshot));
         this.depositCollateral(2372, 1e24);
         this.realizeLargeValueLoss(5_184_000);
         this.transmuterClaimDuringBadDebt(16032393237489252879, 12080589133847099991);

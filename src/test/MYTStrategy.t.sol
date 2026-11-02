@@ -188,7 +188,9 @@ contract MYTStrategyTest is Test {
             protocolFeeReceiver: protocolFeeReceiver,
             liquidatorFee: liquidatorFeeBPS,
             repaymentFee: 100,
-            myt: address(vault)
+            myt: address(vault),
+            debtReferenceToken: address(vault.asset()),
+            collateralPriceOracle: address(0)
         });
 
         bytes memory alchemParams = abi.encodeWithSelector(AlchemistV3.initialize.selector, params);

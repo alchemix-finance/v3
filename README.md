@@ -207,6 +207,59 @@ The release should include the following:
 - Deployment information (can be copied from the generated log files)
   - Addresses of the deployed contracts
 
+## Non-like-kind collateral
+
+See the [unlike-kind borrowing specification](NON_LIKE_KIND_BORROWING_SPEC.md) for behavior, accounting, configuration, and validation details.
+
+An Alchemist/Transmuter pair can value its MYT underlying in a different debt reference
+asset. For an ETH-MYT/alUSD pair, `params.underlyingToken` is WETH,
+`params.debtToken` is alUSD, and `params.debtReferenceToken` is USDC. Each pair still accepts
+one MYT. Transmuter claims pay that MYT at its current reference-asset value;
+there is no swap into USDC.
+
+Deploy `ChainlinkCollateralPriceOracle` with collateral/reference token metadata
+and either a direct collateral/reference feed, or two feeds with a common quote.
+For example, ETH/USD divided by USDC/USD gives ETH/USDC and reflects USDC depegs.
+Each feed has an independent maximum age. Configure the sequencer feed and
+recovery grace period for supported L2 deployments. Feed addresses, denominations,
+heartbeats, and tokenized-stock issuer units must be selected for the actual pair.
+
+Initialize the new proxy atomically using:
+
+```solidity
+params.debtReferenceToken = address(usdc);
+params.collateralPriceOracle = address(collateralOracle);
+bytes memory initialization = abi.encodeCall(AlchemistV3.initialize, (params));
+```
+
+`initialize(params)` is the only initializer. Its parameter struct includes the
+explicit debt reference and collateral price oracle; there is no default reference.
+For like-kind parity pricing, set `params.debtReferenceToken` to
+`params.underlyingToken` and `params.collateralPriceOracle` to `address(0)`.
+Unlike-asset pairs require a nonzero oracle matching the underlying and reference.
+The reference is fixed for the life of the instance. Admins may replace the oracle
+with one for the same pair; unlike-asset pairs cannot disable it. This initialization
+ABI targets new deployments; no proxy migration is part of this feature.
+
+Oracle prices are whole reference tokens per whole collateral underlying, scaled
+by `1e18`. Debt decimals must be at least collateral decimals, with a difference
+of at most 18 for oracle pricing. MYT/underlying conversions keep their existing
+units. Collateral valuations and redemption payouts round down; oracle-priced
+collateral collected for fixed debt repayment and collateral locks round up.
+
+Invalid, stale, or unavailable oracle data reverts dependent operations, including
+some deposit and debt-burn paths. Stock feeds that stop publishing outside market
+hours require an explicit feed/freshness policy. This branch retains the 3.1
+collateral averaging implementation; collateral-index accounting remains a
+separate feature branch.
+
+Local feature checks:
+
+```sh
+forge test --contracts src/test/ChainlinkCollateralPriceOracle.t.sol --match-path src/test/ChainlinkCollateralPriceOracle.t.sol
+forge test --contracts src/test/AlchemistV3NonLikeKind.t.sol --match-path src/test/AlchemistV3NonLikeKind.t.sol
+```
+
 ## Docs
 
 The documentation and architecture diagrams for the contracts within this repo can be found [here](docs/).

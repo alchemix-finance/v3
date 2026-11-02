@@ -42,6 +42,10 @@ contract MockAlchemist {
         return amount * FIXED_POINT_SCALAR / (2 * FIXED_POINT_SCALAR);
     }
 
+    function normalizeUnderlyingTokensToDebt(uint256 amount) external pure returns (uint256) {
+        return amount;
+    }
+
     function convertYieldTokensToDebt(uint256 amount) public pure returns (uint256) {
         return (amount * 2 * FIXED_POINT_SCALAR) / FIXED_POINT_SCALAR;
     }

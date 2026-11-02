@@ -232,7 +232,9 @@ contract AlchemistV3PerformanceFeeTest is Test {
             protocolFeeReceiver: protocolFeeReceiver,
             liquidatorFee: liquidatorFeeBPS,
             repaymentFee: repaymentFeeBPS,
-            myt: address(vault)
+            myt: address(vault),
+            debtReferenceToken: address(vault.asset()),
+            collateralPriceOracle: address(0)
         });
 
         bytes memory init = abi.encodeWithSelector(AlchemistV3.initialize.selector, params);

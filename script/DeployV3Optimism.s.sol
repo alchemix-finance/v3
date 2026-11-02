@@ -268,7 +268,9 @@ contract DeployV3OptimismScript is Script {
             protocolFeeReceiver: protocolFeeReceiver,
             liquidatorFee: 150, // 1.5% = 150 BPS
             repaymentFee: 0,
-            myt: vault
+            myt: vault,
+            debtReferenceToken: underlying,
+            collateralPriceOracle: address(0)
         });
 
         bytes memory alchemParams = abi.encodeWithSelector(AlchemistV3.initialize.selector, params);

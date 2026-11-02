@@ -105,7 +105,9 @@ contract DeployV3BaseScript is Script {
             protocolFeeReceiver: protocolFeeReceiver,
             liquidatorFee: 150,
             repaymentFee: 0,
-            myt: vault
+            myt: vault,
+            debtReferenceToken: underlying,
+            collateralPriceOracle: address(0)
 
         });
 

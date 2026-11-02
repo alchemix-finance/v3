@@ -27,7 +27,7 @@ contract Transmuter is ITransmuter, ERC721Enumerable {
     int256 public constant BLOCK_SCALING_FACTOR = 1e8;
     
     /// @inheritdoc ITransmuter
-    string public constant version = "3.0.0";
+    string public constant version = "3.1.0";
 
     /// @inheritdoc ITransmuter
     uint256 public depositCap;
@@ -229,23 +229,21 @@ contract Transmuter is ITransmuter, ERC721Enumerable {
         // Burn position NFT
         _burn(id);
         
-        // Ratio of total synthetics issued by the alchemist / underlingying value of collateral stored in the alchemist
-        // If the system experiences bad debt we use this ratio to scale back the value of yield tokens that are transmuted
+        // Compare issued synthetics with backing in the same debt denomination.
+        // Collateral underlying can be a different asset from the synthetic's reference token.
         address myt = alchemist.myt();
         uint256 yieldTokenBalance = TokenUtils.safeBalanceOf(myt, address(this));
 
-        // Avoid divide by 0
         uint256 backingUnderlying = alchemist.getTotalLockedUnderlyingValue() + alchemist.convertYieldTokensToUnderlying(yieldTokenBalance);
-        uint256 denominator = backingUnderlying > 0 ? backingUnderlying : 1;
+        uint256 backingDebt = alchemist.normalizeUnderlyingTokensToDebt(backingUnderlying);
+        uint256 scaledTransmuted;
 
-        // Round up so badDebtRatio is never understated.
-        // Understating badDebtRatio makes scaledTransmuted slightly too large, which can cause alchemist.redeem(amountToRedeem) to revert due to share rounding.
-        uint256 badDebtRatio = FixedPointMath.mulDivUp(alchemist.totalSyntheticsIssued(), 10 ** TokenUtils.expectDecimals(alchemist.underlyingToken()), denominator);
-
-        uint256 scaledTransmuted = amountTransmuted;
-
-        if (badDebtRatio > 1e18) {
-            scaledTransmuted = amountTransmuted * FIXED_POINT_SCALAR / badDebtRatio;
+        if (backingDebt != 0) {
+            // Round up so the insolvency ratio cannot overstate the available payout.
+            uint256 badDebtRatio = FixedPointMath.mulDivUp(alchemist.totalSyntheticsIssued(), FIXED_POINT_SCALAR, backingDebt);
+            scaledTransmuted = badDebtRatio > FIXED_POINT_SCALAR
+                ? FixedPointMath.mulDiv(amountTransmuted, FIXED_POINT_SCALAR, badDebtRatio)
+                : amountTransmuted;
         }
 
         // If the contract has a balance of yield tokens from alchemist repayments then we only need to redeem partial or none from Alchemist earmarked

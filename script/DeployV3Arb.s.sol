@@ -330,7 +330,9 @@ contract DeployV3ArbScript is Script {
             protocolFeeReceiver: protocolFeeReceiver,
             liquidatorFee: 150,
             repaymentFee: 0,
-            myt: vault
+            myt: vault,
+            debtReferenceToken: underlying,
+            collateralPriceOracle: address(0)
         });
 
         bytes memory alchemParams = abi.encodeWithSelector(AlchemistV3.initialize.selector, params);

@@ -170,7 +170,9 @@ contract IntegrationTest is Test {
             protocolFeeReceiver: receiver,
             liquidatorFee: 300, // in bps? 3%
             repaymentFee: 100,
-            myt: address(vault)
+            myt: address(vault),
+            debtReferenceToken: USDC,
+            collateralPriceOracle: address(0)
         });
 
         bytes memory alchemParams = abi.encodeWithSelector(AlchemistV3.initialize.selector, params);

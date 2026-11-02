@@ -31,6 +31,10 @@ struct AlchemistInitializationParams {
     uint256 repaymentFee;
     // The address of the morpho v2 vault.
     address myt;
+    // The token defining one unit of synthetic debt. Must be nonzero.
+    address debtReferenceToken;
+    // The underlying/reference price oracle. Zero requires the reference to equal the underlying.
+    address collateralPriceOracle;
 }
 
 /// @notice A user account.
@@ -75,6 +79,13 @@ struct RedemptionInfo {
 }
 
 interface IAlchemistV3Actions {
+    /// @notice Initializes a new like-kind or oracle-priced pair, atomically with proxy deployment.
+    /// @param params Initialization parameters; underlyingToken remains the MYT asset.
+    /// @dev debtReferenceToken must be nonzero. A zero oracle requires it to equal underlyingToken.
+    /// A configured oracle must price underlyingToken in debtReferenceToken units.
+    /// Collateral decimals must not exceed debt decimals; oracle pricing limits their difference to 18.
+    function initialize(AlchemistInitializationParams calldata params) external;
+
     /// @notice Approve `spender` to mint `amount` debt tokens.
     ///
     /// @param tokenId The tokenId of account granting approval.
@@ -309,6 +320,10 @@ interface IAlchemistV3Actions {
 }
 
 interface IAlchemistV3AdminActions {
+    /// @notice Replaces the collateral oracle without changing the pair's asset denomination.
+    /// @dev Only the admin may call this. Unlike-asset pairs cannot disable their oracle.
+    function setCollateralPriceOracle(address value) external;
+
     /// @notice Sets the pending administrator.
     ///
     /// @notice `msg.sender` must be the admin or this call will will revert with an {Unauthorized} error.
@@ -469,6 +484,9 @@ interface IAlchemistV3Events {
     ///
     /// @param alchemistFeeVault The address of the alchemist Fee vault.
     event AlchemistFeeVaultUpdated(address alchemistFeeVault);
+
+    /// @notice Emitted when the collateral valuation oracle is updated.
+    event CollateralPriceOracleUpdated(address oracle);
 
     /// @notice Emitted when the administrator is updated.
     ///
@@ -699,7 +717,14 @@ interface IAlchemistV3State {
 
     function repaymentFee() external view returns (uint256 fee);
 
+    /// @notice Decimal scaling only; market value additionally depends on the collateral oracle.
     function underlyingConversionFactor() external view returns (uint256 factor);
+
+    /// @notice The asset defining one unit of debt, such as USDC for alUSD.
+    function debtReferenceToken() external view returns (address token);
+
+    /// @notice Oracle pricing the MYT underlying in the debt reference token, or zero for like-kind parity.
+    function collateralPriceOracle() external view returns (address oracle);
 
     function protocolFeeReceiver() external view returns (address receiver);
 
@@ -794,7 +819,7 @@ interface IAlchemistV3State {
     /// @return grossCollateralToSeize  Total collateral to take (fee + net)
     /// @return debtToBurn              Amount of debt to erase (sent to protocol)
     /// @return fee                     Amount of collateral paid to liquidator
-    /// @return outsourcedFee           Amount of fee paid to liquidator in underlying tokens in the event that account funds are insufficient to cover the fee
+    /// @return outsourcedFee           Debt value of the fee paid from the underlying fee vault when account collateral cannot cover it
     function calculateLiquidation(
         uint256 collateral,
         uint256 debt,
@@ -804,14 +829,14 @@ interface IAlchemistV3State {
         uint256 feeBps
     ) external view returns (uint256 grossCollateralToSeize, uint256 debtToBurn, uint256 fee, uint256 outsourcedFee);
 
-    /// @dev Normalizes underlying tokens to debt tokens.
-    /// @notice This is to handle decimal conversion in the case where underlying tokens have < 18 decimals.
+    /// @dev Values underlying tokens in debt units, rounding down.
+    /// @notice Applies decimal scaling and, when configured, the current collateral oracle price.
     ///
     /// @param amount   The amount to convert.
     function normalizeUnderlyingTokensToDebt(uint256 amount) external view returns (uint256);
 
-    /// @dev Normalizes debt tokens to underlying tokens.
-    /// @notice This is to handle decimal conversion in the case where underlying tokens have < 18 decimals.
+    /// @dev Converts debt value to underlying tokens, rounding down.
+    /// @notice Applies decimal scaling and, when configured, the current collateral oracle price.
     ///
     /// @param amount   The amount to convert.
     function normalizeDebtTokensToUnderlying(uint256 amount) external view returns (uint256);
@@ -825,11 +850,11 @@ interface IAlchemistV3State {
     /// @return earmarked   Current debt that is earmarked for redemption.
     function getCDP(uint256 tokenId) external view returns (uint256 collateral, uint256 debt, uint256 earmarked);
 
-    /// @dev Gets total value of account managed by `tokenId` in units of underlying tokens.
+    /// @dev Gets collateral value of the account managed by `tokenId` in debt-token units.
     ///
     /// @param tokenId    tokenId of the account to query.
     ///
-    /// @return value   Underlying value of the account.
+    /// @return value   Debt-denominated collateral value of the account.
     function totalValue(uint256 tokenId) external view returns (uint256 value);
 
     /// @dev Gets total value deposited in the alchemist

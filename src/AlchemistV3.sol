@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import "./interfaces/IAlchemistV3.sol";
 import {ITransmuter} from "./interfaces/ITransmuter.sol";
+import {ICollateralPriceOracle} from "./interfaces/ICollateralPriceOracle.sol";
 import {IAlchemistV3Position} from "./interfaces/IAlchemistV3Position.sol";
 import {IFeeVault} from "./interfaces/IFeeVault.sol";
 import {TokenUtils} from "./libraries/TokenUtils.sol";
@@ -24,7 +25,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     uint256 public constant ONE_Q128 = uint256(1) << 128;
 
     /// @inheritdoc IAlchemistV3Immutables
-    string public constant version = "3.0.0";
+    string public constant version = "3.1.0";
 
     /// @inheritdoc IAlchemistV3State
     address public admin;
@@ -144,6 +145,12 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     /// @dev Fixed debt credit for cover which was spent before being applied in `_earmark()`.
     uint256 private _settledCoverDebt;
 
+    /// @inheritdoc IAlchemistV3State
+    address public debtReferenceToken;
+
+    /// @inheritdoc IAlchemistV3State
+    address public collateralPriceOracle;
+
     uint256 private constant _REDEMPTION_INDEX_BITS = 129;
     uint256 private constant _REDEMPTION_INDEX_MASK = (uint256(1) << _REDEMPTION_INDEX_BITS) - 1;
     uint256 private constant _REDEMPTION_SCALE_SHIFT = _REDEMPTION_INDEX_BITS + 64;
@@ -168,7 +175,9 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
     constructor() initializer {}
 
+    /// @inheritdoc IAlchemistV3Actions
     function initialize(AlchemistInitializationParams calldata params) external initializer {
+        _checkArgument(params.debtReferenceToken != address(0));
         _checkArgument(params.protocolFee <= BPS);
         _checkArgument(params.liquidatorFee <= BPS);
         _checkArgument(params.repaymentFee <= BPS);
@@ -191,6 +200,8 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         lastEarmarkBlock = block.number;
         lastRedemptionBlock = block.number;
         myt = params.myt;
+        debtReferenceToken = params.debtReferenceToken;
+        _setCollateralPriceOracle(params.collateralPriceOracle);
 
         // Initialize packed weights at full survival.
         _redemptionWeight = ONE_Q128;
@@ -199,6 +210,11 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         // Initialize epoch checkpoints.
         _earmarkEpochStartRedemptionWeight[0] = _redemptionWeight;
         _earmarkEpochStartSurvivalAccumulator[0] = _survivalAccumulator;
+    }
+
+    /// @inheritdoc IAlchemistV3AdminActions
+    function setCollateralPriceOracle(address value) external onlyAdmin {
+        _setCollateralPriceOracle(value);
     }
 
     /// @notice Sets the NFT position token, callable by admin.
@@ -377,8 +393,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
         uint256 lockedCollateral;
         if (debt != 0) {
-            uint256 debtShares = convertDebtTokensToYield(debt);
-            lockedCollateral = FixedPointMath.mulDivUp(debtShares, minimumCollateralization, FIXED_POINT_SCALAR);
+            lockedCollateral = _requiredCollateralForDebt(debt);
         }
 
         uint256 positionFree = collateral > lockedCollateral ? collateral - lockedCollateral : 0;
@@ -459,8 +474,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             _accounts[tokenId].collateralBalance = _mytSharesDeposited;
         }
 
-        uint256 debtShares = convertDebtTokensToYield(_accounts[tokenId].debt);
-        uint256 lockedCollateral = FixedPointMath.mulDivUp(debtShares, minimumCollateralization, FIXED_POINT_SCALAR);
+        uint256 lockedCollateral = _requiredCollateralForDebt(_accounts[tokenId].debt);
         _checkArgument(_accounts[tokenId].collateralBalance - lockedCollateral >= amount);
         uint256 transferred = _subCollateralBalance(amount, tokenId);
 
@@ -581,7 +595,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         uint256 earmarkedRepaid = _subEarmarkedDebt(credit, recipientTokenId);
 
 
-        uint256 creditToYield = convertDebtTokensToYield(credit);
+        uint256 creditToYield = _convertDebtTokensToYieldUp(credit);
         uint256 earmarkedRepaidToYield = convertDebtTokensToYield(earmarkedRepaid);
 
 
@@ -675,14 +689,6 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             uint256 oldScale  = _redScale(packedOld);
             uint256 oldIndex  = _redIndex(packedOld);
 
-            // Normalize uninitialized / zero index
-            if (packedOld == 0) {
-                oldIndex = ONE_Q128;
-            }
-            if (oldIndex == 0) {
-                oldEpoch += 1;
-                oldIndex = ONE_Q128;
-            }
             (oldIndex, oldScale) = _normalizeRedemptionIndex(oldIndex, oldScale);
 
             // Compute new packed
@@ -771,7 +777,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         _subDebt(accountId, debt);
 
         // Remove the collateral that backed the remaining debt.
-        uint256 repaidDebtInYield = _subCollateralBalance(convertDebtTokensToYield(debt), accountId);
+        uint256 repaidDebtInYield = _subCollateralBalance(_convertDebtTokensToYieldUp(debt), accountId);
 
         // Sweep any residual collateral out of the account.
         uint256 remainingCollateral = _subCollateralBalance(account.collateralBalance, accountId);
@@ -924,12 +930,33 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
 
     /// @inheritdoc IAlchemistV3State
     function normalizeUnderlyingTokensToDebt(uint256 amount) public view returns (uint256) {
-        return amount * underlyingConversionFactor;
+        if (collateralPriceOracle == address(0)) return amount * underlyingConversionFactor;
+        if (amount == 0) return 0;
+        return FixedPointMath.mulDiv(amount, _collateralPrice(), FIXED_POINT_SCALAR / underlyingConversionFactor);
     }
 
     /// @inheritdoc IAlchemistV3State
     function normalizeDebtTokensToUnderlying(uint256 amount) public view returns (uint256) {
-        return amount / underlyingConversionFactor;
+        if (collateralPriceOracle == address(0)) return amount / underlyingConversionFactor;
+        if (amount == 0) return 0;
+        return FixedPointMath.mulDiv(amount, FIXED_POINT_SCALAR / underlyingConversionFactor, _collateralPrice());
+    }
+
+    /// @dev Oracle adapters enforce freshness. Also reject zero from any configured adapter.
+    function _collateralPrice() internal view returns (uint256 price) {
+        price = ICollateralPriceOracle(collateralPriceOracle).price();
+        _checkState(price != 0);
+    }
+
+    /// @dev Oracle-priced debt requires enough collateral to cover the full debt amount.
+    /// Legacy like-kind pairs retain their existing rounding. Outward payouts still round down.
+    function _convertDebtTokensToYieldUp(uint256 amount) internal view returns (uint256) {
+        if (collateralPriceOracle == address(0)) return convertDebtTokensToYield(amount);
+        if (amount == 0) return 0;
+        uint256 assets = FixedPointMath.mulDivUp(
+            amount, FIXED_POINT_SCALAR / underlyingConversionFactor, _collateralPrice()
+        );
+        return IVaultV2(myt).previewWithdraw(assets);
     }
 
     /// @dev Mints debt tokens to `recipient` using the account owned by `tokenId`.
@@ -982,7 +1009,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         _subDebt(accountId, credit);
         
         // Remove the collateral that backs the retired debt.
-        uint256 creditToYield = _subCollateralBalance(convertDebtTokensToYield(credit), accountId);
+        uint256 creditToYield = _subCollateralBalance(_convertDebtTokensToYieldUp(credit), accountId);
 
         // Collect as much protocol fee as the remaining collateral can support.
         uint256 targetProtocolFee = creditToYield * protocolFee / BPS;
@@ -1146,8 +1173,8 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         if (_accounts[accountId].debt == 0) {
             return true;
         }
-        uint256 collateralInUnderlying = _totalCollateralValue(accountId, refresh);
-        uint256 collateralizationRatio = collateralInUnderlying * FIXED_POINT_SCALAR / _accounts[accountId].debt;
+        uint256 collateralInDebt = _totalCollateralValue(accountId, refresh);
+        uint256 collateralizationRatio = collateralInDebt * FIXED_POINT_SCALAR / _accounts[accountId].debt;
         return collateralizationRatio > collateralizationLowerBound;
     }
 
@@ -1162,9 +1189,9 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     {
         Account storage account = _accounts[accountId];
         uint256 debt = account.debt;
-        uint256 collateralInUnderlying = totalValue(accountId);
+        uint256 collateralInDebt = totalValue(accountId);
         (uint256 liquidationAmount, uint256 debtToBurn, uint256 baseFee, uint256 outsourcedFee) = calculateLiquidation(
-            collateralInUnderlying,
+            collateralInDebt,
             debt,
             liquidationTargetCollateralization,
             normalizeUnderlyingTokensToDebt(_getTotalUnderlyingValue()) * FIXED_POINT_SCALAR / totalDebt,
@@ -1319,6 +1346,22 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         if (cumulativeEarmarked > totalDebt) {
             cumulativeEarmarked = totalDebt;
         }
+    }
+
+    /// @dev Oracle replacements must preserve the pair's collateral and debt denomination.
+    function _setCollateralPriceOracle(address value) internal {
+        if (value == address(0)) {
+            _checkArgument(underlyingToken == debtReferenceToken);
+        } else {
+            _checkArgument(underlyingConversionFactor <= FIXED_POINT_SCALAR);
+            _checkArgument(IVaultV2(myt).asset() == underlyingToken);
+            ICollateralPriceOracle oracle = ICollateralPriceOracle(value);
+            _checkArgument(oracle.baseToken() == underlyingToken);
+            _checkArgument(oracle.quoteToken() == debtReferenceToken);
+            _checkArgument(oracle.price() > 0);
+        }
+        collateralPriceOracle = value;
+        emit CollateralPriceOracleUpdated(value);
     }
 
     /// @dev Caps a debt-denominated credit against account debt and global debt.
@@ -1554,26 +1597,21 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             uint256 boundaryRedemptionWeight = _earmarkEpochStartRedemptionWeight[boundaryEpoch];
             uint256 boundarySurvivalAccumulator = _earmarkEpochStartSurvivalAccumulator[boundaryEpoch];
 
-            if (boundaryRedemptionWeight != 0) {
-                uint256 preBoundarySurvival =
-                    _redemptionSurvivalRatio(account.lastAccruedRedemptionWeight, boundaryRedemptionWeight);
-                uint256 decayedAtBoundary = FixedPointMath.mulQ128(account.lastSurvivalAccumulator, preBoundarySurvival);
+            uint256 preBoundarySurvival =
+                _redemptionSurvivalRatio(account.lastAccruedRedemptionWeight, boundaryRedemptionWeight);
+            uint256 decayedAtBoundary = FixedPointMath.mulQ128(account.lastSurvivalAccumulator, preBoundarySurvival);
 
-                uint256 boundaryDiff =
-                    boundarySurvivalAccumulator > decayedAtBoundary ? boundarySurvivalAccumulator - decayedAtBoundary : 0;
-                if (boundaryDiff > earmarkSurvival) boundaryDiff = earmarkSurvival;
+            uint256 boundaryDiff =
+                boundarySurvivalAccumulator > decayedAtBoundary ? boundarySurvivalAccumulator - decayedAtBoundary : 0;
+            if (boundaryDiff > earmarkSurvival) boundaryDiff = earmarkSurvival;
 
-                uint256 unredeemedAtBoundaryRatio = FixedPointMath.divQ128(boundaryDiff, earmarkSurvival);
-                uint256 unredeemedAtBoundary = FixedPointMath.mulQ128(userExposure, unredeemedAtBoundaryRatio);
+            uint256 unredeemedAtBoundaryRatio = FixedPointMath.divQ128(boundaryDiff, earmarkSurvival);
+            uint256 unredeemedAtBoundary = FixedPointMath.mulQ128(userExposure, unredeemedAtBoundaryRatio);
 
-                uint256 postBoundarySurvival =
-                    _redemptionSurvivalRatio(boundaryRedemptionWeight, redemptionWeightCurrent);
+            uint256 postBoundarySurvival =
+                _redemptionSurvivalRatio(boundaryRedemptionWeight, redemptionWeightCurrent);
 
-                earmarkedUnredeemed = FixedPointMath.mulQ128(unredeemedAtBoundary, postBoundarySurvival);
-            } else {
-                // Backward-compatibility fallback for old state without boundary checkpoints.
-                earmarkedUnredeemed = FixedPointMath.mulQ128(earmarkRaw, survivalRatio);
-            }
+            earmarkedUnredeemed = FixedPointMath.mulQ128(unredeemedAtBoundary, postBoundarySurvival);
         }
 
         if (earmarkedUnredeemed > earmarkRaw) earmarkedUnredeemed = earmarkRaw;
@@ -1767,8 +1805,16 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     function _requiredLockedShares() internal view returns (uint256) {
         if (totalDebt == 0) return 0;
 
-        uint256 debtShares = convertDebtTokensToYield(totalDebt);
-        return FixedPointMath.mulDivUp(debtShares, minimumCollateralization, FIXED_POINT_SCALAR);
+        return _requiredCollateralForDebt(totalDebt);
+    }
+
+    /// @dev Round the required debt value before converting to indivisible collateral units.
+    function _requiredCollateralForDebt(uint256 debt) internal view returns (uint256) {
+        if (collateralPriceOracle != address(0)) {
+            uint256 requiredValue = FixedPointMath.mulDivUp(debt, minimumCollateralization, FIXED_POINT_SCALAR);
+            return _convertDebtTokensToYieldUp(requiredValue);
+        }
+        return FixedPointMath.mulDivUp(convertDebtTokensToYield(debt), minimumCollateralization, FIXED_POINT_SCALAR);
     }
 
     // Survival ratio of *unearmarked* exposure between two packed earmark states.
@@ -1874,14 +1920,6 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
     {
         uint256 oldEpoch = packedOld >> _EARMARK_INDEX_BITS;
         oldIndex = packedOld & _EARMARK_INDEX_MASK;
-
-        if (packedOld == 0) {
-            oldIndex = ONE_Q128;
-        }
-        if (oldIndex == 0) {
-            oldEpoch += 1;
-            oldIndex = ONE_Q128;
-        }
 
         newEpoch = oldEpoch;
         uint256 newIndex;
