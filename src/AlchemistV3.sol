@@ -1198,6 +1198,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             if (remainingShares > 0) {
                 uint256 removedShares = _subCollateralBalance(remainingShares, accountId);
                 netToTransmuter += removedShares;
+                amountLiquidated += removedShares;
 
                 uint256 extraDebtBurn = _capDebtCredit(convertYieldTokensToDebt(removedShares), account.debt);
                 if (extraDebtBurn > 0) {
