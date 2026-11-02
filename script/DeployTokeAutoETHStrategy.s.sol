@@ -65,6 +65,10 @@ contract DeployTokeAutoETHStrategyScript is Script {
             config.execToleranceBps
         );
         strategyAddr = address(strategy);
+        // Seed lastGoodSharePrice from live Withdraw NAV while this script still owns
+        // the adapter, before killSwitch / ownership transfer. Reverts if Tokemak's
+        // report is unusable. Do not deploy into a frozen-at-zero cold start.
+        strategy.snapshotSharePrice();
         MYTStrategy(strategyAddr).setKillSwitch(true);
         MYTStrategy(strategyAddr).transferOwnership(targetOwner);
     }
