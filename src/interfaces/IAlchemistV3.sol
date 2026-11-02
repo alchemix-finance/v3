@@ -222,22 +222,19 @@ interface IAlchemistV3Actions {
     function repay(uint256 amount, uint256 recipientTokenId) external returns (uint256 amountRepaid);
 
     /**
-     * @notice Liquidates `owner` if the debt for account `owner` is greater than the underlying value of their collateral * LTV.
+     * @notice Liquidates `accountId` when it is below the collateralization lower bound.
      *
-     * @notice `owner` must be non-zero or this call will revert with an {IllegalArgument} error.
+     * @notice Earmarked debt is force-repaid first. If that restores health, `yieldAmount` is the repaid MYT
+     *         and {RepaymentFee} is emitted. Otherwise `yieldAmount` is only the MYT seized by liquidation
+     *         and {Liquidated} is emitted. A preceding repayment is reported by {ForceRepay}.
      *
-     * @notice Emits a {Liquidate} event.
+     * @notice Reverts with {LiquidationError} when the account is already healthy and no debt was reduced.
      *
-     * @notice **Example:**
-     * @notice ```
-     * @notice AlchemistV2(alchemistAddress).liquidate(id4);
-     * @notice ```
+     * @param accountId The tokenId of the account.
      *
-     * @param accountId   The tokenId of account
-     *
-     * @return yieldAmount         Yield tokens sent to the transmuter.
-     * @return feeInYield          Fee paid to liquidator in yield tokens.
-     * @return feeInUnderlying     Fee paid to liquidator in underlying token.
+     * @return yieldAmount      Repaid MYT if health is restored, otherwise MYT seized by liquidation.
+     * @return feeInYield       MYT fee paid to the caller.
+     * @return feeInUnderlying  Underlying fee paid to the caller from the fee vault.
      */
     function liquidate(uint256 accountId) external returns (uint256 yieldAmount, uint256 feeInYield, uint256 feeInUnderlying);
 
@@ -268,9 +265,9 @@ interface IAlchemistV3Actions {
     ///
     /// @param accountIds   The tokenId of each account
     ///
-    /// @return totalAmountLiquidated   Amount in yield tokens sent to the transmuter.
-    /// @return totalFeesInYield        Amount sent to liquidator in yield tokens.
-    /// @return totalFeesInUnderlying   Amount sent to liquidator in underlying token.
+    /// @return totalAmountLiquidated   Sum of each account's `yieldAmount`. See {liquidate}.
+    /// @return totalFeesInYield        Sum of MYT fees paid to the caller.
+    /// @return totalFeesInUnderlying   Sum of underlying fees paid to the caller.
     function batchLiquidate(uint256[] memory accountIds)
         external
         returns (uint256 totalAmountLiquidated, uint256 totalFeesInYield, uint256 totalFeesInUnderlying);
@@ -603,7 +600,7 @@ interface IAlchemistV3Events {
     ///
     /// @param accountId        The token id of the account liquidated
     /// @param liquidator   The address of the liquidator
-    /// @param amount       The amount liquidated in yield tokens
+    /// @param amount       MYT seized by liquidation. Excludes a preceding {ForceRepay}.
     /// @param feeInYield          The liquidation fee sent to 'liquidator' in yield tokens.
     /// @param feeInUnderlying            The liquidation fee sent to 'liquidator' in ETH (if needed i.e. if there isn't enough remaining collateral to cover the fee).
     event Liquidated(uint256 indexed accountId, address liquidator, uint256 amount, uint256 feeInYield, uint256 feeInUnderlying);
