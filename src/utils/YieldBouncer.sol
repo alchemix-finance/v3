@@ -44,8 +44,10 @@ interface IBouncerStrategy {
  *         rate(from) + minSpreadBps (APR basis points). Moving money lowers the
  *         destination's rate and raises the source's, so passing after the move
  *         proves the order before it, and caps the size at the crossing point. Rates
- *         come from IRateSource views the owner registers per strategy. A strategy
- *         without one cannot be paired, and removing one stops its pairs.
+ *         come from IRateSource views the owner registers per strategy
+ *         (`setRateSource`, listed by `fedStrategies`), added and cleared as the
+ *         vault's strategies change. A strategy without one cannot be paired, and
+ *         removing one stops its pairs.
  *
  *         Per pair, as on the ClipAllocator: maxClip (largest single move),
  *         minIntervalBlocks (spacing, shared by both directions), expiresAtBlock (0
@@ -101,6 +103,8 @@ contract YieldBouncer {
     mapping(bytes32 => Pair) internal _pairs;               // pairKey(bot, x, y) → pair
     mapping(address => uint256) public activePairs;         // per bot; one is enough to pause
     mapping(address => RateFeed) public rateFeeds;          // strategy → rate source + venue
+    address[] internal _fed;                                 // strategies with a rate feed, any order
+    mapping(address => uint256) internal _fedIndex;          // strategy → position in _fed + 1 (0 = absent)
 
     event RateSourceSet(address indexed strategy, address source, address venue);
     event PairUpdated(address indexed bot, bytes32 indexed key, address a, address b, Limits limits, bool active, int256 net);
@@ -155,15 +159,28 @@ contract YieldBouncer {
 
     // ---- the owner (the Safe once accepted) ---------------------------------------
 
-    /// @notice Register how to read `strategy`'s supply rate. `source` = 0 removes it,
-    ///         which stops every pair over that strategy. A source that cannot read
-    ///         `venue` now is refused.
+    /// @notice Register how to read `strategy`'s supply rate: the owner's registry,
+    ///         updated as strategies are added to and removed from the vault.
+    ///         `source` = 0 removes the feed, which stops every pair over that
+    ///         strategy. A source that cannot read `venue` now is refused.
     function setRateSource(address strategy, address source, address venue) external onlyOwner {
         if (source != address(0)) {
             if (!vault.isAdapter(strategy)) revert NotAdapter(strategy);
             IRateSource(source).supplyRate(venue);
+            if (_fedIndex[strategy] == 0) {
+                _fed.push(strategy);
+                _fedIndex[strategy] = _fed.length;
+            }
         } else {
             venue = address(0);
+            uint256 i = _fedIndex[strategy];
+            if (i != 0) {
+                address last = _fed[_fed.length - 1];
+                _fed[i - 1] = last;
+                _fedIndex[last] = i;
+                _fed.pop();
+                delete _fedIndex[strategy];
+            }
         }
         rateFeeds[strategy] = RateFeed(source, venue);
         emit RateSourceSet(strategy, source, venue);
@@ -268,6 +285,11 @@ contract YieldBouncer {
 
     function pairOf(address bot, address x, address y) external view returns (Pair memory) {
         return _pairs[pairKey(bot, x, y)];
+    }
+
+    /// @notice Every strategy that has a rate feed now, in no particular order.
+    function fedStrategies() external view returns (address[] memory) {
+        return _fed;
     }
 
     /// @notice Supply APR (WAD) of `strategy` from its registered source.
