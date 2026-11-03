@@ -7,6 +7,7 @@ import {EulerEVaultRateSource} from "../../utils/rates/EulerEVaultRateSource.sol
 import {FluidFTokenRateSource} from "../../utils/rates/FluidFTokenRateSource.sol";
 import {YearnV3RateSource} from "../../utils/rates/YearnV3RateSource.sol";
 import {TokemakAutopoolRateSource} from "../../utils/rates/TokemakAutopoolRateSource.sol";
+import {FluidLiteRateSource} from "../../utils/rates/FluidLiteRateSource.sol";
 import {
     MorphoVaultV2RateSource,
     MorphoMarketParamsLite,
@@ -78,6 +79,26 @@ contract MockAutopool {
 
     function getProfitUnlockSettings() external view returns (uint48, uint48, uint48, uint256) {
         return (period, fullUnlock, lastUnlock, rate);
+    }
+}
+
+// ---- Fluid Lite ------------------------------------------------------------------
+
+contract MockLiteAsset {
+    uint8 public decimals = 6;
+}
+
+contract MockFluidLite {
+    address public asset = address(new MockLiteAsset());
+    uint256 public getExchangePrice;
+    uint256 public getEffectiveExchangePrice;
+    uint256 public getFixedRate;
+    uint256 public getRewardAmountPerYear;
+    uint256 public totalSupply;
+
+    function set(uint256 p0, uint256 pEff, uint256 fixedRate, uint256 reward, uint256 supply) external {
+        (getExchangePrice, getEffectiveExchangePrice, getFixedRate, getRewardAmountPerYear, totalSupply) =
+            (p0, pEff, fixedRate, reward, supply);
     }
 }
 
@@ -415,5 +436,35 @@ contract RateSourcesTest is Test {
         assertApproxEqRel(src.supplyRate(address(p)), r / 2, 1e9);
         vm.warp(t0 + 16 hours);
         assertEq(src.supplyRate(address(p)), 0);
+    }
+
+    /// Live fLiteUSD 2026-11-03: fixed 6.00%, reward 3,000,000 USDC/yr on ~38.68M.
+    /// Expected values recomputed off-chain with the vault's own integer maths.
+    function test_fluidLite_rewardBinds_dilutes_thenFixedFloor() public {
+        MockFluidLite v = new MockFluidLite();
+        FluidLiteRateSource src = new FluidLiteRateSource();
+        uint256 p0 = 1_055_874_513_206_277_275;
+        uint256 pEff = 1_055_876_568_613_160_457;
+        uint256 supply = 36_630_653e18;
+        uint256 reward = 3_000_000e6;
+
+        v.set(p0, pEff, 600, reward, supply);
+        assertEq(src.supplyRate(address(v)), 77_511_489_298_381_349);           // 7.751% (365-day basis)
+
+        v.set(p0, pEff, 600, reward, supply * 6 / 5);                           // +20% deposits
+        assertEq(src.supplyRate(address(v)), 64_592_907_748_651_124);
+
+        v.set(p0, pEff, 600, reward, supply * 2);                               // past the crossover
+        uint256 floor = 59_958_815_520_002_943;                                  // 6% on p0, per 365 d, vs pEff
+        assertEq(src.supplyRate(address(v)), floor);
+
+        v.set(p0, pEff, 600, reward, 99e18);                                    // reward needs 100 shares
+        assertEq(src.supplyRate(address(v)), floor);
+
+        v.set(pEff, pEff, 600, 0, supply);                                      // fresh checkpoint: 6% × 365/365.25
+        assertEq(src.supplyRate(address(v)), uint256(6e16) * 36_500 / 36_525);
+
+        v.set(p0, pEff, 0, 0, supply);
+        assertEq(src.supplyRate(address(v)), 0);
     }
 }

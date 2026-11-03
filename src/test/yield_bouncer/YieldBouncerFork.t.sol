@@ -12,6 +12,7 @@ import {FluidFTokenRateSource} from "../../utils/rates/FluidFTokenRateSource.sol
 import {MorphoVaultV2RateSource} from "../../utils/rates/MorphoVaultV2RateSource.sol";
 import {YearnV3RateSource} from "../../utils/rates/YearnV3RateSource.sol";
 import {TokemakAutopoolRateSource} from "../../utils/rates/TokemakAutopoolRateSource.sol";
+import {FluidLiteRateSource} from "../../utils/rates/FluidLiteRateSource.sol";
 
 interface IAllocatorLive {
     function vault() external view returns (address);
@@ -43,6 +44,12 @@ interface IAutopoolLive {
     function getProfitUnlockSettings() external view returns (uint48, uint48, uint48, uint256);
 }
 
+interface IFluidLiteLive {
+    function getEffectiveExchangePrice() external view returns (uint256);
+    function getFixedRate() external view returns (uint256);
+    function getRewardAmountPerYear() external view returns (uint256);
+}
+
 library Addr {
     // Base
     address internal constant BASE_ALLOCATOR = 0x347371c17D14Ee7943943995E2A0A9Df4FD83d50;
@@ -65,6 +72,12 @@ library Addr {
     address internal constant YV_USDC_1 = 0x696d02Db93291651ED510704c9b286841d506987;
     address internal constant EWETH_2 = 0xD8b27CF359b7D15710a5BE299AF6e7Bf904984C2;
     address internal constant TOKE_AUTOUSD = 0xa7569A44f348d3D70d8ad5889e50F78E33d80D35;
+    address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address internal constant FLITE_USD = 0x273DA948ACa9261043fbdb2a857BC255ECC29012;
+    // Ethereum alUSD (Mix USDC)
+    address internal constant USD_ALLOCATOR = 0x693b7594Ae0633d9c5574D0da46a040f92F5b281;
+    address internal constant YVUSD_STRATEGY = 0xdFDC17F784e16D7634AC270911D98755C68Ae220;
+    address internal constant FLUID_LITE_STRATEGY = 0x320e38ca23FB11cC1f673b204E301210d3758653;
 }
 
 abstract contract ForkHelpers is Test {
@@ -266,6 +279,37 @@ contract EthRateSourcesForkTest is ForkHelpers {
         assertEq(toke.supplyRate(Addr.TOKE_AUTOUSD), 0);
     }
 
+    /// fLiteUSD accrues at max(fixed, reward / TVL) between checkpoints: a day of warp
+    /// grows the share price at the source's rate, and a deposit dilutes the reward.
+    function test_fluidLite_predictsShareGrowth_andMovesOnDeposit() public {
+        FluidLiteRateSource lite = new FluidLiteRateSource();
+        IFluidLiteLive v = IFluidLiteLive(Addr.FLITE_USD);
+        uint256 apr = lite.supplyRate(Addr.FLITE_USD);
+        uint256 p0 = v.getEffectiveExchangePrice();
+        uint256 t0 = block.timestamp;
+        uint256 snap = vm.snapshotState();
+        vm.warp(t0 + 1 days);
+        uint256 realized = _realized(p0, v.getEffectiveExchangePrice(), 1 days);
+        _pct("Fluid Lite source %", apr);
+        _pct("Fluid Lite realized %", realized);
+        assertApproxEqRel(realized, apr, 1e13);
+        vm.revertToState(snap);
+
+        deal(Addr.USDC, user, 5_000_000e6);
+        vm.startPrank(user);
+        IERC20(Addr.USDC).approve(Addr.FLITE_USD, 5_000_000e6);
+        IERC4626(Addr.FLITE_USD).deposit(5_000_000e6, user);
+        vm.stopPrank();
+        uint256 afterDeposit = lite.supplyRate(Addr.FLITE_USD);
+        _pct("Fluid Lite after +5,000,000 %", afterDeposit);
+        // the deposit checkpoints the price, so the rate is max(fixed, reward / totalAssets) exactly
+        uint256 byTvl = v.getRewardAmountPerYear() * 1e18 / IERC4626(Addr.FLITE_USD).totalAssets();
+        uint256 fixedApr = v.getFixedRate() * 1e14;
+        uint256 expected = (byTvl > fixedApr ? byTvl : fixedApr) * 36_500 / 36_525;
+        assertApproxEqRel(afterDeposit, expected, 1e12);
+        if (byTvl > fixedApr) assertLt(afterDeposit, apr);
+    }
+
     function test_euler_predictsShareGrowth_andMovesOnDeposit() public {
         uint256 apr = euler.supplyRate(Addr.EWETH_2);
         uint256 p0 = IERC4626(Addr.EWETH_2).convertToAssets(1e18);
@@ -309,6 +353,11 @@ abstract contract YieldBouncerLiveTest is ForkHelpers {
     function _small() internal pure virtual returns (uint256);
     function _searchCeiling() internal pure virtual returns (uint256);
 
+    /// @dev Real-time lending venues land within a few wei; a venue with an exit fee needs more.
+    function _maxLossBps() internal pure virtual returns (uint16) {
+        return 2;
+    }
+
     function setUp() public {
         vm.createSelectFork(_rpc());
         bouncer = new YieldBouncer(_allocator());
@@ -328,7 +377,7 @@ abstract contract YieldBouncerLiveTest is ForkHelpers {
             maxNetToA: _searchCeiling() * 10,
             maxClip: _searchCeiling() * 10,
             minIntervalBlocks: 0,
-            maxLossBps: 2,
+            maxLossBps: _maxLossBps(),
             minSpreadBps: 0,
             expiresAtBlock: 0
         }));
@@ -362,8 +411,8 @@ abstract contract YieldBouncerLiveTest is ForkHelpers {
         _pct("to:   after %", rTo);
         assertEq(net, int256(_small()));
         assertEq(IERC20(asset).balanceOf(vault), idle0, "vault idle moved");
-        assertApproxEqRel(lo0 - _real(lo), _small(), 2 * BP, "from leg");
-        assertApproxEqRel(_real(hi) - hi0, _small(), 2 * BP, "to leg");
+        assertApproxEqRel(lo0 - _real(lo), _small(), uint256(_maxLossBps()) * BP, "from leg");
+        assertApproxEqRel(_real(hi) - hi0, _small(), uint256(_maxLossBps()) * BP, "to leg");
         assertLe(rTo, rHi, "destination rate rose");
         assertGe(rTo, rFrom);
         assertEq(rTo, bouncer.rateOf(hi));
@@ -570,5 +619,38 @@ contract YieldBouncerEthLiveTest is YieldBouncerLiveTest {
 
     function _searchCeiling() internal pure override returns (uint256) {
         return 2_000 ether;
+    }
+}
+
+/// @notice alUSD's one lending pair with both sides fed: Yearn yvUSD ↔ Fluid Lite USD.
+///         The Fluid Lite strategy books its shares net of the vault's 5 bps withdrawal
+///         fee (realAssets = previewRedeem), so a move into it lands 5 bps short.
+contract YieldBouncerUsdLiveTest is YieldBouncerLiveTest {
+    function _rpc() internal view override returns (string memory) {
+        return _ethRpc();
+    }
+
+    function _allocator() internal pure override returns (address) {
+        return Addr.USD_ALLOCATOR;
+    }
+
+    function _pair() internal pure override returns (address, address) {
+        return (Addr.YVUSD_STRATEGY, Addr.FLUID_LITE_STRATEGY);
+    }
+
+    function _feeds() internal override returns (IRateSource, address, IRateSource, address) {
+        return (new YearnV3RateSource(), Addr.YV_USDC_1, new FluidLiteRateSource(), Addr.FLITE_USD);
+    }
+
+    function _small() internal pure override returns (uint256) {
+        return 1_000e6;
+    }
+
+    function _searchCeiling() internal pure override returns (uint256) {
+        return 2_000_000e6;
+    }
+
+    function _maxLossBps() internal pure override returns (uint16) {
+        return 6;
     }
 }

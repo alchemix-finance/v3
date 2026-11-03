@@ -9,6 +9,7 @@ import {FluidFTokenRateSource} from "../src/utils/rates/FluidFTokenRateSource.so
 import {MorphoVaultV2RateSource} from "../src/utils/rates/MorphoVaultV2RateSource.sol";
 import {YearnV3RateSource} from "../src/utils/rates/YearnV3RateSource.sol";
 import {TokemakAutopoolRateSource} from "../src/utils/rates/TokemakAutopoolRateSource.sol";
+import {FluidLiteRateSource} from "../src/utils/rates/FluidLiteRateSource.sol";
 
 /// @notice Deploys a YieldBouncer against any mix's AlchemistAllocator, plus the rate
 ///         sources named in YB_SOURCES (one per protocol type per chain; skip any the
@@ -19,7 +20,7 @@ import {TokemakAutopoolRateSource} from "../src/utils/rates/TokemakAutopoolRateS
 ///
 ///   YB_ALLOCATOR   required: the mix's AlchemistAllocator
 ///   YB_NEW_OWNER   optional: defaults to the allocator admin
-///   YB_SOURCES     optional: comma list of aave,euler,fluid,morpho,tokemak,yearn
+///   YB_SOURCES     optional: comma list of aave,euler,fluid,fluidlite,morpho,tokemak,yearn
 ///   YB_DEPLOYER    optional: broadcast from this address (else forge's sender)
 contract DeployYieldBouncerScript is Script {
     struct Deployed {
@@ -30,6 +31,7 @@ contract DeployYieldBouncerScript is Script {
         address morpho;
         address yearn;
         address tokemak;
+        address fluidlite;
     }
 
     function deploy(address allocator, address newOwner, string[] memory sources) public returns (Deployed memory d) {
@@ -44,6 +46,7 @@ contract DeployYieldBouncerScript is Script {
             else if (s == keccak256("morpho")) d.morpho = address(new MorphoVaultV2RateSource());
             else if (s == keccak256("yearn")) d.yearn = address(new YearnV3RateSource());
             else if (s == keccak256("tokemak")) d.tokemak = address(new TokemakAutopoolRateSource());
+            else if (s == keccak256("fluidlite")) d.fluidlite = address(new FluidLiteRateSource());
             else revert(string.concat("unknown rate source: ", sources[i]));
         }
     }
@@ -71,5 +74,6 @@ contract DeployYieldBouncerScript is Script {
         if (d.morpho != address(0)) console.log("MorphoVaultV2RateSource:", d.morpho);
         if (d.yearn != address(0)) console.log("YearnV3RateSource:", d.yearn);
         if (d.tokemak != address(0)) console.log("TokemakAutopoolRateSource:", d.tokemak);
+        if (d.fluidlite != address(0)) console.log("FluidLiteRateSource:", d.fluidlite);
     }
 }
