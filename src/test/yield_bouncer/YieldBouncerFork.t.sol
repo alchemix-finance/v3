@@ -535,7 +535,9 @@ contract YieldBouncerBaseLiveTest is YieldBouncerLiveTest {
         bouncer.grantPair(bot2, steak, fluid, YieldBouncer.Limits({
             maxNetToB: 100_000e6,
             maxNetToA: 0,
-            maxClip: 100_000e6,
+            // above the band, so the band (or the spread) is what stops the next unit;
+            // at maxClip = band a full-band pass is refused by ClipTooLarge first
+            maxClip: 200_000e6,
             minIntervalBlocks: 0,
             maxLossBps: 2,
             minSpreadBps: 0,
