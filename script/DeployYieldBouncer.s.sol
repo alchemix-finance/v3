@@ -33,7 +33,7 @@ contract DeployYieldBouncerScript is Script {
     address public constant MAINNET_BOT_USD = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
     address public constant MAINNET_BOT_ETH = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
 
-    uint16 public constant RATE_BAND_BPS = 500;   // reference = the live rate at deploy, ±500 APR bps
+    uint16 public constant RATE_BAND_BPS = 100;   // reference = the live rate at deploy, ±1% APR
 
     // Base USDC MYT
     address public constant STEAKHOUSE_STRATEGY = 0xaeEA02683f652dd1fb4846bE71FB8Cf26f3393d4;
