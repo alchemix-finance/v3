@@ -47,7 +47,11 @@ interface IBouncerStrategy {
  *         come from IRateSource views the owner registers per strategy
  *         (`setRateSource`, listed by `fedStrategies`), added and cleared as the
  *         vault's strategies change. A strategy without one cannot be paired, and
- *         removing one stops its pairs.
+ *         removing one stops its pairs. Each live read must also sit within
+ *         ±maxDeviationBps of a reference APR written in an earlier block
+ *         (`setRateRef`; the owner or a granted bot refreshes it with
+ *         `proposeRateRef`, effective after REF_LAG), so a same transaction
+ *         utilization pump cannot fake the direction.
  *
  *         Per pair, as on the ClipAllocator: maxClip (largest single move),
  *         minIntervalBlocks (spacing, shared by both directions), expiresAtBlock (0
@@ -93,8 +97,18 @@ contract YieldBouncer {
         address venue;             // what the source reads (aToken, fToken, VaultV2, Yearn vault)
     }
 
+    /// @dev APR guard : live reads must sit within ±maxDeviationBps
+    ///      of `rate`, set by the owner or proposed in band and promoted after REF_LAG.
+    struct RateRef {
+        uint256 rate;              // reference supply APR, WAD
+        uint16 maxDeviationBps;    // 0 = unset, the strategy cannot be bounced
+        uint256 pendingRate;       // proposal, promoted once REF_LAG old
+        uint64 pendingAt;
+    }
+
     uint256 internal constant BPS = 10_000;
     uint256 internal constant APR_BP = 1e14;   // one APR basis point in WAD
+    uint64 public constant REF_LAG = 6 hours;  // age a proposed reference needs before it counts
 
     address public owner;                      // the deployer, then the Safe
     address public pendingOwner;
@@ -103,10 +117,13 @@ contract YieldBouncer {
     mapping(bytes32 => Pair) internal _pairs;               // pairKey(bot, x, y) → pair
     mapping(address => uint256) public activePairs;         // per bot; one is enough to pause
     mapping(address => RateFeed) public rateFeeds;          // strategy → rate source + venue
+    mapping(address => RateRef) public rateRefs;            // strategy → reference APR + tolerance
     address[] internal _fed;                                 // strategies with a rate feed, any order
     mapping(address => uint256) internal _fedIndex;          // strategy → position in _fed + 1 (0 = absent)
 
     event RateSourceSet(address indexed strategy, address source, address venue);
+    event RateRefSet(address indexed strategy, uint256 rate, uint16 maxDeviationBps);
+    event RateRefProposed(address indexed strategy, uint256 rate, uint256 promotedRate);
     event PairUpdated(address indexed bot, bytes32 indexed key, address a, address b, Limits limits, bool active, int256 net);
     event Recentered(address indexed bot, bytes32 indexed key, int256 netBefore);
     event Bounced(address indexed bot, bytes32 indexed key, address indexed from, address to, uint256 assets,
@@ -123,6 +140,8 @@ contract YieldBouncer {
     error NotAdapter(address strategy);
     error SameStrategy(address strategy);
     error NoRateSource(address strategy);
+    error NoRateRef(address strategy);
+    error RateDeviates(address strategy, uint256 live, uint256 ref, uint16 maxDeviationBps);
     error NoPair(address bot, address from, address to);
     error OrientationMismatch(address a, address b);
     error PairExpired(uint64 expiresAtBlock);
@@ -135,6 +154,12 @@ contract YieldBouncer {
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    /// @dev Owner, or a bot that currently holds at least one active pair.
+    modifier onlyBotOrOwner() {
+        if (msg.sender != owner && activePairs[msg.sender] == 0) revert NotBotOrOwner();
         _;
     }
 
@@ -184,6 +209,26 @@ contract YieldBouncer {
         }
         rateFeeds[strategy] = RateFeed(source, venue);
         emit RateSourceSet(strategy, source, venue);
+    }
+
+    /// @notice Set `strategy`'s reference APR (WAD) and band (absolute APR bps), clearing any
+    ///         pending proposal. A zero band removes the reference and halts its pairs.
+    function setRateRef(address strategy, uint256 rate, uint16 maxDeviationBps) external onlyOwner {
+        if (maxDeviationBps == 0) rate = 0;
+        rateRefs[strategy] = RateRef(rate, maxDeviationBps, 0, 0);
+        emit RateRefSet(strategy, rate, maxDeviationBps);
+    }
+
+    /// @notice Promote the pending proposal once REF_LAG old, then propose the live rate,
+    ///         which must be in band, so the reference drifts at most one band per REF_LAG.
+    function proposeRateRef(address strategy) external onlyBotOrOwner {
+        RateRef storage r = rateRefs[strategy];
+        if (r.maxDeviationBps == 0) revert NoRateRef(strategy);
+        if (r.pendingAt != 0 && block.timestamp >= r.pendingAt + REF_LAG) r.rate = r.pendingRate;
+        uint256 live = _guardedRate(strategy);
+        r.pendingRate = live;
+        r.pendingAt = uint64(block.timestamp);
+        emit RateRefProposed(strategy, live, r.rate);
     }
 
     /// @notice Set the bot's pair over `a` and `b`. The first grant fixes the
@@ -343,12 +388,23 @@ contract YieldBouncer {
         m.realToDelta = int256(IBouncerStrategy(to).realAssets()) - int256(toBefore);
         _checkLegs(l.maxLossBps, assets, m.realFromDelta, m.realToDelta);
 
-        RateFeed memory feedFrom = rateFeeds[from];
-        RateFeed memory feedTo = rateFeeds[to];
-        m.rateFromAfter = IRateSource(feedFrom.source).supplyRate(feedFrom.venue);
-        m.rateToAfter = IRateSource(feedTo.source).supplyRate(feedTo.venue);
+        m.rateFromAfter = _guardedRate(from);
+        m.rateToAfter = _guardedRate(to);
         if (m.rateToAfter < m.rateFromAfter + uint256(l.minSpreadBps) * APR_BP) {
             revert SpreadTooThin(m.rateToAfter, m.rateFromAfter, l.minSpreadBps);
+        }
+    }
+
+    /// @dev Live supplyRate, accepted only within ±maxDeviationBps of the reference.
+    function _guardedRate(address strategy) internal view returns (uint256 live) {
+        RateFeed memory f = rateFeeds[strategy];
+        RateRef memory r = rateRefs[strategy];
+        if (f.source == address(0)) revert NoRateSource(strategy);
+        if (r.maxDeviationBps == 0) revert NoRateRef(strategy);
+        live = IRateSource(f.source).supplyRate(f.venue);
+        uint256 band = uint256(r.maxDeviationBps) * APR_BP;
+        if (live > r.rate + band || live + band < r.rate) {
+            revert RateDeviates(strategy, live, r.rate, r.maxDeviationBps);
         }
     }
 

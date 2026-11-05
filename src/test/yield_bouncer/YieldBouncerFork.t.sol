@@ -371,6 +371,10 @@ abstract contract YieldBouncerLiveTest is ForkHelpers {
         (IRateSource src0, address v0, IRateSource src1, address v1) = _feeds();
         bouncer.setRateSource(s0, address(src0), v0);
         bouncer.setRateSource(s1, address(src1), v1);
+        // reference = the live rate at the fork block, ±500 bp: wide enough for the
+        // outside deposits some scenarios use to push a rate under the other
+        bouncer.setRateRef(s0, bouncer.rateOf(s0), 500);
+        bouncer.setRateRef(s1, bouncer.rateOf(s1), 500);
         (lo, hi) = bouncer.rateOf(s0) < bouncer.rateOf(s1) ? (s0, s1) : (s1, s0);
         bouncer.grantPair(bot, lo, hi, YieldBouncer.Limits({
             maxNetToB: _searchCeiling() * 10,

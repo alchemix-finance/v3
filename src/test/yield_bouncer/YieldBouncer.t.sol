@@ -140,6 +140,9 @@ contract YieldBouncerTest is Test {
         vm.startPrank(owner);
         bouncer.setRateSource(address(steak), address(rates), address(steak));
         bouncer.setRateSource(address(fluid), address(rates), address(fluid));
+        // reference 5.5% ± 200 bp: every rate these tests set (5.0%–6.0%) is in band
+        bouncer.setRateRef(address(steak), 55 * 10 * BP, 200);
+        bouncer.setRateRef(address(fluid), 55 * 10 * BP, 200);
         vm.stopPrank();
         _favour(address(fluid));
     }
@@ -367,6 +370,120 @@ contract YieldBouncerTest is Test {
         bouncer.setRateSource(address(outsider), address(rates), address(outsider));
     }
 
+    // ---- the APR deviation guard --------------------------------------------------
+
+    /// A same-block pump: Fluid printed 6% a block ago, now says 9%. The live rate is
+    /// outside the reference band, so the bounce refuses it instead of believing it.
+    function test_guard_rejectsAPumpedRate() public {
+        _grant(_limits(100 * U, 0));
+        rates.set(address(fluid), 9e16, 0);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.RateDeviates.selector, address(fluid), 9e16, 55 * 10 * BP, uint16(200)));
+        _bounce(address(steak), address(fluid), 1 * U);
+        // and a depressed source is refused the same way
+        rates.set(address(fluid), 6e16, 0);
+        rates.set(address(steak), 2e16, 0);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.RateDeviates.selector, address(steak), 2e16, 55 * 10 * BP, uint16(200)));
+        _bounce(address(steak), address(fluid), 1 * U);
+    }
+
+    function test_guard_bandEdges() public {
+        _grant(_limits(100 * U, 0));
+        rates.set(address(fluid), 55 * 10 * BP + 200 * BP, 0);     // exactly +band passes
+        _bounce(address(steak), address(fluid), 1 * U);
+        rates.set(address(fluid), 55 * 10 * BP + 200 * BP + 1, 0); // one wei over does not
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.RateDeviates.selector, address(fluid), 55 * 10 * BP + 200 * BP + 1, 55 * 10 * BP, uint16(200)));
+        _bounce(address(steak), address(fluid), 1 * U);
+    }
+
+    function test_guard_noReferenceBlocksMoves() public {
+        _grant(_limits(100 * U, 0));
+        vm.prank(owner);
+        bouncer.setRateRef(address(fluid), 1e18, 0);              // 0 band clears it, rate ignored
+        (uint256 rate, uint16 band,,) = bouncer.rateRefs(address(fluid));
+        assertEq(rate, 0);
+        assertEq(band, 0);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.NoRateRef.selector, address(fluid)));
+        _bounce(address(steak), address(fluid), 1 * U);
+        vm.prank(bot);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.NoRateRef.selector, address(fluid)));
+        bouncer.proposeRateRef(address(fluid));
+    }
+
+    /// Only the owner or a bot with an active pair may propose a reference.
+    function test_guard_proposalIsBotOrOwner() public {
+        vm.prank(stranger);
+        vm.expectRevert(YieldBouncer.NotBotOrOwner.selector);
+        bouncer.proposeRateRef(address(fluid));
+        vm.prank(bot);                                              // no pair yet
+        vm.expectRevert(YieldBouncer.NotBotOrOwner.selector);
+        bouncer.proposeRateRef(address(fluid));
+        _grant(_limits(100 * U, 0));
+        vm.prank(bot);
+        bouncer.proposeRateRef(address(fluid));
+        vm.prank(owner);
+        bouncer.proposeRateRef(address(fluid));
+        vm.prank(owner);
+        bouncer.revokePair(bot, address(steak), address(fluid));
+        vm.prank(bot);
+        vm.expectRevert(YieldBouncer.NotBotOrOwner.selector);
+        bouncer.proposeRateRef(address(fluid));
+    }
+
+    /// A granted bot proposes the live rate as the next reference; it must be in band
+    /// now and only counts REF_LAG later, so the reference walks at most one band per lag.
+    function test_guard_proposalPromotesAfterLag() public {
+        _grant(_limits(100 * U, 0));
+        rates.set(address(fluid), 7e16, 0);                        // +150 bp, in band
+        uint256 t0 = block.timestamp;
+        vm.prank(bot);
+        bouncer.proposeRateRef(address(fluid));
+        (uint256 rate,, uint256 pendingRate, uint64 pendingAt) = bouncer.rateRefs(address(fluid));
+        assertEq(rate, 55 * 10 * BP);                              // unchanged
+        assertEq(pendingRate, 7e16);
+        assertEq(pendingAt, uint64(t0));
+
+        // 8% is +250 bp from the current reference: refused even though 7% is pending
+        rates.set(address(fluid), 8e16, 0);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.RateDeviates.selector, address(fluid), 8e16, 55 * 10 * BP, uint16(200)));
+        _bounce(address(steak), address(fluid), 1 * U);
+
+        // one second short of the lag: a new proposal replaces the pending one, no promotion
+        rates.set(address(fluid), 7e16, 0);
+        vm.warp(t0 + bouncer.REF_LAG() - 1);
+        vm.prank(bot);
+        bouncer.proposeRateRef(address(fluid));
+        (rate,,, pendingAt) = bouncer.rateRefs(address(fluid));
+        assertEq(rate, 55 * 10 * BP);
+        assertEq(pendingAt, uint64(t0 + bouncer.REF_LAG() - 1));
+
+        // after the lag the pending 7% becomes the reference and 8% is now in band
+        vm.warp(t0 + 2 * bouncer.REF_LAG());
+        vm.prank(bot);
+        bouncer.proposeRateRef(address(fluid));
+        (rate,,,) = bouncer.rateRefs(address(fluid));
+        assertEq(rate, 7e16);
+        rates.set(address(fluid), 8e16, 0);
+        _bounce(address(steak), address(fluid), 1 * U);
+    }
+
+    function test_guard_proposalMustBeInBand() public {
+        rates.set(address(fluid), 9e16, 0);
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.RateDeviates.selector, address(fluid), 9e16, 55 * 10 * BP, uint16(200)));
+        bouncer.proposeRateRef(address(fluid));
+        // the owner can still jump the reference directly, and that clears any pending proposal
+        rates.set(address(fluid), 6e16, 0);
+        vm.prank(owner);
+        bouncer.proposeRateRef(address(fluid));
+        vm.prank(owner);
+        bouncer.setRateRef(address(fluid), 9e16, 50);
+        (uint256 rate, uint16 band, uint256 pendingRate, uint64 pendingAt) = bouncer.rateRefs(address(fluid));
+        assertEq(rate, 9e16);
+        assertEq(band, 50);
+        assertEq(pendingRate, 0);
+        assertEq(pendingAt, 0);
+    }
+
     // ---- per-move limits ----------------------------------------------------------
 
     function test_maxClip() public {
@@ -573,6 +690,8 @@ contract YieldBouncerTest is Test {
         vm.startPrank(owner);
         b2.setRateSource(address(steak), address(rates), address(steak));
         b2.setRateSource(address(fluid), address(rates), address(fluid));
+        b2.setRateRef(address(steak), 55 * 10 * BP, 200);
+        b2.setRateRef(address(fluid), 55 * 10 * BP, 200);
         b2.grantPair(bot, address(steak), address(fluid), _limits(100 * U, 0));
         vm.stopPrank();
         evil.arm(b2, address(steak), address(fluid));
