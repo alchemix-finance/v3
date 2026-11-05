@@ -5,6 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
 import {IERC4626} from "forge-std/interfaces/IERC4626.sol";
 import {YieldBouncer} from "../../utils/YieldBouncer.sol";
+import {YieldBouncerUSD} from "../../utils/YieldBouncerUSD.sol";
+import {YieldBouncerETH} from "../../utils/YieldBouncerETH.sol";
 import {IRateSource} from "../../utils/rates/IRateSource.sol";
 import {AaveV3RateSource} from "../../utils/rates/AaveV3RateSource.sol";
 import {EulerEVaultRateSource} from "../../utils/rates/EulerEVaultRateSource.sol";
@@ -21,6 +23,10 @@ interface IAllocatorLive {
 
 interface IVaultLive {
     function asset() external view returns (address);
+}
+
+interface IVaultLiquidity {
+    function liquidityAdapter() external view returns (address);
 }
 
 interface IStrategyLive {
@@ -358,9 +364,21 @@ abstract contract YieldBouncerLiveTest is ForkHelpers {
         return 2;
     }
 
+    function _deploy(address allocator) internal virtual returns (YieldBouncer) {
+        return new YieldBouncerUSD(allocator);
+    }
+
     function setUp() public {
         vm.createSelectFork(_rpc());
-        bouncer = new YieldBouncer(_allocator());
+        bouncer = _deploy(_allocator());
+        // Steakhouse (Base) and yvUSD (alUSD) are their vaults' liquidity adapters:
+        // allow draws at the ceiling, stamped a day back so the budget is full at the
+        // fork block (warping forward would leave strategy oracles stale)
+        uint256 t0 = block.timestamp;
+        vm.warp(t0 - bouncer.LIQ_ADAPTER_WINDOW());
+        bouncer.setSourceGuard(true, bouncer.MAX_MOVE_BPS_CAP());
+        bouncer.setLiquidityPerDay(uint128(bouncer.LIQ_ADAPTER_MAX()));
+        vm.warp(t0);
         vault = IAllocatorLive(_allocator()).vault();
         asset = IVaultLive(vault).asset();
         address admin = address(uint160(uint256(vm.load(_allocator(), bytes32(0)))));
@@ -528,6 +546,17 @@ contract YieldBouncerBaseLiveTest is YieldBouncerLiveTest {
         return 500_000e6;
     }
 
+    /// Steakhouse is the live liquidity adapter: with draws off it cannot be the source.
+    function test_live_liquidityAdapterRefusedWhenOff() public {
+        address steak = Addr.STEAKHOUSE_STRATEGY;
+        assertEq(IVaultLiquidity(vault).liquidityAdapter(), steak);
+        bouncer.setSourceGuard(false, bouncer.DEFAULT_MAX_MOVE_BPS());
+        address other = steak == lo ? hi : lo;
+        vm.prank(bot);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.FromLiquidityAdapter.selector, steak));
+        bouncer.bounce(steak, other, _small());
+    }
+
     /// The agreed first grant: Steakhouse → Fluid up to 100,000 USDC, never more out of
     /// Fluid than went in. When Steakhouse pays more at the fork block, outside deposits
     /// into the Steakhouse vault first push its rate 20 bp under Fluid's, so the
@@ -625,6 +654,10 @@ contract YieldBouncerEthLiveTest is YieldBouncerLiveTest {
 
     function _searchCeiling() internal pure override returns (uint256) {
         return 2_000 ether;
+    }
+
+    function _deploy(address allocator) internal override returns (YieldBouncer) {
+        return new YieldBouncerETH(allocator);
     }
 }
 

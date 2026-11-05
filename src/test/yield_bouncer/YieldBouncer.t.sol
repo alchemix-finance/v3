@@ -3,6 +3,8 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {YieldBouncer} from "../../utils/YieldBouncer.sol";
+import {YieldBouncerUSD} from "../../utils/YieldBouncerUSD.sol";
+import {YieldBouncerETH} from "../../utils/YieldBouncerETH.sol";
 import {IRateSource} from "../../utils/rates/IRateSource.sol";
 
 /// @dev A position whose value the stub allocator moves.
@@ -18,11 +20,30 @@ contract StubStrategy {
     }
 }
 
+/// @dev Also stands in for the vault's asset (6 decimals, like USDC).
 contract StubVault {
     mapping(address => bool) public isAdapter;
+    address public liquidityAdapter;
+    uint256 public totalAssets = 100_000_000 * 1e6;
 
     function setAdapter(address a, bool on) external {
         isAdapter[a] = on;
+    }
+
+    function setLiquidityAdapter(address a) external {
+        liquidityAdapter = a;
+    }
+
+    function setTotalAssets(uint256 t) external {
+        totalAssets = t;
+    }
+
+    function asset() external view returns (address) {
+        return address(this);
+    }
+
+    function decimals() external pure returns (uint8) {
+        return 6;
     }
 }
 
@@ -136,7 +157,7 @@ contract YieldBouncerTest is Test {
         vault.setAdapter(address(steak), true);
         vault.setAdapter(address(fluid), true);
         vm.prank(owner);
-        bouncer = new YieldBouncer(address(allocator));
+        bouncer = new YieldBouncerUSD(address(allocator));
         vm.startPrank(owner);
         bouncer.setRateSource(address(steak), address(rates), address(steak));
         bouncer.setRateSource(address(fluid), address(rates), address(fluid));
@@ -484,6 +505,154 @@ contract YieldBouncerTest is Test {
         assertEq(pendingAt, 0);
     }
 
+    // ---- the source guard ---------------------------------------------------------
+
+    function _liquidityBudget() internal view returns (uint128 perDay, uint128 available, uint64 updatedAt) {
+        return bouncer.liquidityBudget();
+    }
+
+    /// @dev Makes Steakhouse the vault's liquidity adapter and lets the owner draw from it.
+    function _enableLiquidity() internal {
+        vault.setLiquidityAdapter(address(steak));
+        uint16 maxMoveBps = bouncer.DEFAULT_MAX_MOVE_BPS();
+        vm.prank(owner);
+        bouncer.setSourceGuard(true, maxMoveBps);
+    }
+
+    function test_source_defaults() public view {
+        (bool movable, uint16 maxMoveBps) = bouncer.sourceGuard();
+        assertFalse(movable);
+        assertEq(maxMoveBps, 500);
+        assertEq(bouncer.LIQ_ADAPTER_MAX(), 200_000 * U);
+        (uint128 perDay, uint128 available,) = _liquidityBudget();
+        assertEq(perDay, 100_000 * U);
+        assertEq(available, 0);
+    }
+
+    function test_source_ethCeiling() public {
+        vm.prank(owner);
+        YieldBouncer b2 = new YieldBouncerETH(address(allocator));
+        assertEq(b2.LIQ_ADAPTER_MAX(), 50 * U);             // the stub asset has 6 decimals
+        (uint128 perDay,,) = b2.liquidityBudget();
+        assertEq(perDay, 25 * U);
+    }
+
+    function test_source_liquidityBlockedByDefault() public {
+        _grant(_limits(100 * U, 100 * U));
+        vault.setLiquidityAdapter(address(steak));
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.FromLiquidityAdapter.selector, address(steak)));
+        _bounce(address(steak), address(fluid), 1 * U);
+        // into the liquidity adapter is never limited
+        _favour(address(steak));
+        _bounce(address(fluid), address(steak), 1 * U);
+    }
+
+    function test_source_maxMoveBps() public {
+        YieldBouncer.Limits memory l = _limits(10_000_000 * U, 0);
+        l.maxClip = 10_000_000 * U;
+        _grant(l);
+        vault.setTotalAssets(1_000_000 * U);                // 5% = 50,000
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.MoveTooLarge.selector, 50_000 * U + 1, 50_000 * U));
+        _bounce(address(steak), address(fluid), 50_000 * U + 1);
+        _bounce(address(steak), address(fluid), 50_000 * U);
+    }
+
+    function test_source_setterBounds() public {
+        vm.startPrank(owner);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.BadMaxMoveBps.selector, uint16(0)));
+        bouncer.setSourceGuard(false, 0);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.BadMaxMoveBps.selector, uint16(2_001)));
+        bouncer.setSourceGuard(false, 2_001);
+        bouncer.setSourceGuard(false, 2_000);
+        bouncer.setLiquidityPerDay(uint128(200_000 * U));
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityPerDayTooHigh.selector, 200_000 * U + 1, 200_000 * U));
+        bouncer.setLiquidityPerDay(uint128(200_000 * U + 1));
+        vm.stopPrank();
+
+        _grant(_limits(1, 1));
+        vm.startPrank(bot);
+        vm.expectRevert(YieldBouncer.NotOwner.selector);
+        bouncer.setSourceGuard(true, 500);
+        vm.expectRevert(YieldBouncer.NotOwner.selector);
+        bouncer.setLiquidityPerDay(1);
+        vm.stopPrank();
+    }
+
+    /// Enabling draws starts the budget empty, so a bot cannot take a full day at once.
+    function test_budget_startsEmptyOnEnable() public {
+        _grant(_limits(1_000_000 * U, 0));
+        _enableLiquidity();
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 1 * U, 0));
+        _bounce(address(steak), address(fluid), 1 * U);
+    }
+
+    function test_budget_refillsAndCaps() public {
+        _grant(_limits(1_000_000 * U, 0));
+        _enableLiquidity();
+        uint256 t0 = block.timestamp;
+        vm.warp(t0 + 12 hours);                             // half of 100,000
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 50_000 * U + 1, 50_000 * U));
+        _bounce(address(steak), address(fluid), 50_000 * U + 1);
+        _bounce(address(steak), address(fluid), 50_000 * U);
+        (, uint128 available, uint64 updatedAt) = _liquidityBudget();
+        assertEq(available, 0);
+        assertEq(updatedAt, uint64(t0 + 12 hours));
+
+        vm.warp(t0 + 10 days);                              // the budget holds one day, no more
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 100_000 * U + 1, 100_000 * U));
+        _bounce(address(steak), address(fluid), 100_000 * U + 1);
+        _bounce(address(steak), address(fluid), 100_000 * U);
+    }
+
+    function test_budget_sharedAcrossBots() public {
+        address bot2 = makeAddr("bot2");
+        _grant(_limits(1_000_000 * U, 0));
+        vm.prank(owner);
+        bouncer.grantPair(bot2, address(steak), address(fluid), _limits(1_000_000 * U, 0));
+        _enableLiquidity();
+        vm.warp(block.timestamp + 1 days);
+        _bounce(address(steak), address(fluid), 60_000 * U);
+        vm.prank(bot2);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 40_000 * U + 1, 40_000 * U));
+        bouncer.bounce(address(steak), address(fluid), 40_000 * U + 1);
+        vm.prank(bot2);
+        bouncer.bounce(address(steak), address(fluid), 40_000 * U);
+    }
+
+    /// Moves from other strategies do not spend the budget, and changing only maxMoveBps keeps it.
+    function test_budget_onlyLiquidityDrawsSpend() public {
+        _grant(_limits(1_000_000 * U, 1_000_000 * U));
+        vault.setLiquidityAdapter(address(fluid));
+        uint256 t0 = block.timestamp;
+        vm.prank(owner);
+        bouncer.setSourceGuard(true, 500);
+        vm.warp(t0 + 1 days);
+        _bounce(address(steak), address(fluid), 10_000 * U);
+        (, uint128 available, uint64 updatedAt) = _liquidityBudget();
+        assertEq(available, 0);
+        assertEq(updatedAt, uint64(t0));
+
+        _favour(address(steak));
+        _bounce(address(fluid), address(steak), 30_000 * U);
+        vm.prank(owner);
+        bouncer.setSourceGuard(true, 1_000);
+        (, available,) = _liquidityBudget();
+        assertEq(available, 70_000 * U);
+    }
+
+    function test_budget_setPerDayRestartsEmpty() public {
+        _grant(_limits(1_000_000 * U, 0));
+        _enableLiquidity();
+        uint256 t0 = block.timestamp;
+        vm.warp(t0 + 1 days);
+        vm.prank(owner);
+        bouncer.setLiquidityPerDay(uint128(200_000 * U));
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 1 * U, 0));
+        _bounce(address(steak), address(fluid), 1 * U);
+        vm.warp(t0 + 2 days);
+        _bounce(address(steak), address(fluid), 200_000 * U);
+    }
+
     // ---- per-move limits ----------------------------------------------------------
 
     function test_maxClip() public {
@@ -686,7 +855,7 @@ contract YieldBouncerTest is Test {
     function test_reentryFromALegReverts() public {
         ReentrantAllocator evil = new ReentrantAllocator(address(vault));
         vm.prank(owner);
-        YieldBouncer b2 = new YieldBouncer(address(evil));
+        YieldBouncer b2 = new YieldBouncerUSD(address(evil));
         vm.startPrank(owner);
         b2.setRateSource(address(steak), address(rates), address(steak));
         b2.setRateSource(address(fluid), address(rates), address(fluid));

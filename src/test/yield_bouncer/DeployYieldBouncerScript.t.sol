@@ -32,7 +32,7 @@ contract DeployYieldBouncerScriptTest is Test {
 
         DeployYieldBouncerScript script = new DeployYieldBouncerScript();
         address admin = script.allocatorAdmin(BASE_ALLOCATOR);
-        DeployYieldBouncerScript.Deployed memory d = script.run();
+        DeployYieldBouncerScript.Deployed memory d = script.runUSD();
         YieldBouncer bouncer = YieldBouncer(d.bouncer);
 
         assertEq(address(bouncer.allocator()), BASE_ALLOCATOR);
@@ -41,6 +41,7 @@ contract DeployYieldBouncerScriptTest is Test {
         assertEq(bouncer.pendingOwner(), admin, "handover to the allocator admin");
         assertTrue(d.morpho != address(0) && d.fluid != address(0));
         assertEq(d.aave, address(0));
+        assertEq(bouncer.LIQ_ADAPTER_MAX(), 200_000e6, "USDC ceiling");
 
         // the admin's batch
         vm.startPrank(admin);
@@ -76,12 +77,30 @@ contract DeployYieldBouncerScriptTest is Test {
         sources[0] = "compound";
         address allocator = address(new FakeAllocator());
         vm.expectRevert(bytes("unknown rate source: compound"));
-        script.deploy(allocator, address(1), sources);
+        script.deployUSD(allocator, address(1), sources);
+    }
+
+    function test_entryPointPicksTheContract() public {
+        DeployYieldBouncerScript script = new DeployYieldBouncerScript();
+        address allocator = address(new FakeAllocator());
+        YieldBouncer usd = YieldBouncer(script.deployUSD(allocator, address(1), new string[](0)).bouncer);
+        YieldBouncer eth = YieldBouncer(script.deployETH(allocator, address(1), new string[](0)).bouncer);
+        assertEq(usd.LIQ_ADAPTER_MAX(), 200_000e6);
+        assertEq(eth.LIQ_ADAPTER_MAX(), 50e6);              // the fake asset has 6 decimals
     }
 }
 
+/// @dev Stands in for the allocator, its vault and the vault's asset.
 contract FakeAllocator {
     function vault() external view returns (address) {
         return address(this);
+    }
+
+    function asset() external view returns (address) {
+        return address(this);
+    }
+
+    function decimals() external pure returns (uint8) {
+        return 6;
     }
 }
