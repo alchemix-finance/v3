@@ -278,11 +278,11 @@ abstract contract YieldBouncer {
     }
 
     /// @notice Allow or forbid liquidity adapter draws and cap each move as a share of TVL.
-    ///         Enabling draws restarts the budget empty.
+    ///         Enabling draws restarts the budget at half a day.
     function setSourceGuard(bool liquidityMovable, uint16 maxMoveBps) external onlyOwner {
         if (maxMoveBps == 0 || maxMoveBps > MAX_MOVE_BPS_CAP) revert BadMaxMoveBps(maxMoveBps);
         if (liquidityMovable && !sourceGuard.liquidityMovable) {
-            liquidityBudget.available = 0;
+            liquidityBudget.available = liquidityBudget.perDay / 2;
             liquidityBudget.updatedAt = uint64(block.timestamp);
         }
         sourceGuard = SourceGuard(liquidityMovable, maxMoveBps);

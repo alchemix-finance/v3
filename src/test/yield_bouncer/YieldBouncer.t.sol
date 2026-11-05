@@ -578,25 +578,26 @@ contract YieldBouncerTest is Test {
         vm.stopPrank();
     }
 
-    /// Enabling draws starts the budget empty, so a bot cannot take a full day at once.
-    function test_budget_startsEmptyOnEnable() public {
+    /// Enabling draws starts the budget at half the daily amount, so a bot cannot take a full day at once.
+    function test_budget_startsHalfFullOnEnable() public {
         _grant(_limits(1_000_000 * U, 0));
         _enableLiquidity();
-        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 1 * U, 0));
-        _bounce(address(steak), address(fluid), 1 * U);
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 50_000 * U + 1, 50_000 * U));
+        _bounce(address(steak), address(fluid), 50_000 * U + 1);
+        _bounce(address(steak), address(fluid), 50_000 * U);
     }
 
     function test_budget_refillsAndCaps() public {
         _grant(_limits(1_000_000 * U, 0));
         _enableLiquidity();
         uint256 t0 = block.timestamp;
-        vm.warp(t0 + 12 hours);                             // half of 100,000
-        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 50_000 * U + 1, 50_000 * U));
-        _bounce(address(steak), address(fluid), 50_000 * U + 1);
-        _bounce(address(steak), address(fluid), 50_000 * U);
+        vm.warp(t0 + 6 hours);                              // half a day accrued on top of the half it started with
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 75_000 * U + 1, 75_000 * U));
+        _bounce(address(steak), address(fluid), 75_000 * U + 1);
+        _bounce(address(steak), address(fluid), 75_000 * U);
         (, uint128 available, uint64 updatedAt) = _liquidityBudget();
         assertEq(available, 0);
-        assertEq(updatedAt, uint64(t0 + 12 hours));
+        assertEq(updatedAt, uint64(t0 + 6 hours));
 
         vm.warp(t0 + 10 days);                              // the budget holds one day, no more
         vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 100_000 * U + 1, 100_000 * U));
@@ -629,7 +630,7 @@ contract YieldBouncerTest is Test {
         vm.warp(t0 + 1 days);
         _bounce(address(steak), address(fluid), 10_000 * U);
         (, uint128 available, uint64 updatedAt) = _liquidityBudget();
-        assertEq(available, 0);
+        assertEq(available, 50_000 * U, "enabling starts the budget half full, and this move did not spend it");
         assertEq(updatedAt, uint64(t0));
 
         _favour(address(steak));
