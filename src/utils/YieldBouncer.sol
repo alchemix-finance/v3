@@ -13,6 +13,13 @@ interface IBouncerAllocator {
 
 interface IBouncerVault {
     function isAdapter(address account) external view returns (bool);
+    function liquidityAdapter() external view returns (address);
+    function asset() external view returns (address);
+    function totalAssets() external view returns (uint256);
+}
+
+interface IBouncerAsset {
+    function decimals() external view returns (uint8);
 }
 
 interface IBouncerStrategy {
@@ -44,13 +51,25 @@ interface IBouncerStrategy {
  *         rate(from) + minSpreadBps (APR basis points). Moving money lowers the
  *         destination's rate and raises the source's, so passing after the move
  *         proves the order before it, and caps the size at the crossing point. Rates
- *         come from IRateSource views the owner registers per strategy. A strategy
- *         without one cannot be paired, and removing one stops its pairs.
+ *         come from IRateSource views the owner registers per strategy
+ *         (`setRateSource`, listed by `fedStrategies`), added and cleared as the
+ *         vault's strategies change. A strategy without one cannot be paired, and
+ *         removing one stops its pairs. Each live read must also sit within
+ *         ±maxDeviationBps of a reference APR written in an earlier block
+ *         (`setRateRef`; the owner or a granted bot refreshes it with
+ *         `proposeRateRef`, effective after REF_LAG), so a same transaction
+ *         utilization pump cannot fake the direction.
  *
  *         Per pair, as on the ClipAllocator: maxClip (largest single move),
  *         minIntervalBlocks (spacing, shared by both directions), expiresAtBlock (0
  *         does not expire), and maxLossBps per leg: `from` may shrink by at most
  *         assets × (1 + bps), `to` must grow by at least assets × (1 − bps).
+ *
+ *         Every move is at most maxMoveBps of vault TVL. The vault's liquidity
+ *         adapter funds withdrawals, so drawing from it is off until the owner
+ *         enables it, and then shares one daily budget across all bots, capped by
+ *         the immutable LIQ_ADAPTER_MAX. Deploy one bouncer per MYT vault, as
+ *         YieldBouncerUSD or YieldBouncerETH, which fix that ceiling.
  *
  *         Both legs run in one transaction, so vault idle ends where it started.
  *         The allocate leg still meets the proxy's caps (VaultV2 absolute and
@@ -63,7 +82,7 @@ interface IBouncerStrategy {
  *         limits and keeps `net`; `recenter` is the only reset. The Safe keeps the
  *         kill switch: `setOperator(bouncer, false)`.
  */
-contract YieldBouncer {
+abstract contract YieldBouncer {
     IBouncerAllocator public immutable allocator;
     IBouncerVault public immutable vault;
 
@@ -91,8 +110,37 @@ contract YieldBouncer {
         address venue;             // what the source reads (aToken, fToken, VaultV2, Yearn vault)
     }
 
+    /// @dev APR guard : live reads must sit within ±maxDeviationBps
+    ///      of `rate`, set by the owner or proposed in band and promoted after REF_LAG.
+    struct RateRef {
+        uint256 rate;              // reference supply APR, WAD
+        uint16 maxDeviationBps;    // 0 = unset, the strategy cannot be bounced
+        uint256 pendingRate;       // proposal, promoted once REF_LAG old
+        uint64 pendingAt;
+    }
+
+    /// @dev Owner limits on where a move may draw from and how large it may be.
+    struct SourceGuard {
+        bool liquidityMovable;     // allow draws from vault.liquidityAdapter(), default false
+        uint16 maxMoveBps;         // largest move as a share of vault totalAssets
+    }
+
+    /// @dev Liquidity adapter draws shared by every bot, refills at `perDay`, holds at most `perDay`.
+    struct LiquidityBudget {
+        uint128 perDay;
+        uint128 available;
+        uint64 updatedAt;
+    }
+
     uint256 internal constant BPS = 10_000;
     uint256 internal constant APR_BP = 1e14;   // one APR basis point in WAD
+    uint64 public constant REF_LAG = 6 hours;  // age a proposed reference needs before it counts
+    uint16 public constant DEFAULT_MAX_MOVE_BPS = 500;      // 5% of TVL
+    uint16 public constant MAX_MOVE_BPS_CAP = 2_000;        // the owner may raise it to 20%, no further
+    uint256 public constant LIQ_ADAPTER_WINDOW = 1 days;
+
+    /// @notice Hard ceiling on liquidity adapter draws per day across all bots, in asset units.
+    uint256 public immutable LIQ_ADAPTER_MAX;
 
     address public owner;                      // the deployer, then the Safe
     address public pendingOwner;
@@ -101,12 +149,21 @@ contract YieldBouncer {
     mapping(bytes32 => Pair) internal _pairs;               // pairKey(bot, x, y) → pair
     mapping(address => uint256) public activePairs;         // per bot; one is enough to pause
     mapping(address => RateFeed) public rateFeeds;          // strategy → rate source + venue
+    mapping(address => RateRef) public rateRefs;            // strategy → reference APR + tolerance
+    address[] internal _fed;                                 // strategies with a rate feed, any order
+    mapping(address => uint256) internal _fedIndex;          // strategy → position in _fed + 1 (0 = absent)
+    SourceGuard public sourceGuard;
+    LiquidityBudget public liquidityBudget;
 
     event RateSourceSet(address indexed strategy, address source, address venue);
+    event RateRefSet(address indexed strategy, uint256 rate, uint16 maxDeviationBps);
+    event RateRefProposed(address indexed strategy, uint256 rate, uint256 promotedRate);
     event PairUpdated(address indexed bot, bytes32 indexed key, address a, address b, Limits limits, bool active, int256 net);
     event Recentered(address indexed bot, bytes32 indexed key, int256 netBefore);
     event Bounced(address indexed bot, bytes32 indexed key, address indexed from, address to, uint256 assets,
                   int256 netAfter, uint256 rateFromAfter, uint256 rateToAfter, int256 realFromDelta, int256 realToDelta);
+    event SourceGuardSet(bool liquidityMovable, uint16 maxMoveBps);
+    event LiquidityPerDaySet(uint256 perDay);
     event Paused(address indexed by, bool paused);
     event OwnershipTransferStarted(address indexed from, address indexed to);
     event OwnerUpdated(address indexed owner);
@@ -119,6 +176,8 @@ contract YieldBouncer {
     error NotAdapter(address strategy);
     error SameStrategy(address strategy);
     error NoRateSource(address strategy);
+    error NoRateRef(address strategy);
+    error RateDeviates(address strategy, uint256 live, uint256 ref, uint16 maxDeviationBps);
     error NoPair(address bot, address from, address to);
     error OrientationMismatch(address a, address b);
     error PairExpired(uint64 expiresAtBlock);
@@ -128,9 +187,20 @@ contract YieldBouncer {
     error RealAssetsDidNotMove(uint256 assets, int256 realAssetsDelta);
     error LossExceedsLimit(uint256 valueMoved, uint256 limit, bool isAllocate);
     error SpreadTooThin(uint256 rateTo, uint256 rateFrom, uint16 minSpreadBps);
+    error FromLiquidityAdapter(address strategy);
+    error MoveTooLarge(uint256 assets, uint256 cap);
+    error BadMaxMoveBps(uint16 maxMoveBps);
+    error LiquidityPerDayTooHigh(uint256 perDay, uint256 max);
+    error LiquidityBudgetExceeded(uint256 assets, uint256 available);
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    /// @dev Owner, or a bot that currently holds at least one active pair.
+    modifier onlyBotOrOwner() {
+        if (msg.sender != owner && activePairs[msg.sender] == 0) revert NotBotOrOwner();
         _;
     }
 
@@ -146,27 +216,87 @@ contract YieldBouncer {
         locked = false;
     }
 
-    constructor(address _allocator) {
+    /// @param liqAdapterUnits Daily liquidity adapter ceiling in whole units of the vault asset,
+    ///        scaled by the asset's decimals into LIQ_ADAPTER_MAX.
+    constructor(address _allocator, uint256 liqAdapterUnits) {
         require(_allocator != address(0), "zero");
         allocator = IBouncerAllocator(_allocator);
         vault = IBouncerVault(allocator.vault());
         owner = msg.sender;                                     // the deployer, until the Safe accepts
+        LIQ_ADAPTER_MAX = liqAdapterUnits * 10 ** IBouncerAsset(vault.asset()).decimals();
+        sourceGuard = SourceGuard(false, DEFAULT_MAX_MOVE_BPS);
+        liquidityBudget = LiquidityBudget(uint128(LIQ_ADAPTER_MAX / 2), 0, uint64(block.timestamp));
     }
 
     // ---- the owner (the Safe once accepted) ---------------------------------------
 
-    /// @notice Register how to read `strategy`'s supply rate. `source` = 0 removes it,
-    ///         which stops every pair over that strategy. A source that cannot read
-    ///         `venue` now is refused.
+    /// @notice Register how to read `strategy`'s supply rate. `source` = 0 removes the feed.
+    ///         A changed source or venue clears the rate reference, so `setRateRef` must follow.
     function setRateSource(address strategy, address source, address venue) external onlyOwner {
         if (source != address(0)) {
             if (!vault.isAdapter(strategy)) revert NotAdapter(strategy);
             IRateSource(source).supplyRate(venue);
+            if (_fedIndex[strategy] == 0) {
+                _fed.push(strategy);
+                _fedIndex[strategy] = _fed.length;
+            }
         } else {
             venue = address(0);
+            uint256 i = _fedIndex[strategy];
+            if (i != 0) {
+                address last = _fed[_fed.length - 1];
+                _fed[i - 1] = last;
+                _fedIndex[last] = i;
+                _fed.pop();
+                delete _fedIndex[strategy];
+            }
+        }
+        RateFeed memory feed = rateFeeds[strategy];
+        if ((feed.source != source || feed.venue != venue) && rateRefs[strategy].maxDeviationBps != 0) {
+            delete rateRefs[strategy];
+            emit RateRefSet(strategy, 0, 0);
         }
         rateFeeds[strategy] = RateFeed(source, venue);
         emit RateSourceSet(strategy, source, venue);
+    }
+
+    /// @notice Set `strategy`'s reference APR (WAD) and band (absolute APR bps), clearing any
+    ///         pending proposal. A zero band removes the reference and halts its pairs.
+    function setRateRef(address strategy, uint256 rate, uint16 maxDeviationBps) external onlyOwner {
+        if (maxDeviationBps == 0) rate = 0;
+        rateRefs[strategy] = RateRef(rate, maxDeviationBps, 0, 0);
+        emit RateRefSet(strategy, rate, maxDeviationBps);
+    }
+
+    /// @notice Promote the pending proposal once REF_LAG old, then propose the live rate,
+    ///         which must be in band, so the reference drifts at most one band per REF_LAG.
+    function proposeRateRef(address strategy) external onlyBotOrOwner {
+        RateRef storage r = rateRefs[strategy];
+        if (r.maxDeviationBps == 0) revert NoRateRef(strategy);
+        if (r.pendingAt != 0 && block.timestamp >= r.pendingAt + REF_LAG) r.rate = r.pendingRate;
+        uint256 live = _guardedRate(strategy);
+        r.pendingRate = live;
+        r.pendingAt = uint64(block.timestamp);
+        emit RateRefProposed(strategy, live, r.rate);
+    }
+
+    /// @notice Allow or forbid liquidity adapter draws and cap each move as a share of TVL.
+    ///         Enabling draws restarts the budget at half a day.
+    function setSourceGuard(bool liquidityMovable, uint16 maxMoveBps) external onlyOwner {
+        if (maxMoveBps == 0 || maxMoveBps > MAX_MOVE_BPS_CAP) revert BadMaxMoveBps(maxMoveBps);
+        if (liquidityMovable && !sourceGuard.liquidityMovable) {
+            liquidityBudget.available = liquidityBudget.perDay / 2;
+            liquidityBudget.updatedAt = uint64(block.timestamp);
+        }
+        sourceGuard = SourceGuard(liquidityMovable, maxMoveBps);
+        emit SourceGuardSet(liquidityMovable, maxMoveBps);
+    }
+
+    /// @notice Set the daily liquidity adapter draw, at most LIQ_ADAPTER_MAX, restarts the budget empty.
+    function setLiquidityPerDay(uint128 perDay) external onlyOwner {
+        if (perDay > LIQ_ADAPTER_MAX) revert LiquidityPerDayTooHigh(perDay, LIQ_ADAPTER_MAX);
+        liquidityBudget = LiquidityBudget(perDay, 0, uint64(block.timestamp));
+        emit LiquidityPerDaySet(perDay);
     }
 
     /// @notice Set the bot's pair over `a` and `b`. The first grant fixes the
@@ -175,6 +305,7 @@ contract YieldBouncer {
     function grantPair(address bot, address a, address b, Limits calldata limits) external onlyOwner {
         require(bot != address(0) && limits.maxClip > 0, "grant");
         require(limits.maxLossBps <= BPS, "loss");
+        require(limits.minSpreadBps > 0 && limits.minIntervalBlocks > 0, "limits");
         require(limits.maxClip <= uint256(type(int256).max) && limits.maxNetToB <= uint256(type(int256).max)
                 && limits.maxNetToA <= uint256(type(int256).max), "range");
         if (a == b) revert SameStrategy(a);
@@ -252,6 +383,7 @@ contract YieldBouncer {
     {
         bytes32 key = pairKey(msg.sender, from, to);
         Limits memory l = _admit(_pairs[key], from, to, assets);
+        _validateMoveSource(from, assets);
         Move memory m = _move(from, to, assets, l);
         m.netAfter = _pairs[key].net;
         emit Bounced(msg.sender, key, from, to, assets, m.netAfter, m.rateFromAfter, m.rateToAfter, m.realFromDelta, m.realToDelta);
@@ -268,6 +400,11 @@ contract YieldBouncer {
 
     function pairOf(address bot, address x, address y) external view returns (Pair memory) {
         return _pairs[pairKey(bot, x, y)];
+    }
+
+    /// @notice Every strategy that has a rate feed now, in no particular order.
+    function fedStrategies() external view returns (address[] memory) {
+        return _fed;
     }
 
     /// @notice Supply APR (WAD) of `strategy` from its registered source.
@@ -311,6 +448,23 @@ contract YieldBouncer {
         p.lastMoveBlock = uint64(block.number);
     }
 
+    /// @dev Rejects oversized moves, and liquidity adapter draws that are disabled or over the daily budget.
+    function _validateMoveSource(address from, uint256 assets) internal {
+        SourceGuard memory guard = sourceGuard;
+        uint256 cap = vault.totalAssets() * guard.maxMoveBps / BPS;
+        if (assets > cap) revert MoveTooLarge(assets, cap);
+
+        if (from != vault.liquidityAdapter()) return;
+        if (!guard.liquidityMovable) revert FromLiquidityAdapter(from);
+
+        LiquidityBudget memory budget = liquidityBudget;
+        uint256 avail = budget.available
+            + uint256(budget.perDay) * (block.timestamp - budget.updatedAt) / LIQ_ADAPTER_WINDOW;
+        if (avail > budget.perDay) avail = budget.perDay;
+        if (assets > avail) revert LiquidityBudgetExceeded(assets, avail);
+        liquidityBudget = LiquidityBudget(budget.perDay, uint128(avail - assets), uint64(block.timestamp));
+    }
+
     /// @dev Both legs, the per-leg loss bound, then the rate check on post-move state.
     function _move(address from, address to, uint256 assets, Limits memory l) internal returns (Move memory m) {
         uint256 fromBefore = IBouncerStrategy(from).realAssets();
@@ -321,12 +475,23 @@ contract YieldBouncer {
         m.realToDelta = int256(IBouncerStrategy(to).realAssets()) - int256(toBefore);
         _checkLegs(l.maxLossBps, assets, m.realFromDelta, m.realToDelta);
 
-        RateFeed memory feedFrom = rateFeeds[from];
-        RateFeed memory feedTo = rateFeeds[to];
-        m.rateFromAfter = IRateSource(feedFrom.source).supplyRate(feedFrom.venue);
-        m.rateToAfter = IRateSource(feedTo.source).supplyRate(feedTo.venue);
+        m.rateFromAfter = _guardedRate(from);
+        m.rateToAfter = _guardedRate(to);
         if (m.rateToAfter < m.rateFromAfter + uint256(l.minSpreadBps) * APR_BP) {
             revert SpreadTooThin(m.rateToAfter, m.rateFromAfter, l.minSpreadBps);
+        }
+    }
+
+    /// @dev Live supplyRate, accepted only within ±maxDeviationBps of the reference.
+    function _guardedRate(address strategy) internal view returns (uint256 live) {
+        RateFeed memory f = rateFeeds[strategy];
+        RateRef memory r = rateRefs[strategy];
+        if (f.source == address(0)) revert NoRateSource(strategy);
+        if (r.maxDeviationBps == 0) revert NoRateRef(strategy);
+        live = IRateSource(f.source).supplyRate(f.venue);
+        uint256 band = uint256(r.maxDeviationBps) * APR_BP;
+        if (live > r.rate + band || live + band < r.rate) {
+            revert RateDeviates(strategy, live, r.rate, r.maxDeviationBps);
         }
     }
 
