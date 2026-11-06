@@ -26,6 +26,7 @@ import {IAsyncExitStrategy} from "./StrategyHandler.sol";
 interface IStrategySimulationProvider {
     function onSimulateYield(address strategy, uint256 amount) external;
     function onSimulateValueLoss(address strategy, uint256 amount) external;
+    function onWarp(uint256 elapsed) external;
     /// @dev Prepare the strategy's pending queue exit for claiming (finalization, queue funding).
     function onBeforeAsyncClaim(address strategy) external;
 }
@@ -771,7 +772,9 @@ contract E2EStrategyHandler is Test, StrategyRevertUtils {
 
     function warpTime(uint256 timeDelta) external countCall(this.warpTime.selector) {
         timeDelta = bound(timeDelta, 1 hours, 365 days);
-        vm.warp(block.timestamp + timeDelta);
+        uint256 start = block.timestamp;
+        vm.warp(start + timeDelta);
+        if (simulator != address(0)) IStrategySimulationProvider(simulator).onWarp(block.timestamp - start);
         executed[this.warpTime.selector]++;
     }
 
