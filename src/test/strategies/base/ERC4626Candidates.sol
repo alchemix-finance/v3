@@ -110,6 +110,32 @@ library ERC4626Candidates {
         });
     }
 
+    /// @notice karpatkey-curated Morpho Vault V2 on Base. Deposits land in its mGLO/USDC liquidity market.
+    function kpkUSDCYield() internal pure returns (ERC4626Candidate memory) {
+        return ERC4626Candidate({
+            targetVault: 0x392B3CCf36C8adB8094F45573346B457414cD752,
+            asset: BASE_USDC,
+            rpcEnv: "BASE_RPC_URL",
+            fallbackRpcUrl: BASE_RPC_FALLBACK,
+            name: "KPK USDC Yield",
+            protocol: "Morpho V2",
+            riskClass: IMYTStrategy.RiskClass.HIGH,
+            forkBlock: 53_930_000,
+            assetDecimals: 6,
+            shareDecimals: 18,
+            initialDeposit: 10_000e6,
+            absoluteCap: 10_000e6,
+            relativeCap: 0.1e18,
+            strategyCap: 10_000e6,
+            globalCap: 0.1e18,
+            estimatedYield: 680,
+            slippageBPS: 50,
+            additionalIncentives: false,
+            maxWithdrawIsAuthoritative: true,
+            zeroMaxWithdrawIsUnbounded: true
+        });
+    }
+
     /// @notice Yearn V3 WETH-2 multi-strategy vault. Higher-risk sibling of WETH-1.
     function yearnWETH2() internal pure returns (ERC4626Candidate memory) {
         return ERC4626Candidate({
