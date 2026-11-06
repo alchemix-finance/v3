@@ -175,9 +175,9 @@ contract YieldBouncerTest is Test {
             maxNetToB: toB,
             maxNetToA: toA,
             maxClip: 1_000_000 * U,
-            minIntervalBlocks: 0,
+            minIntervalBlocks: 1,
             maxLossBps: 2,
-            minSpreadBps: 0,
+            minSpreadBps: 1,
             expiresAtBlock: 0
         });
     }
@@ -199,6 +199,11 @@ contract YieldBouncerTest is Test {
         return bouncer.bounce(from, to, assets);
     }
 
+    /// @dev Grants require at least one block between moves.
+    function _nextBlock() internal {
+        vm.roll(block.number + 1);
+    }
+
     function _net() internal view returns (int256) {
         return bouncer.pairOf(bot, address(steak), address(fluid)).net;
     }
@@ -215,20 +220,25 @@ contract YieldBouncerTest is Test {
         assertEq(_net(), int256(100 * U));
 
         _favour(address(steak));
+        _nextBlock();
         _bounce(address(fluid), address(steak), 50 * U);
         assertEq(_net(), int256(50 * U));
 
         _favour(address(fluid));
+        _nextBlock();
         _bounce(address(steak), address(fluid), 50 * U);
         assertEq(_net(), int256(100 * U));
 
+        _nextBlock();
         vm.expectRevert(abi.encodeWithSelector(YieldBouncer.NetLimitExceeded.selector, int256(100 * U + 1), int256(100 * U)));
         _bounce(address(steak), address(fluid), 1);
 
         _favour(address(steak));
+        _nextBlock();
         _bounce(address(fluid), address(steak), 100 * U);
         assertEq(_net(), 0);
 
+        _nextBlock();
         vm.expectRevert(abi.encodeWithSelector(YieldBouncer.NetLimitExceeded.selector, int256(-1), int256(0)));
         _bounce(address(fluid), address(steak), 1);
 
@@ -240,8 +250,10 @@ contract YieldBouncerTest is Test {
         _grant(_limits(100 * U, 100 * U));
         _bounce(address(steak), address(fluid), 100 * U);
         _favour(address(steak));
+        _nextBlock();
         _bounce(address(fluid), address(steak), 200 * U);
         assertEq(_net(), -int256(100 * U));
+        _nextBlock();
         vm.expectRevert(abi.encodeWithSelector(YieldBouncer.NetLimitExceeded.selector, -int256(100 * U + 1), -int256(100 * U)));
         _bounce(address(fluid), address(steak), 1);
     }
@@ -249,9 +261,11 @@ contract YieldBouncerTest is Test {
     function test_volumeIsUnlimitedInsideTheBand() public {
         _grant(_limits(10 * U, 0));
         for (uint256 i = 0; i < 20; i++) {
+            if (i != 0) _nextBlock();
             _favour(address(fluid));
             _bounce(address(steak), address(fluid), 10 * U);
             _favour(address(steak));
+            _nextBlock();
             _bounce(address(fluid), address(steak), 10 * U);
         }
         assertEq(_net(), 0);
@@ -263,13 +277,16 @@ contract YieldBouncerTest is Test {
         _grant(_limits(0, 0));
         assertEq(_net(), int256(60 * U));
 
+        _nextBlock();
         vm.expectRevert(abi.encodeWithSelector(YieldBouncer.NetLimitExceeded.selector, int256(60 * U + 1), int256(0)));
         _bounce(address(steak), address(fluid), 1);
 
         _favour(address(steak));
+        _nextBlock();
         vm.expectRevert(abi.encodeWithSelector(YieldBouncer.NetLimitExceeded.selector, int256(-1), int256(0)));
         _bounce(address(fluid), address(steak), 60 * U + 1);
 
+        _nextBlock();
         _bounce(address(fluid), address(steak), 60 * U);
         assertEq(_net(), 0);
     }
@@ -283,6 +300,7 @@ contract YieldBouncerTest is Test {
         vm.prank(owner);
         bouncer.recenter(bot, address(fluid), address(steak));   // either order names the pair
         assertEq(_net(), 0);
+        _nextBlock();
         _bounce(address(steak), address(fluid), 100 * U);
         assertEq(_net(), int256(100 * U));
     }
@@ -302,6 +320,7 @@ contract YieldBouncerTest is Test {
         uint256 toA = 200 * U;
         _grant(_limits(toB, toA));
         for (uint256 i = 0; i < 8; i++) {
+            if (i != 0) _nextBlock();
             uint256 assets = uint256(amounts[i]) % (400 * U) + 1;
             (address from, address to) = towardB[i] ? (address(steak), address(fluid)) : (address(fluid), address(steak));
             _favour(to);
@@ -337,12 +356,14 @@ contract YieldBouncerTest is Test {
         assertEq(rTo, bouncer.rateOf(address(fluid)));
 
         // 15,000 more would hold 85,000: 5.175% < 5.20%
-        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.SpreadTooThin.selector, 5175 * BP / 10, 520 * BP, uint16(0)));
+        _nextBlock();
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.SpreadTooThin.selector, 5175 * BP / 10, 520 * BP, uint16(1)));
         _bounce(address(steak), address(fluid), 15_000 * U);
 
-        // exactly to the crossing passes: equal rates meet a zero spread
-        _bounce(address(steak), address(fluid), 10_000 * U);
-        assertEq(bouncer.rateOf(address(fluid)), 520 * BP);
+        // one bp of spread is the minimum a grant allows: 78,000 held pays 5.21%
+        _nextBlock();
+        _bounce(address(steak), address(fluid), 8_000 * U);
+        assertEq(bouncer.rateOf(address(fluid)), 521 * BP);
     }
 
     function test_spread_minSpreadBps() public {
@@ -351,6 +372,7 @@ contract YieldBouncerTest is Test {
         _grant(l);
         _fluidCurve();
         _bounce(address(steak), address(fluid), 20_000 * U);
+        _nextBlock();
         vm.expectRevert(abi.encodeWithSelector(YieldBouncer.SpreadTooThin.selector, 530 * BP - 5e10, 520 * BP, uint16(10)));
         _bounce(address(steak), address(fluid), 1 * U);
     }
@@ -358,7 +380,7 @@ contract YieldBouncerTest is Test {
     function test_spread_wrongDirectionReverts() public {
         _grant(_limits(100 * U, 100 * U));
         _favour(address(steak));
-        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.SpreadTooThin.selector, 5e16, 6e16, uint16(0)));
+        vm.expectRevert(abi.encodeWithSelector(YieldBouncer.SpreadTooThin.selector, 5e16, 6e16, uint16(1)));
         _bounce(address(steak), address(fluid), 1 * U);
     }
 
@@ -412,6 +434,7 @@ contract YieldBouncerTest is Test {
         rates.set(address(fluid), 55 * 10 * BP + 200 * BP, 0);     // exactly +band passes
         _bounce(address(steak), address(fluid), 1 * U);
         rates.set(address(fluid), 55 * 10 * BP + 200 * BP + 1, 0); // one wei over does not
+        _nextBlock();
         vm.expectRevert(abi.encodeWithSelector(YieldBouncer.RateDeviates.selector, address(fluid), 55 * 10 * BP + 200 * BP + 1, 55 * 10 * BP, uint16(200)));
         _bounce(address(steak), address(fluid), 1 * U);
     }
@@ -600,6 +623,7 @@ contract YieldBouncerTest is Test {
         assertEq(updatedAt, uint64(t0 + 6 hours));
 
         vm.warp(t0 + 10 days);                              // the budget holds one day, no more
+        _nextBlock();
         vm.expectRevert(abi.encodeWithSelector(YieldBouncer.LiquidityBudgetExceeded.selector, 100_000 * U + 1, 100_000 * U));
         _bounce(address(steak), address(fluid), 100_000 * U + 1);
         _bounce(address(steak), address(fluid), 100_000 * U);
@@ -634,6 +658,7 @@ contract YieldBouncerTest is Test {
         assertEq(updatedAt, uint64(t0));
 
         _favour(address(steak));
+        _nextBlock();
         _bounce(address(fluid), address(steak), 30_000 * U);
         vm.prank(owner);
         bouncer.setSourceGuard(true, 1_000);
@@ -768,6 +793,14 @@ contract YieldBouncerTest is Test {
         YieldBouncer.Limits memory l = _limits(1, 1);
         l.maxClip = 0;
         vm.expectRevert("grant");
+        bouncer.grantPair(bot, address(steak), address(fluid), l);
+        l = _limits(1, 1);
+        l.minSpreadBps = 0;
+        vm.expectRevert(bytes("limits"));
+        bouncer.grantPair(bot, address(steak), address(fluid), l);
+        l = _limits(1, 1);
+        l.minIntervalBlocks = 0;
+        vm.expectRevert(bytes("limits"));
         bouncer.grantPair(bot, address(steak), address(fluid), l);
         l = _limits(1, 1);
         l.maxLossBps = 10_001;

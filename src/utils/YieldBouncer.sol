@@ -302,6 +302,7 @@ abstract contract YieldBouncer {
     function grantPair(address bot, address a, address b, Limits calldata limits) external onlyOwner {
         require(bot != address(0) && limits.maxClip > 0, "grant");
         require(limits.maxLossBps <= BPS, "loss");
+        require(limits.minSpreadBps > 0 && limits.minIntervalBlocks > 0, "limits");
         require(limits.maxClip <= uint256(type(int256).max) && limits.maxNetToB <= uint256(type(int256).max)
                 && limits.maxNetToA <= uint256(type(int256).max), "range");
         if (a == b) revert SameStrategy(a);

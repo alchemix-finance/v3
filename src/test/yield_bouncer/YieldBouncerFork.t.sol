@@ -398,9 +398,9 @@ abstract contract YieldBouncerLiveTest is ForkHelpers {
             maxNetToB: _searchCeiling() * 10,
             maxNetToA: _searchCeiling() * 10,
             maxClip: _searchCeiling() * 10,
-            minIntervalBlocks: 0,
+            minIntervalBlocks: 1,
             maxLossBps: _maxLossBps(),
-            minSpreadBps: 0,
+            minSpreadBps: 1,
             expiresAtBlock: 0
         }));
         _pct("lower-rate strategy %", bouncer.rateOf(lo));
@@ -571,9 +571,9 @@ contract YieldBouncerBaseLiveTest is YieldBouncerLiveTest {
             // above the band, so the band (or the spread) is what stops the next unit;
             // at maxClip = band a full-band pass is refused by ClipTooLarge first
             maxClip: 200_000e6,
-            minIntervalBlocks: 0,
+            minIntervalBlocks: 1,
             maxLossBps: 2,
-            minSpreadBps: 0,
+            minSpreadBps: 1,
             expiresAtBlock: 0
         }));
         _pct("Steakhouse at the fork block %", bouncer.rateOf(steak));
