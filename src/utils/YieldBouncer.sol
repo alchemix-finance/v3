@@ -230,10 +230,8 @@ abstract contract YieldBouncer {
 
     // ---- the owner (the Safe once accepted) ---------------------------------------
 
-    /// @notice Register how to read `strategy`'s supply rate: the owner's registry,
-    ///         updated as strategies are added to and removed from the vault.
-    ///         `source` = 0 removes the feed, which stops every pair over that
-    ///         strategy. A source that cannot read `venue` now is refused.
+    /// @notice Register how to read `strategy`'s supply rate. `source` = 0 removes the feed.
+    ///         A changed source or venue clears the rate reference, so `setRateRef` must follow.
     function setRateSource(address strategy, address source, address venue) external onlyOwner {
         if (source != address(0)) {
             if (!vault.isAdapter(strategy)) revert NotAdapter(strategy);
@@ -252,6 +250,11 @@ abstract contract YieldBouncer {
                 _fed.pop();
                 delete _fedIndex[strategy];
             }
+        }
+        RateFeed memory feed = rateFeeds[strategy];
+        if ((feed.source != source || feed.venue != venue) && rateRefs[strategy].maxDeviationBps != 0) {
+            delete rateRefs[strategy];
+            emit RateRefSet(strategy, 0, 0);
         }
         rateFeeds[strategy] = RateFeed(source, venue);
         emit RateSourceSet(strategy, source, venue);

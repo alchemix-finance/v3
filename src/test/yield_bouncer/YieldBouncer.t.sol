@@ -928,15 +928,29 @@ contract YieldBouncerTest is Test {
         vm.startPrank(owner);
         bouncer.setRateSource(address(third), address(rates), address(third));
         assertEq(_fed().length, 3);
-        // pointing a fed strategy at another source keeps one entry
+        // pointing a fed strategy at another source keeps one entry and drops its rate reference
         bouncer.setRateSource(address(steak), address(other), address(steak));
         assertEq(_fed().length, 3);
         (address src,) = bouncer.rateFeeds(address(steak));
         assertEq(src, address(other));
+        (uint256 refRate, uint16 refBand,,) = bouncer.rateRefs(address(steak));
+        assertEq(refRate, 0);
+        assertEq(refBand, 0);
+        // the same feed again does not disturb a reference set after it
+        bouncer.setRateRef(address(steak), 55 * 10 * BP, 200);
+        bouncer.setRateSource(address(steak), address(other), address(steak));
+        (refRate, refBand,,) = bouncer.rateRefs(address(steak));
+        assertEq(refRate, 55 * 10 * BP);
+        // a different venue does
+        bouncer.setRateSource(address(steak), address(other), address(fluid));
+        (, refBand,,) = bouncer.rateRefs(address(steak));
+        assertEq(refBand, 0);
 
         // clear from the middle, from the end, and twice
         bouncer.setRateSource(address(fluid), address(0), address(0));
         assertEq(_fed().length, 2);
+        (, refBand,,) = bouncer.rateRefs(address(fluid));
+        assertEq(refBand, 0, "removing the feed clears the reference");
         assertFalse(_has(_fed(), address(fluid)));
         assertTrue(_has(_fed(), address(steak)) && _has(_fed(), address(third)));
         bouncer.setRateSource(address(third), address(0), address(0));
