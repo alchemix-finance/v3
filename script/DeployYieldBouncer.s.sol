@@ -34,6 +34,7 @@ contract DeployYieldBouncerScript is Script {
     address public constant MAINNET_BOT_ETH = 0xf456A36B04B0951Cd19d6D8aA0c0b3b0a07f9fF2;
 
     uint16 public constant RATE_BAND_BPS = 100;   // reference = the live rate at deploy, ±1% APR
+    uint16 public constant YEARN_BAND_BPS = 300;  // Yearn's unlock rate steps 1 to 2.5% at each report
 
     // Base USDC MYT
     address public constant STEAKHOUSE_STRATEGY = 0xaeEA02683f652dd1fb4846bE71FB8Cf26f3393d4;
@@ -153,11 +154,12 @@ contract DeployYieldBouncerScript is Script {
         return address(uint160(uint256(vm.load(allocator, bytes32(0)))));
     }
 
-    /// @dev Reference each strategy at its live rate, so bounces stay within RATE_BAND_BPS of the rate at deploy.
+    /// @dev Reference each strategy at its live rate. Yearn gets the wider band, every other feed RATE_BAND_BPS.
     function _setRateRefs(YieldBouncer bouncer, Feed[] memory feeds) internal {
         for (uint256 index = 0; index < feeds.length; index++) {
             address strategy = feeds[index].strategy;
-            bouncer.setRateRef(strategy, bouncer.rateOf(strategy), RATE_BAND_BPS);
+            bool yearn = keccak256(bytes(feeds[index].source)) == keccak256("yearn");
+            bouncer.setRateRef(strategy, bouncer.rateOf(strategy), yearn ? YEARN_BAND_BPS : RATE_BAND_BPS);
         }
     }
 

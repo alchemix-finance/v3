@@ -98,7 +98,11 @@ contract DeployYieldBouncerScriptTest is Test {
         assertEq(eth.room(script.MAINNET_BOT_ETH(), script.AAVE_STRATEGY(), script.YEARN_STRATEGY()), 25 ether);
         (uint256 refRate, uint16 band,,) = usd.rateRefs(script.YVUSD_STRATEGY());
         assertEq(refRate, usd.rateOf(script.YVUSD_STRATEGY()));
+        assertEq(band, script.YEARN_BAND_BPS(), "yearn feeds get the wider band");
+        (, band,,) = usd.rateRefs(script.FLUID_LITE_STRATEGY());
         assertEq(band, script.RATE_BAND_BPS());
+        (, band,,) = eth.rateRefs(script.YEARN_STRATEGY());
+        assertEq(band, script.YEARN_BAND_BPS());
         // two bouncers, two handovers, three sources, four feed registrations,
         // four rate references, two grants
         assertEq(vm.getNonce(script.deployerAddr()) - nonceBefore, 17);
