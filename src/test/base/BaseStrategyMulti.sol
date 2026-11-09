@@ -12,6 +12,11 @@ import "forge-std/console.sol";
 /// @notice Multi-step/fuzz/loop-heavy base tests shared by strategy suites.
 /// @dev Keep stochastic, iterative, and invariant-like tests here; prefer allowlist-aware helper paths.
 abstract contract BaseStrategyMulti is StrategyOps {
+    /// @dev Longest fuzz time jump. Override when a venue rejects deposits after years at its max rate.
+    function _maxFuzzTimeShift() internal view virtual returns (uint256) {
+        return 365 days;
+    }
+
     // Fuzz test: Multiple random allocations and deallocations
     function test_fuzz_multiple_allocations_deallocations(uint256[] calldata amounts, uint8[] calldata actions) public {
         uint256 numOps = bound(amounts.length, 1, 10);
@@ -165,7 +170,7 @@ abstract contract BaseStrategyMulti is StrategyOps {
                 }
             } else {
                 // Time warp
-                _warpWithHook(bound(amount, 0, 365 days));
+                _warpWithHook(bound(amount, 0, _maxFuzzTimeShift()));
             }
         }
 
@@ -388,7 +393,7 @@ abstract contract BaseStrategyMulti is StrategyOps {
 
         // Perform multiple time warps
         for (uint8 i = 0; i < numWarps; i++) {
-            warpAmount = bound(warpAmount, 1 hours, 365 days);
+            warpAmount = bound(warpAmount, 1 hours, _maxFuzzTimeShift());
             _warpWithHook(warpAmount);
 
             uint256 currentRealAssets = IMYTStrategy(strategy).realAssets();
