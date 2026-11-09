@@ -1025,11 +1025,12 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         return amountToRemove;
     }
 
-    /// @dev Syncs the account, attempts earmarked debt repayment, and liquidates collateral if still unhealthy.
-    /// @param accountId The token id of the account to liquidate.
-    /// @return amountLiquidated The amount of MYT seized from the account.
-    /// @return feeInYield The MYT fee paid to the liquidator.
-    /// @return feeInUnderlying The underlying-denominated fee paid from the fee vault, if any.
+    /// @dev Force-repays earmarked debt, then liquidates only if the account is still unhealthy.
+    ///      `amountLiquidated` is the repaid MYT when that restores health, otherwise only the `_doLiquidation` seizure.
+    /// @param accountId The token id of the account.
+    /// @return amountLiquidated Repaid MYT, or MYT seized by liquidation.
+    /// @return feeInYield MYT fee paid to the caller.
+    /// @return feeInUnderlying Underlying fee paid from the fee vault.
     function _liquidate(uint256 accountId) internal returns (uint256 amountLiquidated, uint256 feeInYield, uint256 feeInUnderlying) {
         // Query transmuter and earmark global debt
         _earmark();
@@ -1126,11 +1127,11 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
         return collateralizationRatio > collateralizationLowerBound;
     }
 
-    /// @dev Performs the collateral-seizure phase of liquidation once the account must be liquidated.
-    /// @param accountId The token id of the account to liquidate.
-    /// @return amountLiquidated The amount of MYT seized from the account.
-    /// @return feeInYield The MYT fee paid to the liquidator.
-    /// @return feeInUnderlying The underlying-denominated fee paid from the fee vault.
+    /// @dev Seizes collateral after forced repayment left the account unhealthy. Excludes that repayment.
+    /// @param accountId The token id of the account.
+    /// @return amountLiquidated MYT seized, including the liquidator fee when paid in MYT.
+    /// @return feeInYield MYT fee paid to the liquidator.
+    /// @return feeInUnderlying Underlying fee paid from the fee vault.
     function _doLiquidation(uint256 accountId)
         internal
         returns (uint256 amountLiquidated, uint256 feeInYield, uint256 feeInUnderlying)
@@ -1197,6 +1198,7 @@ contract AlchemistV3 is IAlchemistV3, Initializable {
             if (remainingShares > 0) {
                 uint256 removedShares = _subCollateralBalance(remainingShares, accountId);
                 netToTransmuter += removedShares;
+                amountLiquidated += removedShares;
 
                 uint256 extraDebtBurn = _capDebtCredit(convertYieldTokensToDebt(removedShares), account.debt);
                 if (extraDebtBurn > 0) {

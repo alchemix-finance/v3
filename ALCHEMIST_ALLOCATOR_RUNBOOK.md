@@ -414,11 +414,6 @@ Notes:
 
 PlasmaVault (rETH Liquity LP Carry) on Ethereum. Synchronous deposit and redeem, plus a scheduled exit leg through the WithdrawManager for amounts beyond idle liquidity.
 
-Supported allocator paths:
-
-- `allocate()`
-- `deallocate()`
-
 Notes:
 
 1. The strategy deposits `WETH` into the PlasmaVault and exits with `redeem`. For exits larger than `availableSyncLiquidity()`, the keeper or owner calls `requestExit(amount, replace)`. IPOR's Alpha releases funds on its schedule. Anyone calls `claimExit()` inside the window, and `deallocate()` claims a released request on its own before touching sync liquidity. The claim pays no withdraw fee. Each request pays the WithdrawManager's request fee in shares (0.2% today). A claim realizes value, so it is floor checked like a redeem. `requestExit` moves no funds. It refuses to overwrite a claimable release (`ClaimableExitPending`), so claim first. With `replace` false it also refuses to overwrite a request still waiting inside its window (`ExitRequestPending`), so a retried transaction cannot pay the fee twice. Pass `replace` true to resize or restart a waiting request on purpose. A lapsed request is overwritten either way. `previewAdjustedWithdraw` only counts idle plus sync liquidity, so a release is visible to the allocator once claimed. Requested shares stay in the strategy until claimed, so `realAssets()` needs no adjustment. Views: `pendingExitShares()`, `claimableExit()`, `exitWindowEnd()`.
@@ -442,3 +437,30 @@ Scenarios:
 10. Exit needed is larger than `availableSyncLiquidity()`. Keeper or owner: `requestExit(amount, false)`. Bot: poll `claimableExit()`, call `claimExit()` as soon as it is nonzero, and alert when `exitWindowEnd()` is within a day and nothing is claimable yet. Then the allocator deallocates from idle. If `claimExit()` reverts `PriceOutsideRoom`, the owner books the print with `acceptPrice(minPps, maxPps)` and the bot retries. If `requestExit()` reverts `ClaimableExitPending`, claim first. If it reverts `ExitRequestPending`, a request is already waiting. Leave it, or call `requestExit(amount, true)` to resize it and pay the request fee again.
 11. Claim window lapsed with nothing claimed. Nothing is lost, the shares are still ours. Keeper: `requestExit(amount, false)` again. Expect `availableSyncLiquidity()` to read low until IPOR's next release overwrites the reservation counter.
 12. `redeemFromRequest` reverts on access. IPOR has re-gated the claim path. Fall back to sync exits sized to `availableSyncLiquidity()`. This shares the access manager with `redeem`, so treat it as a signal that sync exits may be next. The bot watches that access manager's role updates for both selectors.
+
+### `Re7ETHMidasStrategy`
+
+Supported allocator paths:
+
+- `allocate()`
+- `deallocate()`
+
+Allocator notes:
+
+1. `allocate()` mints `Re7ETH` via the Midas deposit vault at posted NAV.
+  Swap paths are not supported. Allocations below the Midas minimum mint (`depositVault.minAmount()`) revert.
+2. `deallocate()` serves idle `WETH` first, then redeems instantly via the Midas redemption vault.
+  Instant redemption charges 30 bps, shares a global 5,000 Re7ETH/day limit, and depends on the vault's own `WETH` balance.
+3. Size `deallocate()` from `previewAdjustedWithdraw(amount)`.
+  It nets fee and slippage and caps at liquidity, daily limit and allowance. `0` means nothing is instantly redeemable.
+4. When the NAV feed is stale or out of band, `allocate()` reverts `NAV unhealthy`, and so does any `deallocate()` that must redeem `Re7ETH` (one covered by idle `WETH` still works).
+  Try `pokeNav()`. If that reverts, stop and escalate to the owner.
+
+Keeper notes:
+
+1. `requestExit(wethAmount)` queues a Midas redemption when instant liquidity is short. One request open at a time.
+2. Midas settles off-chain (~2 NAV updates) by sending `WETH` to the strategy. It lands as idle. a plain `deallocate()` then pulls it. Track with `pendingExitMTokens()`.
+3. If Midas rejects, the keeper bot should call `clearExit()` once the strategy's `Re7ETH` balance shows the escrow has returned. The contract refuses any clear before then. a short or disputed return needs the owner's `writeOffExit()`.
+4. Call `pokeNav()` at least as often as Midas posts NAV so the deviation band is not crossed by accrued yield.
+5. Owner-only: `acceptNav`, `setMaxNavStaleness`, `setMaxNavDeviationBPS`, `setAggregator`, `setKeeper`, `writeOffExit`, `clearExit` on a processed request.
+

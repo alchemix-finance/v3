@@ -11,8 +11,7 @@ interface IYearnV3Vault {
 
 /**
  * @title YearnV3Strategy
- * @notice ERC4626Strategy for Yearn V3 vaults; deallocations tolerate up to
- *         slippageBPS of realized loss instead of reverting.
+ * @notice ERC4626Strategy for Yearn V3 vaults, deallocations tolerate rounding level unrealized loss.
  */
 contract YearnV3Strategy is ERC4626Strategy {
     constructor(address _myt, StrategyParams memory _params, address _vault) ERC4626Strategy(_myt, _params, _vault) {}
