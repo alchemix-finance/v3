@@ -371,16 +371,72 @@ Supported allocator paths:
 - `deallocate()`
 - `deallocateWithSwap()`
 
+Async unwind operations (keeper/owner, outside the allocator):
+
+- `requestExits(uint256 wethAmount)` — unwrap `weETH` and enter the Ether.fi
+  native withdrawal queue (`LiquidityPool.requestWithdraw`), holding the minted
+  `WithdrawRequestNFT`. Callable by the owner or the configured `keeper`.
+- `claimExits(uint256[] tokenIds)` — permissionless settlement of finalized
+  requests; claimed ETH is wrapped into idle WETH for later deallocation or
+  `withdrawToVault()`.
+- `removeInvalidExits(uint256[] tokenIds)` — owner cleanup for requests the
+  protocol has invalidated/seized; realizes the loss in `realAssets()`.
+
 Notes:
 
 1. `allocate()` uses the Ether.fi deposit adapter and directly mints into `weETH`.
 2. `allocateWithSwap()` can be used when buying `weETH` on the market is preferable to the native mint path.
-  The quote should be for `WETH -> weETH`.
-3. `deallocate()` uses Ether.fi instant redemption.
-  This path is liquidity-dependent and reverts if instant redemption is unavailable.
+   The quote should be for `WETH -> weETH`. Pricing is oracle-free: minimum outputs are
+   floored by the canonical `weETH -> eETH` rate (`getEETHByWeETH`), not a Chainlink feed.
+
+3. `deallocate()` cascades through instant liquidity: idle WETH, then Ether.fi instant
+   redemption, then a LiquidityPool instant withdraw (bounds-checked, permission failures
+   tolerated). It reverts with "Insufficient WETH available" only when all instant legs
+   are exhausted; the async queue refills idle WETH over subsequent days.
+
 4. `deallocateWithSwap()` remains useful as the market exit path when the operator prefers to sell `weETH -> WETH` rather than rely on the redemption manager.
 
+5. Pending queue exits are valued inside `realAssets()` (unfinalized: share value minus
+   `pendingHaircutBps`; finalized: exact `getClaimableAmount`), so the vault never
+   registers a phantom loss during the unwind window. `previewAdjustedWithdraw` counts
+   instant capacity only.
 
+6. A canonical-rate circuit breaker trips the kill switch when the eETH-per-weETH rate
+   drops more than `maxRateDropBps` below the last allocation checkpoint. Allocation
+   blocks; deallocation stays open.
+
+7. Keeper runbook: monitor idle WETH + RedemptionManager capacity against the target
+   buffer; when low, call `requestExits(refill)`. After Ether.fi finalizes (watch
+   `lastFinalizedRequestId` on the WithdrawRequestNFT), anyone calls `claimExits`; the
+   allocator then rebalances the recovered WETH.
+
+### `IporFusionStrategy`
+
+PlasmaVault (rETH Liquity LP Carry) on Ethereum. Synchronous deposit and redeem, plus a scheduled exit leg through the WithdrawManager for amounts beyond idle liquidity.
+
+Notes:
+
+1. The strategy deposits `WETH` into the PlasmaVault and exits with `redeem`. For exits larger than `availableSyncLiquidity()`, the keeper or owner calls `requestExit(amount, replace)`. IPOR's Alpha releases funds on its schedule. Anyone calls `claimExit()` inside the window, and `deallocate()` claims a released request on its own before touching sync liquidity. The claim pays no withdraw fee. Each request pays the WithdrawManager's request fee in shares (0.2% today). A claim realizes value, so it is floor checked like a redeem. `requestExit` moves no funds. It refuses to overwrite a claimable release (`ClaimableExitPending`), so claim first. With `replace` false it also refuses to overwrite a request still waiting inside its window (`ExitRequestPending`), so a retried transaction cannot pay the fee twice. Pass `replace` true to resize or restart a waiting request on purpose. A lapsed request is overwritten either way. `previewAdjustedWithdraw` only counts idle plus sync liquidity, so a release is visible to the allocator once claimed. Requested shares stay in the strategy until claimed, so `realAssets()` needs no adjustment. Views: `pendingExitShares()`, `claimableExit()`, `exitWindowEnd()`.
+2. Share price room defaults: 5 bp minimum, 5 bp per day up and down, 50 bp maximum per update. The vault's expected carry is about 6% a year, about 1.6 bp per day. 5 bp per day is about 3 times that, so one week of carry fits in a single `poke()` without an owner snap. 50 bp is about 30 days of that carry. The 5 bp minimum covers rounding and fee dust. `priceBounds()` is that band. `allocate()` must sit inside it. `deallocate()` reverts `PriceOutsideRoom` only under the floor. One `poke()` books at most the accrued daily budget, excluding the 5 bp minimum, and a second poke in the same timestamp does nothing.
+3. A redeem is grossed up by the live withdraw fee (0.2% today) plus 10 bp, and it must fit in `availableSyncLiquidity()`. `maxWithdrawFee` is 0.5%. Entry costs about 0.4%. Deploy cap is 100 `WETH`.
+4. `previewRedeem` includes the withdraw fee and skips the unrealized 10% performance fee. The 10 bp buffer covers about two months of a 6% carry.
+5. The PlasmaVault locks a fresh deposit for 1 second (`AccountIsLocked`) and can sit at its supply cap.
+6. `allocate()` and `deallocate()` check the price after their deposit or redeem, which is when the PlasmaVault realizes fees and refreshes its booked balances. `acceptPrice(minPps, maxPps)` redeems a dust amount of the strategy's shares first for the same reason, so one snap books the price the next call will see. If that dust redeem cannot run (fresh deposit lock, no shares), the snap still books the current preview. Read `liveSharePrice()` right before the call and pass a band of about 1% around it. A print pushed in front of the call lands outside the band and the call reverts `PriceOutsideAcceptBounds` instead of booking it.
+
+Scenarios:
+
+1. No `allocate()` or `deallocate()` this week. Anyone: `poke()`.
+2. Allocate. Allocator operator: `allocate(adapter, amount)`.
+3. Deallocate. Allocator operator: `deallocate(adapter, amount)`, at least 1 second after this strategy's last deposit, sized to `availableSyncLiquidity()`.
+4. `liveSharePrice()` above `priceBounds()`. Anyone: `poke()` when the gap is within 50 bp. Owner: `acceptPrice(minPps, maxPps)` with a band around the live price when it is not.
+5. `liveSharePrice()` under the floor. Owner: `acceptPrice(minPps, maxPps)` with a band around the live price, then the allocator deallocates.
+6. No poke for more than about 30 days. Anyone: `poke()` once. If the price is still outside `priceBounds()`, wait for the daily budget and `poke()` again, or the owner calls `acceptPrice(minPps, maxPps)` with a band around the live price.
+7. `currentWithdrawFee()` above `maxWithdrawFee`. Owner: `setMaxWithdrawFee(newMax)`, then deallocate.
+8. No PlasmaVault redeem for about two months. Any shareholder: dust `redeem` on the PlasmaVault, then deallocate.
+9. PlasmaVault supply cap is full. Wait for IPOR before allocating.
+10. Exit needed is larger than `availableSyncLiquidity()`. Keeper or owner: `requestExit(amount, false)`. Bot: poll `claimableExit()`, call `claimExit()` as soon as it is nonzero, and alert when `exitWindowEnd()` is within a day and nothing is claimable yet. Then the allocator deallocates from idle. If `claimExit()` reverts `PriceOutsideRoom`, the owner books the print with `acceptPrice(minPps, maxPps)` and the bot retries. If `requestExit()` reverts `ClaimableExitPending`, claim first. If it reverts `ExitRequestPending`, a request is already waiting. Leave it, or call `requestExit(amount, true)` to resize it and pay the request fee again.
+11. Claim window lapsed with nothing claimed. Nothing is lost, the shares are still ours. Keeper: `requestExit(amount, false)` again. Expect `availableSyncLiquidity()` to read low until IPOR's next release overwrites the reservation counter.
+12. `redeemFromRequest` reverts on access. IPOR has re-gated the claim path. Fall back to sync exits sized to `availableSyncLiquidity()`. This shares the access manager with `redeem`, so treat it as a signal that sync exits may be next. The bot watches that access manager's role updates for both selectors.
 
 ### `Re7ETHMidasStrategy`
 

@@ -201,6 +201,15 @@ contract Re7WETHInvariantTest is E2EInvariantStrategyTest {
         return address(new ERC4626Strategy(vault_, params, RE7_WETH_VAULT));
     }
 
+    /// @dev The underlying Re7 Morpho vault caps one internal market at 2,000 WETH with
+    ///      ~62 already allocated at the pinned fork block; keep the vault-side cap
+    ///      inside that headroom so allocations cannot trip the wrapper's own
+    ///      AbsoluteCapExceeded. (The wrapper's maxDeposit view reports 0 and cannot
+    ///      be used as a bound.)
+    function _realAbsoluteCap() internal view override returns (uint256) {
+        return 1_500e18;
+    }
+
     function _enableForceDeallocate(address strategy) internal override {
         ERC4626Strategy(strategy).setCanForceDeallocate(true);
     }
