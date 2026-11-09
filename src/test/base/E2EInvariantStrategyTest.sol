@@ -224,7 +224,7 @@ abstract contract E2EInvariantStrategyTest is E2EInvariantEnv, IStrategySimulati
         assertGt(vault.maxRate(), 0, "maxRate is zero");
     }
 
-    function invariant_feeRecipientSharesBounded() public view {
+    function invariant_feeRecipientSharesBounded() public view virtual {
         if (vault.performanceFeeRecipient() == address(0)) return;
         uint256 feeShares = vault.balanceOf(vault.performanceFeeRecipient());
         assertLe(feeShares, vault.totalSupply() / 2, "fee shares exceed 50% of totalSupply");
