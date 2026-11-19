@@ -55,6 +55,7 @@ abstract contract StrategyLaunchBase is Script {
         uint256 probeToleranceBps;
         StrategyLauncher.Plan plan;
         Grant pilot;
+        uint256 pilotHeadroom;
         Grant liquidity;
         bool liquidityTopUp;
         uint256 scaleAbsoluteCap;
@@ -85,7 +86,8 @@ abstract contract StrategyLaunchBase is Script {
         cfg.forceDeallocatePenalty = _uint(json, ".caps.forceDeallocatePenalty");
         cfg.probeToleranceBps = _uint(json, ".probe.toleranceBps");
         cfg.plan = _plan(json, cfg.c.myt);
-        cfg.pilot = _grant(json, ".pilot", ".maxAllocate");
+        cfg.pilot = _grant(json, ".pilot", ".target");
+        cfg.pilotHeadroom = _uint(json, ".pilot.grantHeadroom");
         cfg.liquidity = _grant(json, ".liquidityGrant", ".amount");
         cfg.liquidityTopUp = keccak256(bytes(json.readString(".liquidityGrant.mode"))) == keccak256("topUp");
         cfg.scaleAbsoluteCap = _uint(json, ".scale.absoluteCap");
@@ -123,7 +125,7 @@ abstract contract StrategyLaunchBase is Script {
         calls[i++] = Call(strategy, abi.encodeCall(MYTStrategy.setKillSwitch, (false)), "setKillSwitch(false)");
 
         Grant memory p = cfg.pilot;
-        uint256 allocateBudget = p.amount + (swapLadder ? uint256(cfg.plan.smallLeg) + cfg.plan.largeLeg : 0);
+        uint256 allocateBudget = p.amount + cfg.pilotHeadroom + (swapLadder ? uint256(cfg.plan.smallLeg) + cfg.plan.largeLeg : 0);
         calls[i++] = Call(
             cfg.c.clip,
             abi.encodeCall(
@@ -251,7 +253,7 @@ abstract contract StrategyLaunchBase is Script {
             smallLeg: uint128(_uint(json, string.concat(legs, ".smallLeg"))),
             largeLeg: uint128(_uint(json, string.concat(legs, ".largeLeg"))),
             exitBufferBps: uint16(_uint(json, string.concat(legs, ".exitBufferBps"))),
-            pilotMax: _uint(json, ".pilot.maxAllocate")
+            pilotTarget: _uint(json, ".pilot.target")
         });
     }
 

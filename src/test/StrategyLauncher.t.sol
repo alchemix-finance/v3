@@ -26,6 +26,7 @@ contract StrategyLauncherTest is Test {
     address internal depositor = makeAddr("depositor");
     address internal probeBot = makeAddr("probeBot");
     address internal clipBot = makeAddr("clipBot");
+    address internal sentinel = makeAddr("sentinel");
 
     uint256 internal constant DEPOSIT = 100 ether;
     uint256 internal constant SMALL = 1 ether;
@@ -66,7 +67,7 @@ contract StrategyLauncherTest is Test {
         vm.stopPrank();
 
         DeployStrategyLauncherScript deployScript = new DeployStrategyLauncherScript();
-        launcher = deployScript.deploy(address(vault), address(probe), address(clip), address(this), probeBot, clipBot);
+        launcher = deployScript.deploy(address(vault), address(probe), address(clip), address(this), probeBot, clipBot, sentinel);
         launcher.acceptOwnership();
         probe.setPoker(address(launcher), true);
 
@@ -77,7 +78,7 @@ contract StrategyLauncherTest is Test {
         vm.stopPrank();
     }
 
-    function test_probeLaunch_stopsAtPilotMax() public {
+    function test_probeLaunch_stopsAtPilotTarget() public {
         MockMYTStrategy strategy = _registerStrategy("Probe strategy");
         _register(strategy, true);
 
@@ -85,13 +86,8 @@ contract StrategyLauncherTest is Test {
         vm.prank(clipBot);
         launcher.clip(address(strategy), 1 ether, "");
 
-        for (uint8 leg = 1; leg <= 4; leg++) {
-            vm.prank(probeBot);
-            uint8 ran = launcher.step(address(strategy), "", 0);
-            assertEq(ran, leg);
-        }
-        (StrategyLauncher.Phase phase,,,,) = launcher.nextStep(address(strategy));
-        assertEq(uint8(phase), uint8(StrategyLauncher.Phase.Pilot));
+        _runLadder(strategy);
+        assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.Pilot));
         assertApproxEqAbs(strategy.realAssets(), 0, 1);
 
         clip.grantAllocate(address(launcher), address(strategy), PILOT, PILOT, 0, address(0), 0, MAX_LOSS);
@@ -101,7 +97,7 @@ contract StrategyLauncherTest is Test {
         vm.prank(clipBot);
         launcher.clip(address(strategy), 8 ether, "");
 
-        (StrategyLauncher.Phase done,,, uint256 room,) = launcher.nextStep(address(strategy));
+        (StrategyLauncher.Phase done,,, uint256 room,,) = launcher.nextStep(address(strategy));
         assertEq(room, 0);
         assertEq(uint8(done), uint8(StrategyLauncher.Phase.PilotComplete));
         assertApproxEqAbs(strategy.realAssets(), PILOT, 1);
@@ -111,8 +107,7 @@ contract StrategyLauncherTest is Test {
         launcher.clip(address(strategy), 1, "");
 
         launcher.graduate(address(strategy));
-        (StrategyLauncher.Phase graduated,,,,) = launcher.nextStep(address(strategy));
-        assertEq(uint8(graduated), uint8(StrategyLauncher.Phase.Graduated));
+        assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.Graduated));
     }
 
     function test_clipLadder_runsWhenProbeCannot() public {
@@ -123,16 +118,12 @@ contract StrategyLauncherTest is Test {
         clip.grantAllocate(address(launcher), address(strategy), allocateBudget, PILOT, 0, address(0), 0, MAX_LOSS);
         clip.grantDeallocate(address(launcher), address(strategy), SMALL + LARGE, LARGE, 0, address(0), 0, MAX_LOSS);
 
-        for (uint8 leg = 1; leg <= 4; leg++) {
-            vm.prank(probeBot);
-            launcher.step(address(strategy), "", 0);
-        }
+        _runLadder(strategy);
         assertApproxEqAbs(strategy.realAssets(), 0, 1);
 
         vm.prank(clipBot);
         launcher.clip(address(strategy), PILOT, "");
-        (StrategyLauncher.Phase done,,,,) = launcher.nextStep(address(strategy));
-        assertEq(uint8(done), uint8(StrategyLauncher.Phase.PilotComplete));
+        assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.PilotComplete));
         assertApproxEqAbs(strategy.realAssets(), PILOT, 1);
         (uint256 left,,,,,,) = clip.allocateGrants(address(launcher), address(strategy));
         assertEq(left, 0);
@@ -147,6 +138,52 @@ contract StrategyLauncherTest is Test {
         launcher.step(address(strategy), "", 0);
     }
 
+    /// @dev A venue revert comes back as StepFailed with the venue's own revert data inside.
+    function test_probeFailure_reportsTheLegAndReason() public {
+        MockMYTStrategy strategy = _registerStrategy("Paused probe strategy");
+        _register(strategy, true);
+        probe.setPaused(true);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                StrategyLauncher.StepFailed.selector,
+                address(strategy),
+                StrategyLauncher.Phase.Ladder,
+                uint8(1),
+                StrategyLauncher.Venue.Probe,
+                StrategyLauncher.Mode.Direct,
+                true,
+                SMALL,
+                abi.encodeWithSelector(StrategyProbe.ProbePaused.selector)
+            )
+        );
+        vm.prank(probeBot);
+        launcher.step(address(strategy), "", 0);
+    }
+
+    function test_clipFailure_reportsTheClipAndReason() public {
+        MockMYTStrategy strategy = _registerStrategy("No grant strategy");
+        _register(strategy, true);
+        vm.prank(sentinel);
+        launcher.setLeg(address(strategy), 5, 0);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                StrategyLauncher.StepFailed.selector,
+                address(strategy),
+                StrategyLauncher.Phase.Pilot,
+                uint8(1),
+                StrategyLauncher.Venue.Clip,
+                StrategyLauncher.Mode.Direct,
+                true,
+                5 ether,
+                abi.encodeWithSelector(ClipAllocator.NoGrant.selector, address(launcher), address(strategy), true)
+            )
+        );
+        vm.prank(clipBot);
+        launcher.clip(address(strategy), 5 ether, "");
+    }
+
     function test_abort_blocksTheLadder() public {
         MockMYTStrategy strategy = _registerStrategy("Aborted strategy");
         _register(strategy, true);
@@ -157,14 +194,110 @@ contract StrategyLauncherTest is Test {
         launcher.step(address(strategy), "", 0);
     }
 
-    function test_stranger_cannotStepOrClip() public {
-        MockMYTStrategy strategy = _registerStrategy("Guarded strategy");
+    function test_sentinel_reopensAnAbortedLaunch() public {
+        MockMYTStrategy strategy = _registerStrategy("Reopened strategy");
+        _register(strategy, false);
+        vm.prank(sentinel);
+        launcher.abort(address(strategy));
+
+        StrategyLauncher.Plan memory plan = _plan(false, StrategyLauncher.Mode.Direct, StrategyLauncher.Mode.Direct);
+        plan.pilotTarget = 5 ether;
+        vm.prank(sentinel);
+        launcher.registerLaunch(address(strategy), plan);
+
+        StrategyLauncher.Launch memory l = launcher.launch(address(strategy));
+        assertEq(l.attempt, 2);
+        assertEq(uint8(l.phase), uint8(StrategyLauncher.Phase.Ladder));
+        assertEq(l.pilotTarget, 5 ether);
+        assertEq(l.planHash, keccak256(abi.encode(plan)));
+        assertEq(launcher.launchCount(), 1, "listed once");
+    }
+
+    function test_sentinel_editsThePilot() public {
+        MockMYTStrategy strategy = _registerStrategy("Edited strategy");
+        _register(strategy, false);
+        clip.grantAllocate(address(launcher), address(strategy), 100 ether, PILOT, 0, address(0), 0, MAX_LOSS);
+        vm.startPrank(sentinel);
+        launcher.setLeg(address(strategy), 5, 0);
+        vm.stopPrank();
+
+        vm.prank(clipBot);
+        launcher.clip(address(strategy), 10 ether, "");
+
+        StrategyLauncher.Plan memory plan = _plan(false, StrategyLauncher.Mode.Direct, StrategyLauncher.Mode.Direct);
+        plan.pilotTarget = 10 ether;
+        vm.prank(sentinel);
+        launcher.updatePlan(address(strategy), plan);
+        assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.PilotComplete), "target lowered to what landed");
+
+        plan.pilotTarget = 15 ether;
+        vm.prank(sentinel);
+        launcher.updatePlan(address(strategy), plan);
+        assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.Pilot), "target raised reopens");
+        vm.prank(clipBot);
+        launcher.clip(address(strategy), 5 ether, "");
+        assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.PilotComplete));
+
+        vm.prank(sentinel);
+        launcher.resetPilot(address(strategy));
+        StrategyLauncher.Launch memory l = launcher.launch(address(strategy));
+        assertEq(uint8(l.phase), uint8(StrategyLauncher.Phase.Pilot));
+        assertEq(l.pilotAllocated, 0);
+        assertEq(l.clipCount, 0);
+        assertApproxEqAbs(strategy.realAssets(), 15 ether, 1, "clips stay in the strategy");
+    }
+
+    function test_setLeg_rejectsProbeLegs() public {
+        MockMYTStrategy strategy = _registerStrategy("Probe legs strategy");
         _register(strategy, true);
 
+        vm.startPrank(sentinel);
+        vm.expectRevert(StrategyLauncher.ProbeOwnsLadder.selector);
+        launcher.setLeg(address(strategy), 3, 0);
+        vm.expectRevert(abi.encodeWithSelector(StrategyLauncher.InvalidLeg.selector, uint8(6)));
+        launcher.setLeg(address(strategy), 6, 0);
+        vm.stopPrank();
+    }
+
+    function test_stranger_cannotRunOrManage() public {
+        MockMYTStrategy strategy = _registerStrategy("Guarded strategy");
+        _register(strategy, true);
+        StrategyLauncher.Plan memory plan = _plan(true, StrategyLauncher.Mode.Direct, StrategyLauncher.Mode.Direct);
+        address stranger = makeAddr("stranger");
+
+        vm.startPrank(stranger);
         vm.expectRevert(StrategyLauncher.NotProbeKeeper.selector);
         launcher.step(address(strategy), "", 0);
         vm.expectRevert(StrategyLauncher.NotClipKeeper.selector);
         launcher.clip(address(strategy), 1, "");
+        vm.expectRevert(StrategyLauncher.NotSentinel.selector);
+        launcher.registerLaunch(address(strategy), plan);
+        vm.expectRevert(StrategyLauncher.NotSentinel.selector);
+        launcher.updatePlan(address(strategy), plan);
+        vm.expectRevert(StrategyLauncher.NotSentinel.selector);
+        launcher.setLeg(address(strategy), 5, 0);
+        vm.expectRevert(StrategyLauncher.NotSentinel.selector);
+        launcher.resetPilot(address(strategy));
+        vm.expectRevert(StrategyLauncher.NotSentinel.selector);
+        launcher.abort(address(strategy));
+        vm.expectRevert(StrategyLauncher.NotSentinel.selector);
+        launcher.graduate(address(strategy));
+        vm.expectRevert(StrategyLauncher.NotKeeper.selector);
+        launcher.pause(address(vault));
+        vm.expectRevert(StrategyLauncher.NotOwner.selector);
+        launcher.setSentinel(stranger, true);
+        vm.stopPrank();
+    }
+
+    function _runLadder(MockMYTStrategy strategy) internal {
+        for (uint8 leg = 1; leg <= 4; leg++) {
+            vm.prank(probeBot);
+            assertEq(launcher.step(address(strategy), "", 0), leg);
+        }
+    }
+
+    function _phase(MockMYTStrategy strategy) internal view returns (StrategyLauncher.Phase) {
+        return launcher.launch(address(strategy)).phase;
     }
 
     function _register(MockMYTStrategy strategy, bool useProbe) internal {
@@ -185,7 +318,7 @@ contract StrategyLauncherTest is Test {
             smallLeg: uint128(SMALL),
             largeLeg: uint128(LARGE),
             exitBufferBps: 0,
-            pilotMax: PILOT
+            pilotTarget: PILOT
         });
     }
 

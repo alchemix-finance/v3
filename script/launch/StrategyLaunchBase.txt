@@ -1,0 +1,117 @@
+StrategyLaunchBase: the calls in batch 1 and batch 2, in execution order.
+Every call is sent by the Safe as its own transaction.
+
+Each call is two lines:
+  // the call with the defaults from etherfi-mainnet-weth.json
+  ContractName.function(<valueName>, ...)
+
+An address that does not exist yet is written 0x0. Values are raw units: WETH has 18
+decimals, and caps and penalties are WAD (1e18 = 100%). adapterId is
+keccak256(abi.encode("this", strategy)), so it is 0x0 until the strategy is deployed.
+
+The Ether.fi launch uses the swap paths both ways, so its ladder runs through the clip
+allocator (strategy.useProbe = false) and batch 2 makes no manual allocation.
+
+
+BATCH 1: register, cap at the pilot level, turn allocation on, grant the launcher, open the launch
+--------------------------------------------------------------------------------------------------
+
+1. Submit the strategy to the vault.
+// 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4.submitSetStrategy(0x0, 0x29bcfeD246ce37319d94eBa107db90C453D4c43D)
+AlchemistCurator.submitSetStrategy(<strategy>, <myt>)
+
+2. Add the strategy as a vault adapter.
+// 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4.setStrategy(0x0, 0x29bcfeD246ce37319d94eBa107db90C453D4c43D)
+AlchemistCurator.setStrategy(<strategy>, <myt>)
+
+3. Submit the pilot absolute cap. It covers the pilot, the grant headroom, and what the ladder
+   leaves behind. It is the hard ceiling for every retry round.
+// 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4.submitIncreaseAbsoluteCap(0x0, 61000000000000000000)
+AlchemistCurator.submitIncreaseAbsoluteCap(<strategy>, <caps.absoluteCap>)
+
+4. Set the pilot absolute cap.
+// 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4.increaseAbsoluteCap(0x0, 61000000000000000000)
+AlchemistCurator.increaseAbsoluteCap(<strategy>, <caps.absoluteCap>)
+
+5. Submit the relative cap.
+// 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4.submitIncreaseRelativeCap(0x0, 300000000000000000)
+AlchemistCurator.submitIncreaseRelativeCap(<strategy>, <caps.relativeCap>)
+
+6. Set the relative cap.
+// 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4.increaseRelativeCap(0x0, 300000000000000000)
+AlchemistCurator.increaseRelativeCap(<strategy>, <caps.relativeCap>)
+
+7. Submit the force deallocate penalty. Anyone executes it after the batch (see the end of batch 1).
+// 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4.submitSetForceDeallocatePenalty(0x0, 0x29bcfeD246ce37319d94eBa107db90C453D4c43D, 20000000000000000)
+AlchemistCurator.submitSetForceDeallocatePenalty(<strategy>, <myt>, <caps.forceDeallocatePenalty>)
+
+8. Assign the risk class the allocator enforces.
+// 0xdb7d25b0bfd1585a797f6BF7d7CCBa26E77253cc.assignStrategyRiskLevel(0x0, 1)
+AlchemistStrategyClassifier.assignStrategyRiskLevel(<uint256(adapterId)>, <strategy.riskClass>)
+
+9. Turn allocation on.
+// 0x0.setKillSwitch(false)
+MYTStrategy.setKillSwitch(false)
+
+10. Give the launcher its pilot budget on the strategy: the target plus the headroom a sentinel can
+    use for retries. A swap ladder adds smallLeg + largeLeg, so here it is 40 + 20 + 1 + 10 WETH.
+    A probe launch grants <pilot.target + pilot.grantHeadroom> alone.
+// 0x0.grantAllocate(0x0, 0x0, 71000000000000000000, 10000000000000000000, 300, 0x0, 0, 50)
+ClipAllocator.grantAllocate(<launcher>, <strategy>, <pilot.target + pilot.grantHeadroom + swapLadder.smallLeg + swapLadder.largeLeg>, <pilot.maxClip>, <pilot.minIntervalBlocks>, <pilot.priceToken>, <pilot.limitRate>, <pilot.maxLossBps>)
+
+11. Swap ladder only (strategy.useProbe = false): let the launcher run the two deallocate legs.
+    A probe launch skips this call.
+// 0x0.grantDeallocate(0x0, 0x0, 11000000000000000000, 10000000000000000000, 0, 0x0, 0, 50)
+ClipAllocator.grantDeallocate(<launcher>, <strategy>, <swapLadder.smallLeg + swapLadder.largeLeg>, <swapLadder.largeLeg>, 0, <pilot.priceToken>, <pilot.limitRate>, <pilot.maxLossBps>)
+
+12. Let the launcher raise idle from the liquidity adapter. liquidityGrant.mode picks the call:
+    "grant" when the launcher has no grant there yet, "topUp" otherwise.
+// 0x0.grantDeallocate(0x0, 0x8c8BA78A8be6047A71a183d6680fAf32FF9e0209, 71000000000000000000, 10000000000000000000, 0, 0x0, 0, 10)
+ClipAllocator.grantDeallocate(<launcher>, <liquidityAdapter>, <liquidityGrant.amount>, <liquidityGrant.maxClip>, <liquidityGrant.minIntervalBlocks>, <liquidityGrant.priceToken>, <liquidityGrant.limitRate>, <liquidityGrant.maxLossBps>)
+    or, when mode is "topUp":
+// 0x0.topUpDeallocate(0x0, 0x8c8BA78A8be6047A71a183d6680fAf32FF9e0209, 71000000000000000000)
+ClipAllocator.topUpDeallocate(<launcher>, <liquidityAdapter>, <liquidityGrant.amount>)
+
+13. Open the launch in the Ladder phase. The plan fields are in this order:
+    (myt, useProbe, allocMode, deallocMode, smallLeg, largeLeg, exitBufferBps, pilotTarget).
+    Modes: Direct = 1, Swap = 2, UnwrapAndSwap = 3. When useProbe is true the legs come from
+    the probe section, otherwise from swapLadder. A sentinel may also send this call, and
+    sending it again later opens the next attempt.
+// 0x0.registerLaunch(0x0, (0x29bcfeD246ce37319d94eBa107db90C453D4c43D, false, 2, 2, 1000000000000000000, 10000000000000000000, 50, 40000000000000000000))
+StrategyLauncher.registerLaunch(<strategy>, (<myt>, <strategy.useProbe>, <strategy.allocate>, <strategy.deallocate>, <smallLeg>, <largeLeg>, <exitBufferBps>, <pilot.target>))
+
+After batch 1 lands, outside the Safe. Anyone may call it, and the probe bot does it first.
+// 0x29bcfeD246ce37319d94eBa107db90C453D4c43D.setForceDeallocatePenalty(0x0, 20000000000000000)
+VaultV2.setForceDeallocatePenalty(<strategy>, <caps.forceDeallocatePenalty>)
+
+
+BATCH 2: after the pilot review, raise the cap, close the launcher's budget, allocate, graduate
+----------------------------------------------------------------------------------------------
+
+1. Submit the target absolute cap.
+// 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4.submitIncreaseAbsoluteCap(0x0, 5000000000000000000000)
+AlchemistCurator.submitIncreaseAbsoluteCap(<strategy>, <scale.absoluteCap>)
+
+2. Set the target absolute cap.
+// 0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4.increaseAbsoluteCap(0x0, 5000000000000000000000)
+AlchemistCurator.increaseAbsoluteCap(<strategy>, <scale.absoluteCap>)
+
+3. Zero whatever is left of the launcher's pilot budget.
+// 0x0.revokeAllocate(0x0, 0x0)
+ClipAllocator.revokeAllocate(<launcher>, <strategy>)
+
+4. Direct strategies only (strategy.allocate = "direct"): move the manual amount out of the liquidity adapter,
+   because the vault holds no idle cash. Not in the Ether.fi batch.
+// 0x23a3C27Bb007887FD8CbfEaF323799093a450e7e.deallocate(0x8c8BA78A8be6047A71a183d6680fAf32FF9e0209, 200000000000000000000)
+AlchemistAllocator.deallocate(<liquidityAdapter>, <scale.manualAllocate>)
+
+5. Direct strategies only: allocate that amount into the strategy. Not in the Ether.fi batch.
+// 0x23a3C27Bb007887FD8CbfEaF323799093a450e7e.allocate(0x0, 200000000000000000000)
+AlchemistAllocator.allocate(<strategy>, <scale.manualAllocate>)
+
+6. Close the launch.
+// 0x0.graduate(0x0)
+StrategyLauncher.graduate(<strategy>)
+
+Swap strategies skip steps 4 and 5, because a quote will not last through signing.
+The Safe tops up a keeper grant instead.
