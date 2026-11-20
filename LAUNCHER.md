@@ -4,6 +4,25 @@
 
 The probe and the clip allocator for each vault are assumed to be deployed already, and to already be operators of that vault's `AlchemistAllocator`.
 
+## Staged rollout in one page
+
+1. Deploy the strategy with its deploy script.
+2. The Safe executes batch 1.
+3. The keeper bot runs this loop until the pilot is complete. For a direct strategy this is the whole bot:
+
+```solidity
+(Phase phase,,,, bool needsQuote, uint64 readyBlock) = launcher.nextStep(strategy);
+if (phase != Phase.Ladder && phase != Phase.Pilot) return;   // nothing to do
+if (block.number < readyBlock) return;                       // wait
+launcher.advance(strategy, "", 0);                           // the next ladder leg or pilot clip
+```
+
+4. The Safe reviews `report(strategy)` and executes batch 2.
+
+A swap strategy is the same loop, with swap calldata in place of `""` when `needsQuote` is true.
+
+`src/test/StagedRolloutYvWETH.t.sol` runs exactly this for Yearn WETH-1, an `ERC4626Strategy` with direct paths both ways, on a mainnet fork with nothing stubbed: four probe legs, four pilot clips, then batch 2. `src/test/LaunchEtherfiEETHStrategy.t.sol` covers the swap paths.
+
 ## Soft limits, hard limits
 
 The launcher is a test and deployment runner and a reporting layer. Its numbers (leg sizes, `pilotTarget`, the leg pointer) only shape runs that go through it, and a sentinel can change all of them. They are soft limits.
@@ -189,8 +208,17 @@ What still needs the Safe:
 
 ```bash
 forge test --match-contract StrategyLauncherTest
+forge test --match-contract StagedRolloutYvWETHTest
 forge test --match-contract LaunchEtherfiEETHStrategyTest
 ```
+
+`StagedRolloutYvWETHTest` is the direct path rollout on a mainnet fork at block 26,450,000, against the live ETH MYT and the live Yearn WETH-1 vault. Its config is `script/launch/yvweth-mainnet-weth.json`.
+
+| Test | Shows |
+|---|---|
+| `test_stagedRollout_endToEnd` | Deploy, batch 1, then the keeper loop alone runs four probe legs (0.1 and 1 WETH, in and out) and four 10 WETH clips, 25 blocks apart, to `PilotComplete`. The probe returns the idle it raised. Batch 2 raises the cap, allocates 100 WETH and graduates. |
+| `test_stagedRollout_failedStepThenRetry` | A pause fails leg 3 with `StepFailed(…, Probe, …, ProbePaused)` and later clip 2 with `StepFailed(…, Clip, …, MoverPaused)`. Nothing moves, and the same loop finishes once the Safe unpauses. |
+| `test_stagedRollout_sentinelAdjustsThePilot` | The sentinel lowers the target mid-pilot, the next clip shrinks to fit, then `resetPilot` runs a second round from the headroom with no Safe call. |
 
 `StrategyLauncherTest` runs on a local vault with mock strategies: probe and clip ladders, `StepFailed` from each venue, sentinel reopen, `updatePlan`, `resetPilot`, `setLeg` limits, and every role check.
 

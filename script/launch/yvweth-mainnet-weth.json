@@ -1,0 +1,61 @@
+{
+  "name": "yvweth-mainnet-weth",
+  "chainId": 1,
+  "contracts": {
+    "safe": "0xF56D660138815fC5d7a06cd0E1630225E788293D",
+    "myt": "0x29bcfeD246ce37319d94eBa107db90C453D4c43D",
+    "curator": "0x7d61E3cDe8B58C4be192a7A35E9d626c419302A4",
+    "classifier": "0xdb7d25b0bfd1585a797f6BF7d7CCBa26E77253cc",
+    "allocator": "0x23a3C27Bb007887FD8CbfEaF323799093a450e7e",
+    "probe": "0x0000000000000000000000000000000000000000",
+    "clip": "0x0000000000000000000000000000000000000000",
+    "launcher": "0x0000000000000000000000000000000000000000",
+    "liquidityAdapter": "0x8c8BA78A8be6047A71a183d6680fAf32FF9e0209"
+  },
+  "strategy": {
+    "address": "0x0000000000000000000000000000000000000000",
+    "deployScript": "script/DeployYvWETHStrategy.s.sol",
+    "riskClass": 0,
+    "allocate": "direct",
+    "deallocate": "direct",
+    "useProbe": true
+  },
+  "caps": {
+    "absoluteCap": "61000000000000000000",
+    "relativeCap": "300000000000000000",
+    "forceDeallocatePenalty": "20000000000000000"
+  },
+  "probe": {
+    "smallLeg": "100000000000000000",
+    "largeLeg": "1000000000000000000",
+    "toleranceBps": "100",
+    "exitBufferBps": "0"
+  },
+  "swapLadder": {
+    "smallLeg": "0",
+    "largeLeg": "0",
+    "exitBufferBps": "0"
+  },
+  "pilot": {
+    "target": "40000000000000000000",
+    "grantHeadroom": "20000000000000000000",
+    "maxClip": "10000000000000000000",
+    "minIntervalBlocks": 25,
+    "priceToken": "0x0000000000000000000000000000000000000000",
+    "limitRate": "0",
+    "maxLossBps": 10
+  },
+  "liquidityGrant": {
+    "mode": "grant",
+    "amount": "60000000000000000000",
+    "maxClip": "10000000000000000000",
+    "minIntervalBlocks": 0,
+    "priceToken": "0x0000000000000000000000000000000000000000",
+    "limitRate": "0",
+    "maxLossBps": 10
+  },
+  "scale": {
+    "absoluteCap": "10000000000000000000000",
+    "manualAllocate": "100000000000000000000"
+  }
+}
