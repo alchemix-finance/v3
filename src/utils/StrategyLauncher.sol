@@ -133,14 +133,13 @@ contract StrategyLauncher {
     address public owner;
     address public pendingOwner;
     mapping(address => bool) public sentinels;
-    mapping(address => bool) public probeKeepers;
-    mapping(address => bool) public clipKeepers;
+    mapping(address => bool) public keepers;
     mapping(address => Venues) public venues;
     mapping(address => Launch) internal launches;
     address[] public launchList;
 
     event VenueUpdated(address indexed myt, address probe, address clip);
-    event KeeperUpdated(address indexed keeper, bool probeRole, bool allowed);
+    event KeeperUpdated(address indexed keeper, bool allowed);
     event SentinelUpdated(address indexed sentinel, bool allowed);
     event LaunchRegistered(
         address indexed adapter, address indexed myt, uint32 attempt, bytes32 planHash, bool useProbe, uint256 pilotTarget
@@ -169,8 +168,6 @@ contract StrategyLauncher {
 
     error NotOwner();
     error NotSentinel();
-    error NotProbeKeeper();
-    error NotClipKeeper();
     error NotKeeper();
     error NoVenue(address myt);
     error NotRegistered(address adapter);
@@ -184,7 +181,6 @@ contract StrategyLauncher {
     error UnexpectedQuote();
     error ModeUnsupported(Mode mode);
     error BufferTooHigh(uint16 exitBufferBps);
-    error PilotExceeded(uint256 pilotAllocated, uint256 pilotTarget);
     /// @notice A probe or clip allocator call reverted. `reason` is that call's revert data, untouched.
     error StepFailed(
         address adapter, Phase phase, uint8 step, Venue venue, Mode mode, bool isAllocate, uint256 amount, bytes reason
@@ -200,13 +196,8 @@ contract StrategyLauncher {
         _;
     }
 
-    modifier onlyProbeKeeper() {
-        if (!probeKeepers[msg.sender]) revert NotProbeKeeper();
-        _;
-    }
-
-    modifier onlyClipKeeper() {
-        if (!clipKeepers[msg.sender]) revert NotClipKeeper();
+    modifier onlyKeeper() {
+        if (!keepers[msg.sender]) revert NotKeeper();
         _;
     }
 
@@ -228,14 +219,9 @@ contract StrategyLauncher {
         emit SentinelUpdated(sentinel, allowed);
     }
 
-    function setProbeKeeper(address keeper, bool allowed) external onlyOwner {
-        probeKeepers[keeper] = allowed;
-        emit KeeperUpdated(keeper, true, allowed);
-    }
-
-    function setClipKeeper(address keeper, bool allowed) external onlyOwner {
-        clipKeepers[keeper] = allowed;
-        emit KeeperUpdated(keeper, false, allowed);
+    function setKeeper(address keeper, bool allowed) external onlyOwner {
+        keepers[keeper] = allowed;
+        emit KeeperUpdated(keeper, allowed);
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
@@ -360,15 +346,24 @@ contract StrategyLauncher {
 
     // ---- keepers ----------------------------------------------------------------
 
-    /// @notice Run the next ladder leg. Leg 4 moves the launch to Pilot.
-    ///         `txData` is required only when that leg's mode is a swap.
-    function step(address adapter, bytes calldata txData, uint256 minIntermediateOut)
+    /// @notice Run whatever `nextStep` names: the next ladder leg, or one pilot clip of the amount it returns.
+    ///         `txData` is required only when that step's mode is a swap. Returns the leg or clip number.
+    function advance(address adapter, bytes calldata txData, uint256 minIntermediateOut)
         external
-        onlyProbeKeeper
-        returns (uint8 leg)
+        onlyKeeper
+        returns (uint8 index)
     {
         Launch storage l = launches[adapter];
-        if (l.phase != Phase.Ladder) revert WrongPhase(l.phase);
+        if (l.phase == Phase.Ladder) return _ladder(adapter, l, txData, minIntermediateOut);
+        if (l.phase != Phase.Pilot) revert WrongPhase(l.phase);
+        if (minIntermediateOut != 0) revert UnexpectedQuote();
+        return _pilot(adapter, l, txData);
+    }
+
+    function _ladder(address adapter, Launch storage l, bytes calldata txData, uint256 minIntermediateOut)
+        internal
+        returns (uint8 leg)
+    {
         Venues memory v = venues[l.myt];
         if (l.useProbe) {
             if (txData.length != 0 || minIntermediateOut != 0) revert UnexpectedQuote();
@@ -385,15 +380,14 @@ contract StrategyLauncher {
         }
     }
 
-    /// @notice Allocate one pilot clip. Reverts outside Pilot or above `pilotTarget`.
-    function clip(address adapter, uint256 assets, bytes calldata txData) external onlyClipKeeper {
-        Launch storage l = launches[adapter];
-        if (l.phase != Phase.Pilot) revert WrongPhase(l.phase);
-        if (assets == 0 || l.pilotAllocated + assets > l.pilotTarget) revert PilotExceeded(l.pilotAllocated, l.pilotTarget);
+    /// @dev One clip: what remains under `pilotTarget`, at most the grant's clip size.
+    function _pilot(address adapter, Launch storage l, bytes calldata txData) internal returns (uint8) {
+        address clip_ = venues[l.myt].clip;
+        (uint256 assets,) = _clipAmount(clip_, adapter, l.pilotTarget - l.pilotAllocated);
         uint32 n = l.clipCount + 1;
         _call(
             adapter,
-            venues[l.myt].clip,
+            clip_,
             _allocateCall(l.allocMode, adapter, assets, txData),
             Step(Phase.Pilot, uint8(n), Venue.Clip, l.allocMode, true, assets)
         );
@@ -402,13 +396,12 @@ contract StrategyLauncher {
         l.lastSuccessBlock = uint64(block.number);
         emit PilotClip(adapter, l.attempt, n, msg.sender, assets, l.pilotAllocated, l.pilotTarget);
         if (l.pilotAllocated >= l.pilotTarget) _completePilot(adapter, l);
+        return uint8(n);
     }
 
     /// @notice Pause the venue's probe and, when the launcher holds clip budget, the clip allocator.
     function pause(address myt) external {
-        if (!probeKeepers[msg.sender] && !clipKeepers[msg.sender] && !sentinels[msg.sender] && msg.sender != owner) {
-            revert NotKeeper();
-        }
+        if (!keepers[msg.sender] && !sentinels[msg.sender] && msg.sender != owner) revert NotKeeper();
         Venues memory v = venues[myt];
         if (v.probe == address(0)) revert NoVenue(myt);
         IStrategyProbeLite(v.probe).setPaused(true);
@@ -417,8 +410,8 @@ contract StrategyLauncher {
 
     // ---- views ------------------------------------------------------------------
 
-    /// @notice The next keeper call: phase, leg, path, amount, whether it needs a quote, and the first
-    ///         block the clip allocator accepts it. In Pilot the amount is one clip at most.
+    /// @notice What `advance` does next: phase, leg or clip number, path, amount, whether it needs a quote,
+    ///         and the first block the clip allocator accepts it. In Pilot the amount is one clip.
     function nextStep(address adapter)
         public
         view
@@ -439,11 +432,9 @@ contract StrategyLauncher {
             }
             needsQuote = mode != Mode.Direct;
         } else if (phase == Phase.Pilot) {
+            leg = uint8(l.clipCount + 1);
             mode = l.allocMode;
-            amount = l.pilotTarget - l.pilotAllocated;
-            uint256 maxClip;
-            (, maxClip, readyBlock) = _grant(v.clip, adapter, true);
-            if (maxClip != 0 && maxClip < amount) amount = maxClip;
+            (amount, readyBlock) = _clipAmount(v.clip, adapter, l.pilotTarget - l.pilotAllocated);
             needsQuote = mode == Mode.Swap;
         }
     }
@@ -596,6 +587,12 @@ contract StrategyLauncher {
             (remaining, maxClip, interval, last,,,) = IClipAllocatorLite(clip_).deallocateGrants(address(this), adapter);
         }
         if (last != 0) readyBlock = last + interval;
+    }
+
+    function _clipAmount(address clip_, address adapter, uint256 room) internal view returns (uint256 amount, uint64 readyBlock) {
+        uint256 maxClip;
+        (, maxClip, readyBlock) = _grant(clip_, adapter, true);
+        amount = (maxClip != 0 && maxClip < room) ? maxClip : room;
     }
 
     function _probeNext(address probe, address adapter) internal view returns (uint8 leg, uint256 amount, Mode mode) {

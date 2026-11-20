@@ -42,8 +42,7 @@ contract LaunchEtherfiEETHStrategyTest is Test {
     uint256 internal constant THIN = 80;
     uint256 internal constant BELOW_FLOOR = 200;
 
-    address internal probeBot = makeAddr("probeBot");
-    address internal clipBot = makeAddr("clipBot");
+    address internal keeper = makeAddr("keeper");
     address internal sentinel = makeAddr("sentinel");
 
     LaunchEtherfiEETHStrategyScript internal launchScript;
@@ -142,14 +141,10 @@ contract LaunchEtherfiEETHStrategyTest is Test {
     function test_ladder_fourSwapLegsOpenThePilot() public {
         _executeBatch1();
 
-        bytes memory quote = _buy(cfg.pilot.maxClip, FAIR);
-        vm.expectRevert(abi.encodeWithSelector(StrategyLauncher.WrongPhase.selector, StrategyLauncher.Phase.Ladder));
-        vm.prank(clipBot);
-        launcher.clip(strategy, cfg.pilot.maxClip, quote);
-
         _runLadder();
 
         assertEq(uint8(_state().phase), uint8(StrategyLauncher.Phase.Pilot), "pilot open");
+        assertEq(_state().pilotAllocated, 0, "no pilot clip ran during the ladder");
         uint256 legs = uint256(cfg.plan.smallLeg) + cfg.plan.largeLeg;
         assertApproxEqAbs(IMYTStrategy(strategy).realAssets(), legs * cfg.plan.exitBufferBps / BPS, 1e9, "only the exit buffer stays");
         (uint256 exitLeft,,,,,,) = clip.deallocateGrants(address(launcher), strategy);
@@ -190,8 +185,8 @@ contract LaunchEtherfiEETHStrategyTest is Test {
 
         bytes memory quote = _buy(1 ether, FAIR);
         vm.expectRevert(abi.encodeWithSelector(StrategyLauncher.WrongPhase.selector, StrategyLauncher.Phase.PilotComplete));
-        vm.prank(clipBot);
-        launcher.clip(strategy, 1 ether, quote);
+        vm.prank(keeper);
+        launcher.advance(strategy, quote, 0);
     }
 
     /// @dev A clip that lands starts the grant's interval. `nextStep` names the block it ends.
@@ -245,7 +240,7 @@ contract LaunchEtherfiEETHStrategyTest is Test {
         _goodClip();
         _rollInterval();
 
-        vm.prank(clipBot);
+        vm.prank(keeper);
         launcher.pause(cfg.c.myt);
         assertTrue(clip.paused(), "clip allocator paused");
         assertTrue(probe.paused(), "probe paused");
@@ -259,7 +254,7 @@ contract LaunchEtherfiEETHStrategyTest is Test {
         _assertUnchanged(before, _state());
 
         vm.expectRevert(ClipAllocator.NotBotOrOwner.selector);
-        vm.prank(clipBot);
+        vm.prank(keeper);
         clip.setPaused(false);
 
         vm.startPrank(cfg.c.safe);
@@ -288,8 +283,8 @@ contract LaunchEtherfiEETHStrategyTest is Test {
 
         bytes memory quote = _buy(cfg.pilot.maxClip, FAIR);
         vm.expectRevert(abi.encodeWithSelector(StrategyLauncher.WrongPhase.selector, StrategyLauncher.Phase.Aborted));
-        vm.prank(clipBot);
-        launcher.clip(strategy, cfg.pilot.maxClip, quote);
+        vm.prank(keeper);
+        launcher.advance(strategy, quote, 0);
         assertEq(_state().allocateGrantLeft, 0, "grant revoked");
 
         uint256 held = IMYTStrategy(strategy).realAssets();
@@ -429,16 +424,13 @@ contract LaunchEtherfiEETHStrategyTest is Test {
         assertEq(uint8(_state().phase), uint8(StrategyLauncher.Phase.PilotComplete), "pilot completes after the retry");
     }
 
-    function _clipFails(uint256 amount, bytes memory quote) internal returns (Failure memory) {
-        vm.prank(clipBot);
-        (bool ok, bytes memory ret) = address(launcher).call(abi.encodeCall(StrategyLauncher.clip, (strategy, amount, quote)));
-        assertFalse(ok, "clip should revert");
-        return _decodeFailure(ret);
+    function _clipFails(uint256, bytes memory quote) internal returns (Failure memory) {
+        return _stepFails(quote);
     }
 
     function _stepFails(bytes memory quote) internal returns (Failure memory) {
-        vm.prank(probeBot);
-        (bool ok, bytes memory ret) = address(launcher).call(abi.encodeCall(StrategyLauncher.step, (strategy, quote, 0)));
+        vm.prank(keeper);
+        (bool ok, bytes memory ret) = address(launcher).call(abi.encodeCall(StrategyLauncher.advance, (strategy, quote, 0)));
         assertFalse(ok, "step should revert");
         return _decodeFailure(ret);
     }
@@ -516,14 +508,14 @@ contract LaunchEtherfiEETHStrategyTest is Test {
         }
     }
 
-    /// @dev What the probe bot does: read the next leg, quote its amount, send it.
+    /// @dev What the keeper bot does in the ladder: read the next leg, quote its amount, send it.
     function _step(uint256 shortBps) internal returns (uint8 leg) {
         (StrategyLauncher.Phase phase, uint8 next,, uint256 amount, bool needsQuote,) = launcher.nextStep(strategy);
         assertEq(uint8(phase), uint8(StrategyLauncher.Phase.Ladder), "ladder phase");
         assertTrue(needsQuote, "swap legs need a quote");
         bytes memory quote = (next == 1 || next == 3) ? _buy(amount, shortBps) : _sell(amount, shortBps);
-        vm.prank(probeBot);
-        leg = launcher.step(strategy, quote, 0);
+        vm.prank(keeper);
+        leg = launcher.advance(strategy, quote, 0);
     }
 
     function _runPilot() internal returns (uint256 clips) {
@@ -537,11 +529,11 @@ contract LaunchEtherfiEETHStrategyTest is Test {
     function _goodClip() internal returns (uint256 amount) {
         amount = _clipAmount();
         bytes memory quote = _buy(amount, FAIR);
-        vm.prank(clipBot);
-        launcher.clip(strategy, amount, quote);
+        vm.prank(keeper);
+        launcher.advance(strategy, quote, 0);
     }
 
-    /// @dev What the clip bot sends next: `nextStep` already caps it at the grant's clip size.
+    /// @dev The clip the launcher will size next, which is the amount the keeper bot quotes for.
     function _clipAmount() internal view returns (uint256 amount) {
         bool needsQuote;
         (,,, amount, needsQuote,) = launcher.nextStep(strategy);
@@ -581,7 +573,7 @@ contract LaunchEtherfiEETHStrategyTest is Test {
         clip = new ClipAllocator(c.c.allocator);
 
         DeployStrategyLauncherScript launcherScript = new DeployStrategyLauncherScript();
-        launcher = launcherScript.deploy(c.c.myt, address(probe), address(clip), c.c.safe, probeBot, clipBot, sentinel);
+        launcher = launcherScript.deploy(c.c.myt, address(probe), address(clip), c.c.safe, keeper, sentinel);
 
         probe.setPoker(address(launcher), true);
         probe.transferOwnership(c.c.safe);

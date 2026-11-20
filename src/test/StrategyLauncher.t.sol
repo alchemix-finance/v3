@@ -24,8 +24,7 @@ contract StrategyLauncherTest is Test {
     address internal curator = makeAddr("curator");
     address internal operator = makeAddr("operator");
     address internal depositor = makeAddr("depositor");
-    address internal probeBot = makeAddr("probeBot");
-    address internal clipBot = makeAddr("clipBot");
+    address internal keeper = makeAddr("keeper");
     address internal sentinel = makeAddr("sentinel");
 
     uint256 internal constant DEPOSIT = 100 ether;
@@ -67,7 +66,7 @@ contract StrategyLauncherTest is Test {
         vm.stopPrank();
 
         DeployStrategyLauncherScript deployScript = new DeployStrategyLauncherScript();
-        launcher = deployScript.deploy(address(vault), address(probe), address(clip), address(this), probeBot, clipBot, sentinel);
+        launcher = deployScript.deploy(address(vault), address(probe), address(clip), address(this), keeper, sentinel);
         launcher.acceptOwnership();
         probe.setPoker(address(launcher), true);
 
@@ -82,20 +81,23 @@ contract StrategyLauncherTest is Test {
         MockMYTStrategy strategy = _registerStrategy("Probe strategy");
         _register(strategy, true);
 
-        vm.expectRevert(abi.encodeWithSelector(StrategyLauncher.WrongPhase.selector, StrategyLauncher.Phase.Ladder));
-        vm.prank(clipBot);
-        launcher.clip(address(strategy), 1 ether, "");
-
         _runLadder(strategy);
         assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.Pilot));
         assertApproxEqAbs(strategy.realAssets(), 0, 1);
 
-        clip.grantAllocate(address(launcher), address(strategy), PILOT, PILOT, 0, address(0), 0, MAX_LOSS);
+        // The launcher sizes each clip: the grant's clip size, then what is left under the target.
+        clip.grantAllocate(address(launcher), address(strategy), PILOT, 12 ether, 0, address(0), 0, MAX_LOSS);
 
-        vm.prank(clipBot);
-        launcher.clip(address(strategy), 12 ether, "");
-        vm.prank(clipBot);
-        launcher.clip(address(strategy), 8 ether, "");
+        (, uint8 next,, uint256 first,,) = launcher.nextStep(address(strategy));
+        assertEq(next, 1, "clip 1 is next");
+        assertEq(first, 12 ether, "one grant clip");
+        vm.prank(keeper);
+        assertEq(launcher.advance(address(strategy), "", 0), 1);
+        assertApproxEqAbs(strategy.realAssets(), 12 ether, 1);
+        (,,, uint256 second,,) = launcher.nextStep(address(strategy));
+        assertEq(second, 8 ether, "the rest of the target");
+        vm.prank(keeper);
+        assertEq(launcher.advance(address(strategy), "", 0), 2);
 
         (StrategyLauncher.Phase done,,, uint256 room,,) = launcher.nextStep(address(strategy));
         assertEq(room, 0);
@@ -103,8 +105,8 @@ contract StrategyLauncherTest is Test {
         assertApproxEqAbs(strategy.realAssets(), PILOT, 1);
 
         vm.expectRevert(abi.encodeWithSelector(StrategyLauncher.WrongPhase.selector, StrategyLauncher.Phase.PilotComplete));
-        vm.prank(clipBot);
-        launcher.clip(address(strategy), 1, "");
+        vm.prank(keeper);
+        launcher.advance(address(strategy), "", 0);
 
         launcher.graduate(address(strategy));
         assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.Graduated));
@@ -121,8 +123,8 @@ contract StrategyLauncherTest is Test {
         _runLadder(strategy);
         assertApproxEqAbs(strategy.realAssets(), 0, 1);
 
-        vm.prank(clipBot);
-        launcher.clip(address(strategy), PILOT, "");
+        vm.prank(keeper);
+        launcher.advance(address(strategy), "", 0);
         assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.PilotComplete));
         assertApproxEqAbs(strategy.realAssets(), PILOT, 1);
         (uint256 left,,,,,,) = clip.allocateGrants(address(launcher), address(strategy));
@@ -134,8 +136,8 @@ contract StrategyLauncherTest is Test {
         launcher.registerLaunch(address(strategy), _plan(false, StrategyLauncher.Mode.Swap, StrategyLauncher.Mode.Swap));
 
         vm.expectRevert(StrategyLauncher.QuoteRequired.selector);
-        vm.prank(probeBot);
-        launcher.step(address(strategy), "", 0);
+        vm.prank(keeper);
+        launcher.advance(address(strategy), "", 0);
     }
 
     /// @dev A venue revert comes back as StepFailed with the venue's own revert data inside.
@@ -157,8 +159,8 @@ contract StrategyLauncherTest is Test {
                 abi.encodeWithSelector(StrategyProbe.ProbePaused.selector)
             )
         );
-        vm.prank(probeBot);
-        launcher.step(address(strategy), "", 0);
+        vm.prank(keeper);
+        launcher.advance(address(strategy), "", 0);
     }
 
     function test_clipFailure_reportsTheClipAndReason() public {
@@ -176,12 +178,12 @@ contract StrategyLauncherTest is Test {
                 StrategyLauncher.Venue.Clip,
                 StrategyLauncher.Mode.Direct,
                 true,
-                5 ether,
+                PILOT,
                 abi.encodeWithSelector(ClipAllocator.NoGrant.selector, address(launcher), address(strategy), true)
             )
         );
-        vm.prank(clipBot);
-        launcher.clip(address(strategy), 5 ether, "");
+        vm.prank(keeper);
+        launcher.advance(address(strategy), "", 0);
     }
 
     function test_abort_blocksTheLadder() public {
@@ -190,8 +192,8 @@ contract StrategyLauncherTest is Test {
         launcher.abort(address(strategy));
 
         vm.expectRevert(abi.encodeWithSelector(StrategyLauncher.WrongPhase.selector, StrategyLauncher.Phase.Aborted));
-        vm.prank(probeBot);
-        launcher.step(address(strategy), "", 0);
+        vm.prank(keeper);
+        launcher.advance(address(strategy), "", 0);
     }
 
     function test_sentinel_reopensAnAbortedLaunch() public {
@@ -216,13 +218,13 @@ contract StrategyLauncherTest is Test {
     function test_sentinel_editsThePilot() public {
         MockMYTStrategy strategy = _registerStrategy("Edited strategy");
         _register(strategy, false);
-        clip.grantAllocate(address(launcher), address(strategy), 100 ether, PILOT, 0, address(0), 0, MAX_LOSS);
+        clip.grantAllocate(address(launcher), address(strategy), 100 ether, 10 ether, 0, address(0), 0, MAX_LOSS);
         vm.startPrank(sentinel);
         launcher.setLeg(address(strategy), 5, 0);
         vm.stopPrank();
 
-        vm.prank(clipBot);
-        launcher.clip(address(strategy), 10 ether, "");
+        vm.prank(keeper);
+        launcher.advance(address(strategy), "", 0);
 
         StrategyLauncher.Plan memory plan = _plan(false, StrategyLauncher.Mode.Direct, StrategyLauncher.Mode.Direct);
         plan.pilotTarget = 10 ether;
@@ -234,8 +236,8 @@ contract StrategyLauncherTest is Test {
         vm.prank(sentinel);
         launcher.updatePlan(address(strategy), plan);
         assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.Pilot), "target raised reopens");
-        vm.prank(clipBot);
-        launcher.clip(address(strategy), 5 ether, "");
+        vm.prank(keeper);
+        launcher.advance(address(strategy), "", 0);
         assertEq(uint8(_phase(strategy)), uint8(StrategyLauncher.Phase.PilotComplete));
 
         vm.prank(sentinel);
@@ -266,10 +268,8 @@ contract StrategyLauncherTest is Test {
         address stranger = makeAddr("stranger");
 
         vm.startPrank(stranger);
-        vm.expectRevert(StrategyLauncher.NotProbeKeeper.selector);
-        launcher.step(address(strategy), "", 0);
-        vm.expectRevert(StrategyLauncher.NotClipKeeper.selector);
-        launcher.clip(address(strategy), 1, "");
+        vm.expectRevert(StrategyLauncher.NotKeeper.selector);
+        launcher.advance(address(strategy), "", 0);
         vm.expectRevert(StrategyLauncher.NotSentinel.selector);
         launcher.registerLaunch(address(strategy), plan);
         vm.expectRevert(StrategyLauncher.NotSentinel.selector);
@@ -291,8 +291,8 @@ contract StrategyLauncherTest is Test {
 
     function _runLadder(MockMYTStrategy strategy) internal {
         for (uint8 leg = 1; leg <= 4; leg++) {
-            vm.prank(probeBot);
-            assertEq(launcher.step(address(strategy), "", 0), leg);
+            vm.prank(keeper);
+            assertEq(launcher.advance(address(strategy), "", 0), leg);
         }
     }
 

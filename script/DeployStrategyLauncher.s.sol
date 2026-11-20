@@ -9,25 +9,19 @@ import {StrategyLauncher} from "../src/utils/StrategyLauncher.sol";
 ///         `setPoker(launcher, true)`. This script does not touch a strategy.
 contract DeployStrategyLauncherScript is Script {
     /// @dev `safe` receives the ownership handover. Keeper and sentinel addresses may be zero.
-    function deploy(
-        address myt,
-        address probe,
-        address clip,
-        address safe,
-        address probeKeeper,
-        address clipKeeper,
-        address sentinel
-    ) public returns (StrategyLauncher launcher) {
+    function deploy(address myt, address probe, address clip, address safe, address keeper, address sentinel)
+        public
+        returns (StrategyLauncher launcher)
+    {
         launcher = new StrategyLauncher();
         launcher.setVenue(myt, probe, clip);
-        if (probeKeeper != address(0)) launcher.setProbeKeeper(probeKeeper, true);
-        if (clipKeeper != address(0)) launcher.setClipKeeper(clipKeeper, true);
+        if (keeper != address(0)) launcher.setKeeper(keeper, true);
         if (sentinel != address(0)) launcher.setSentinel(sentinel, true);
         if (safe != address(0)) launcher.transferOwnership(safe);
     }
 
     /// @notice Reads MYT, PROBE, CLIP, SAFE, and DEPLOYER from the environment.
-    ///         PROBE_KEEPER, CLIP_KEEPER and SENTINEL are optional.
+    ///         KEEPER and SENTINEL are optional.
     function run() public returns (StrategyLauncher launcher) {
         address deployer = vm.envAddress("DEPLOYER");
         vm.startBroadcast(deployer);
@@ -36,8 +30,7 @@ contract DeployStrategyLauncherScript is Script {
             vm.envAddress("PROBE"),
             vm.envAddress("CLIP"),
             vm.envAddress("SAFE"),
-            vm.envOr("PROBE_KEEPER", address(0)),
-            vm.envOr("CLIP_KEEPER", address(0)),
+            vm.envOr("KEEPER", address(0)),
             vm.envOr("SENTINEL", address(0))
         );
         vm.stopBroadcast();

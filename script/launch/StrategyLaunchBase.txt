@@ -80,7 +80,7 @@ ClipAllocator.topUpDeallocate(<launcher>, <liquidityAdapter>, <liquidityGrant.am
 // 0x0.registerLaunch(0x0, (0x29bcfeD246ce37319d94eBa107db90C453D4c43D, false, 2, 2, 1000000000000000000, 10000000000000000000, 50, 40000000000000000000))
 StrategyLauncher.registerLaunch(<strategy>, (<myt>, <strategy.useProbe>, <strategy.allocate>, <strategy.deallocate>, <smallLeg>, <largeLeg>, <exitBufferBps>, <pilot.target>))
 
-After batch 1 lands, outside the Safe. Anyone may call it, and the probe bot does it first.
+After batch 1 lands, outside the Safe. Anyone may call it, and the keeper bot does it first.
 // 0x29bcfeD246ce37319d94eBa107db90C453D4c43D.setForceDeallocatePenalty(0x0, 20000000000000000)
 VaultV2.setForceDeallocatePenalty(<strategy>, <caps.forceDeallocatePenalty>)
 

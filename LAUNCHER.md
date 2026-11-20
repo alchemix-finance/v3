@@ -1,6 +1,6 @@
 # Strategy launcher
 
-`StrategyLauncher` runs and reports a new strategy's launch, from the first ladder leg through the pilot allocation. The probe bot and the clip bot both call it, and a sentinel or the Safe steers it. One launcher serves every MYT on a chain.
+`StrategyLauncher` runs and reports a new strategy's launch, from the first ladder leg through the pilot allocation. One keeper bot calls it, and a sentinel or the Safe steers it. One launcher serves every MYT on a chain.
 
 The probe and the clip allocator for each vault are assumed to be deployed already, and to already be operators of that vault's `AlchemistAllocator`.
 
@@ -26,15 +26,14 @@ So a sentinel can reopen, rewind or reset a launch, but it can never move more t
 | `AlchemistAllocator` | not called by the launcher | The probe and the clip allocator are its operators. |
 | Safe (owner) | `owner` | Venues, keepers, sentinels, ownership. Everything a sentinel can do. Owns the probe, the clip allocator and the strategy. |
 | Sentinel | `sentinels` | `registerLaunch`, `updatePlan`, `setLeg`, `resetPilot`, `abort`, `graduate`, `pause`. |
-| Probe keeper | `probeKeepers` | `step`, `pause`. |
-| Clip keeper | `clipKeepers` | `clip`, `pause`. |
+| Keeper | `keepers` | `advance`, `pause`. One bot and one key for every strategy and both phases. |
 
 On the mainnet USDC and ETH MYTs the Safe `0xF56D…293D` already administers the allocator, the curator and the classifier, owns the vault, and is a curator operator. Every timelock batch 1 touches is zero, so batch 1 is one Safe transaction.
 
 ## Files
 
 ```
-script/DeployStrategyLauncher.s.sol      deploy the launcher, set venue, keepers and sentinel, hand to the Safe
+script/DeployStrategyLauncher.s.sol      deploy the launcher, set venue, keeper and sentinel, hand to the Safe
 script/launch/StrategyLaunchBase.s.sol   read a launch JSON, build batch 1 and batch 2
 script/launch/StrategyLaunchBase.txt     every batch call in plain text, with the Ether.fi defaults
 script/launch/<strategy>.json            one launch config
@@ -47,11 +46,11 @@ src/test/Launch<Strategy>.t.sol          the launch replayed on a fork
 ## Once per chain: deploy the launcher
 
 ```bash
-MYT=0x… PROBE=0x… CLIP=0x… SAFE=0x… DEPLOYER=0x… PROBE_KEEPER=0x… CLIP_KEEPER=0x… SENTINEL=0x… \
+MYT=0x… PROBE=0x… CLIP=0x… SAFE=0x… DEPLOYER=0x… KEEPER=0x… SENTINEL=0x… \
 forge script script/DeployStrategyLauncher.s.sol --rpc-url mainnet --broadcast
 ```
 
-That deploys the launcher, calls `setVenue(myt, probe, clip)`, the keeper setters and `setSentinel`, and starts the handover to the Safe. The Safe then needs:
+That deploys the launcher, calls `setVenue(myt, probe, clip)`, `setKeeper` and `setSentinel`, and starts the handover to the Safe. The Safe then needs:
 
 - `launcher.acceptOwnership()`
 - `probe.setPoker(launcher, true)`, and removes any other poker
@@ -69,7 +68,7 @@ STRATEGY=0x… forge script script/launch/LaunchEtherfiEETHStrategy.s.sol
 ```
 
 4. Load `script/launch/out/<name>.batch1.json` into the Safe Transaction Builder and execute it.
-5. The bots take over: the penalty execution, then the ladder, then the pilot.
+5. The keeper bot takes over: the penalty execution, then the ladder, then the pilot.
 6. After you review the pilot, execute `<name>.batch2.json`.
 
 A new strategy needs its own JSON and a three line `Launch<Strategy>.s.sol` that returns the JSON path. Copy the Ether.fi fork test to replay it.
@@ -108,7 +107,7 @@ Batch 1, built by `batch1`:
 9. `clip.grantDeallocate` or `topUpDeallocate` for the launcher on the liquidity adapter
 10. `launcher.registerLaunch(strategy, plan)`
 
-After it lands, anyone executes `vault.setForceDeallocatePenalty(strategy, penalty)`. The bot does it first.
+After it lands, anyone executes `vault.setForceDeallocatePenalty(strategy, penalty)`. The keeper bot does it first.
 
 Batch 2, built by `batch2`:
 
@@ -123,17 +122,25 @@ Swap strategies skip step 3, because a quote will not last through signing. The 
 
 `None`, then `Ladder`, `Pilot`, `PilotComplete`, and either `Graduated` or `Aborted`. Each `registerLaunch` on an adapter starts a new `attempt`, and every event carries it.
 
-`nextStep(adapter)` returns the phase, the leg, the mode, the amount, whether a quote is required, and `readyBlock`, the first block the clip allocator accepts the call. In Pilot the amount is one clip: what remains under `pilotTarget`, at most the grant's `maxClip`.
+The keeper has one call for both phases, `advance(adapter, txData, minIntermediateOut)`. It runs whatever `nextStep(adapter)` names and returns the leg or clip number.
 
-- Ladder: `step(adapter, "", 0)` when no quote is needed. Otherwise quote the amount with the strategy as taker and pass `txData`. `minIntermediateOut` is only for `unwrapAndSwap`.
-- Pilot: `clip(adapter, amount, txData)`.
+`nextStep` returns the phase, the leg or clip number, the mode, the amount, whether a quote is required, and `readyBlock`, the first block the clip allocator accepts the call. In Pilot the amount is one clip: what remains under `pilotTarget`, at most the grant's `maxClip`. The launcher sizes the clip the same way inside `advance`, so the keeper never passes an amount.
+
+The loop, for each active launch:
+
+1. Read `nextStep`. Skip if the phase is not `Ladder` or `Pilot`, or the block is before `readyBlock`.
+2. If `needsQuote`, quote `amount` with the strategy as taker. Otherwise `txData` is empty. `minIntermediateOut` is only for `unwrapAndSwap` exit legs.
+3. Simulate `advance` with `eth_call`. Send it if it passes. If it reverts, decode `StepFailed` (below).
+
+If the grant's `maxClip` changes between the quote and the transaction, the clip amount changes with it, the quote no longer matches, and the call fails cleanly. Requote.
+
 - Any keeper or sentinel can call `pause(myt)`. It pauses the probe and, while the launcher holds clip budget, the clip allocator. Only the Safe unpauses.
 
 `report(adapter)` returns everything in one call: the launch record (phase, attempt, plan hash, leg, `held`, clip count, `pilotAllocated`, `pilotTarget`, last success block), the next step, the launcher's remaining allocate and deallocate grant, the clip allocator and probe pause state, the probe's leg and lock, the strategy's `realAssets` and the vault's booked allocation.
 
 ## When a step fails
 
-A failed `step` or `clip` reverts the whole transaction, so the phase, `pilotAllocated`, the grants, their interval clock and the position are unchanged. A retry is the same call with a new quote, and it does not wait an interval.
+A failed `advance` reverts the whole transaction, so the phase, `pilotAllocated`, the grants, their interval clock and the position are unchanged. A retry is the same call with a new quote, and it does not wait an interval.
 
 Every probe or clip allocator revert comes back as one error:
 
@@ -150,12 +157,12 @@ error StepFailed(address adapter, Phase phase, uint8 step, Venue venue, Mode mod
 | `LossExceedsLimit` | clip allocator | The swap cleared the strategy floor but lost more than `pilot.maxLossBps` (50). | Requote and resend. Repeated: pause and review. |
 | `TooSoon(readyAt)` | clip allocator | Before `readyBlock`. | Wait. Not a failure. |
 | `GrantExhausted(remaining, requested)` | clip allocator | The grant is spent. The hard limit, not the launcher's. | Ask the Safe for a top up. |
-| `ClipTooLarge`, `NoGrant` | clip allocator | The clip is above the grant's `maxClip`, or there is no grant. | Clip `nextStep`'s amount, or ask the Safe. |
+| `ClipTooLarge`, `NoGrant` | clip allocator | A ladder leg is above the grant's `maxClip`, or there is no grant. | Ask the Safe. |
 | `MoverPaused` | clip allocator | The vault's clip allocator is paused. | Stop. The Safe unpauses. |
 | `ProbePaused`, `LadderAlreadyCompleted` | probe | The probe is paused, or already ran this adapter. | The Safe unpauses or calls `probe.reset`. |
 | `RateOutsideLimit` | clip allocator | Only with a price guard in `pilot.priceToken`. | Wait, or ask the Safe to change the grant. |
 
-The launcher's own checks revert unwrapped, because they mean the bot sent the wrong call: `WrongPhase`, `PilotExceeded`, `QuoteRequired`, `UnexpectedQuote`.
+The launcher's own checks revert unwrapped, because they mean the bot sent the wrong call: `WrongPhase` (nothing to run in this phase), `QuoteRequired`, `UnexpectedQuote`.
 
 Suggested bot policy: retry a quote failure up to three times with fresh quotes, a block or more apart. If all three fail, call `launcher.pause(myt)` and alert. `pause` stops every grant on that vault's clip allocator, not only this launch.
 
@@ -195,9 +202,9 @@ Only the swap is stubbed. The Safe points the strategy's allowance holder at a `
 |---|---|
 | `test_deployedStrategy_waitsForTheSafe` | A fresh deploy is owned by the Safe, kill switch on, not yet an adapter. |
 | `test_batch1_configuresTheSwapLaunch` | Caps, risk class, the three grants and the registered plan match the JSON. |
-| `test_ladder_fourSwapLegsOpenThePilot` | A clip before the ladder reverts. Four swap legs (1 and 10 WETH, in and out) open the pilot. |
+| `test_ladder_fourSwapLegsOpenThePilot` | Four swap legs (1 and 10 WETH, in and out) open the pilot, and no pilot clip runs before leg 4. |
 | `test_ladder_rejectedLegStaysOnThatLeg` | A thin exit quote fails leg 2 with `InvalidAmount`. The leg and amount hold, and a fair quote runs it. |
-| `test_pilot_fourSwapClipsComplete` | Four 10 WETH clips reach `PilotComplete` at 40 WETH, leaving the 20 WETH headroom. A fifth reverts. |
+| `test_pilot_fourSwapClipsComplete` | Four 10 WETH clips reach `PilotComplete` at 40 WETH, leaving the 20 WETH headroom. A fifth `advance` reverts. |
 | `test_pilot_clipAfterSuccessWaitsTheInterval` | `readyBlock` is 300 blocks out. A clip before it fails with `TooSoon`. |
 | `test_pilot_strategyRejectsQuoteBelowFloor_thenRetry` | Quote 200 bps short: `InvalidAmount`, with the floor and the paid amount decoded. No state change, same-block retry lands, pilot completes. |
 | `test_pilot_clipAllocatorRejectsLoss_thenRetry` | Quote 80 bps short: `LossExceedsLimit`. Same outcome. |
