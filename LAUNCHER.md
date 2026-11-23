@@ -21,7 +21,7 @@ launcher.advance(strategy, "", 0);                           // the next ladder 
 
 A swap strategy is the same loop, with swap calldata in place of `""` when `needsQuote` is true.
 
-`src/test/StagedRolloutYvWETH.t.sol` runs exactly this for Yearn WETH-1, an `ERC4626Strategy` with direct paths both ways, on a mainnet fork with nothing stubbed: four probe legs, four pilot clips, then batch 2. `src/test/LaunchEtherfiEETHStrategy.t.sol` covers the swap paths.
+`src/test/StagedRolloutYvWETH.t.sol` runs exactly this for Yearn WETH-1, an `ERC4626Strategy` with direct paths both ways, on a mainnet fork with nothing stubbed: four probe legs, four pilot clips, then batch 2. `src/test/StagedRolloutWstETH.t.sol` is the swap path version for wstETH: the ladder is skipped, the same loop passes swap calldata to `advance`, and the pilot lands in eight 2.5 WETH clips. `src/test/LaunchEtherfiEETHStrategy.t.sol` covers the swap ladder.
 
 ## Soft limits, hard limits
 
@@ -99,7 +99,7 @@ Amounts are decimal strings. Small integers (`riskClass`, `minIntervalBlocks`, `
 | Section | Used for |
 |---|---|
 | `contracts` | the Safe, the vault, curator, classifier, allocator, probe, clip, launcher, liquidity adapter |
-| `strategy` | address, risk class, `allocate` and `deallocate` path, `useProbe` |
+| `strategy` | address, risk class, `allocate` and `deallocate` path, `useProbe`, and optionally `"ladder": "skip"` |
 | `caps` | pilot absolute cap, relative cap, force deallocate penalty. The absolute cap is the hard ceiling for the pilot and any retry round |
 | `probe` | must match the deployed probe's legs, tolerance and buffer |
 | `swapLadder` | leg sizes when `useProbe` is false |
@@ -108,6 +108,8 @@ Amounts are decimal strings. Small integers (`riskClass`, `minIntervalBlocks`, `
 | `scale` | batch 2 cap and manual allocation |
 
 Paths are `direct`, `swap`, or `unwrapAndSwap`. A probe launch must be `direct` both ways.
+
+With `"ladder": "skip"` batch 1 opens the launch straight in the pilot, with no ladder grants. Use it for swap strategies you do not want to ladder, and set a small `pilot.maxClip` so the first clips do the ladder's job.
 
 The launcher stores `keccak256(abi.encode(plan))` with this field order: `myt`, `useProbe`, `allocMode`, `deallocMode`, `smallLeg`, `largeLeg`, `exitBufferBps`, `pilotTarget`. Modes are `None = 0`, `Direct = 1`, `Swap = 2`, `UnwrapAndSwap = 3`. `run()` prints the same hash, and `LaunchRegistered` and `PlanUpdated` emit it.
 
@@ -125,6 +127,7 @@ Batch 1, built by `batch1`:
 8. Swap ladder only: `clip.grantDeallocate(launcher, strategy, …)` for both legs
 9. `clip.grantDeallocate` or `topUpDeallocate` for the launcher on the liquidity adapter
 10. `launcher.registerLaunch(strategy, plan)`
+11. Ladder skip only: `launcher.setLeg(strategy, 5, 0)`, which moves the launch to the pilot. Steps 7 and 8 then carry no ladder legs.
 
 After it lands, anyone executes `vault.setForceDeallocatePenalty(strategy, penalty)`. The keeper bot does it first.
 
@@ -209,6 +212,7 @@ What still needs the Safe:
 ```bash
 forge test --match-contract StrategyLauncherTest
 forge test --match-contract StagedRolloutYvWETHTest
+forge test --match-contract StagedRolloutWstETHTest
 forge test --match-contract LaunchEtherfiEETHStrategyTest
 ```
 
@@ -219,6 +223,14 @@ forge test --match-contract LaunchEtherfiEETHStrategyTest
 | `test_stagedRollout_endToEnd` | Deploy, batch 1, then the keeper loop alone runs four probe legs (0.1 and 1 WETH, in and out) and four 10 WETH clips, 25 blocks apart, to `PilotComplete`. The probe returns the idle it raised. Batch 2 raises the cap, allocates 100 WETH and graduates. |
 | `test_stagedRollout_failedStepThenRetry` | A pause fails leg 3 with `StepFailed(…, Probe, …, ProbePaused)` and later clip 2 with `StepFailed(…, Clip, …, MoverPaused)`. Nothing moves, and the same loop finishes once the Safe unpauses. |
 | `test_stagedRollout_sentinelAdjustsThePilot` | The sentinel lowers the target mid-pilot, the next clip shrinks to fit, then `resetPilot` runs a second round from the headroom with no Safe call. |
+
+`StagedRolloutWstETHTest` is the swap path rollout on the same fork, for a fresh `WstETHEthereumStrategy`. Its config is `script/launch/wsteth-mainnet-weth.json`: swap both ways, ladder skipped, 20 WETH target in 2.5 WETH clips, 25 blocks apart, 20 bps loss bound. Only the swap is stubbed, with quotes priced from the live stETH/ETH oracle. Real 0x quotes are not exercised.
+
+| Test | Shows |
+|---|---|
+| `test_stagedRollout_endToEnd` | Deploy, then batch 1 opens the launch in the pilot. The keeper loop quotes each announced amount and runs eight clips to `PilotComplete`. The Safe sells 5 WETH back with `allocator.deallocateWithSwap`, then batch 2 raises the cap and graduates. |
+| `test_stagedRollout_failedClipThenRetry` | Three bad quotes fail the next clip with `StepFailed(…, Clip, Swap, …)`: 100 bps short gives `InvalidAmount` (strategy floor), 35 bps short gives `LossExceedsLimit` (grant), dead calldata gives `CounterfeitSettler`. Nothing moves, no interval restarts, and a fair quote lands the same clip. |
+| `test_stagedRollout_sentinelAdjustsThePilot` | The sentinel lowers the target to 6 WETH mid-pilot, the next clip shrinks to 1 WETH, then `resetPilot` runs a second round with no Safe call. |
 
 `StrategyLauncherTest` runs on a local vault with mock strategies: probe and clip ladders, `StepFailed` from each venue, sentinel reopen, `updatePlan`, `resetPilot`, `setLeg` limits, and every role check.
 

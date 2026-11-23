@@ -54,6 +54,7 @@ abstract contract StrategyLaunchBase is Script {
         uint256 forceDeallocatePenalty;
         uint256 probeToleranceBps;
         StrategyLauncher.Plan plan;
+        bool skipLadder;
         Grant pilot;
         uint256 pilotHeadroom;
         Grant liquidity;
@@ -86,6 +87,7 @@ abstract contract StrategyLaunchBase is Script {
         cfg.forceDeallocatePenalty = _uint(json, ".caps.forceDeallocatePenalty");
         cfg.probeToleranceBps = _uint(json, ".probe.toleranceBps");
         cfg.plan = _plan(json, cfg.c.myt);
+        cfg.skipLadder = keccak256(bytes(json.readStringOr(".strategy.ladder", "run"))) == keccak256("skip");
         cfg.pilot = _grant(json, ".pilot", ".target");
         cfg.pilotHeadroom = _uint(json, ".pilot.grantHeadroom");
         cfg.liquidity = _grant(json, ".liquidityGrant", ".amount");
@@ -95,9 +97,10 @@ abstract contract StrategyLaunchBase is Script {
     }
 
     /// @notice Register, cap at the pilot level, turn allocation on, grant the launcher, open the launch.
+    ///         With strategy.ladder = "skip" the launch goes straight to the pilot and gets no ladder grants.
     function batch1(Config memory cfg, address strategy) public view returns (Call[] memory calls) {
-        bool swapLadder = !cfg.plan.useProbe;
-        calls = new Call[](swapLadder ? 13 : 12);
+        bool swapLadder = !cfg.plan.useProbe && !cfg.skipLadder;
+        calls = new Call[](swapLadder || cfg.skipLadder ? 13 : 12);
         AlchemistCurator curator = AlchemistCurator(cfg.c.curator);
         uint256 i;
         calls[i++] = Call(address(curator), abi.encodeCall(curator.submitSetStrategy, (strategy, cfg.c.myt)), "submitSetStrategy");
@@ -148,6 +151,9 @@ abstract contract StrategyLaunchBase is Script {
         calls[i++] = _liquidityGrant(cfg);
         calls[i++] =
             Call(cfg.c.launcher, abi.encodeCall(StrategyLauncher.registerLaunch, (strategy, cfg.plan)), "registerLaunch");
+        if (cfg.skipLadder) {
+            calls[i++] = Call(cfg.c.launcher, abi.encodeCall(StrategyLauncher.setLeg, (strategy, 5, 0)), "setLeg(5): skip the ladder");
+        }
     }
 
     /// @notice After the pilot review: raise the cap, close the launcher's budget, allocate, graduate.

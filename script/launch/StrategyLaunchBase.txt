@@ -80,6 +80,11 @@ ClipAllocator.topUpDeallocate(<launcher>, <liquidityAdapter>, <liquidityGrant.am
 // 0x0.registerLaunch(0x0, (0x29bcfeD246ce37319d94eBa107db90C453D4c43D, false, 2, 2, 1000000000000000000, 10000000000000000000, 50, 40000000000000000000))
 StrategyLauncher.registerLaunch(<strategy>, (<myt>, <strategy.useProbe>, <strategy.allocate>, <strategy.deallocate>, <smallLeg>, <largeLeg>, <exitBufferBps>, <pilot.target>))
 
+14. Ladder skip only (strategy.ladder = "skip"): move the launch straight to the pilot. Calls 10
+    and 11 then carry no ladder legs: the allocate grant is <pilot.target + pilot.grantHeadroom>
+    and call 11 is left out. Keep pilot.maxClip small, since the first clips replace the ladder.
+StrategyLauncher.setLeg(<strategy>, 5, 0)
+
 After batch 1 lands, outside the Safe. Anyone may call it, and the keeper bot does it first.
 // 0x29bcfeD246ce37319d94eBa107db90C453D4c43D.setForceDeallocatePenalty(0x0, 20000000000000000)
 VaultV2.setForceDeallocatePenalty(<strategy>, <caps.forceDeallocatePenalty>)

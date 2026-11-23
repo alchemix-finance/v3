@@ -61,9 +61,9 @@ contract DeployWstETHEthereumStrategyScript is Script {
         return strategy;
     }
 
-    function run() public {
+    function run() public returns (WstETHEthereumStrategy strategy) {
         vm.startBroadcast(deployerAddr);
-        WstETHEthereumStrategy strategy = deployWstEthStrategy(myt);
+        strategy = deployWstEthStrategy(myt);
         vm.stopBroadcast();
 
         console.log("WstETHEthereumStrategy deployed at:", address(strategy));
