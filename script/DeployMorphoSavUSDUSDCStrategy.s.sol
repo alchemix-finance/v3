@@ -47,7 +47,7 @@ contract DeployMorphoSavUSDUSDCStrategyScript is Script {
             globalCap: 0.1e18,
             estimatedYield: 645,
             additionalIncentives: true,
-            slippageBPS: 50
+            slippageBPS: 1
         });
     }
 

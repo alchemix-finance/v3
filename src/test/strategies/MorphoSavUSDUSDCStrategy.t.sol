@@ -38,7 +38,7 @@ library MorphoSavUSDUSDCMarket {
             globalCap: 0.1e18,
             estimatedYield: 645,
             additionalIncentives: true,
-            slippageBPS: 50
+            slippageBPS: 1
         });
     }
 }
@@ -188,7 +188,8 @@ contract MorphoSavUSDUSDCStrategyTest is BaseStrategyTest {
         uint256 position = s.expectedSupplyAssets();
         assertLt(s.availableLiquidity(), position, "liquidity should be below position");
         uint256 preview = s.previewAdjustedWithdraw(position);
-        assertLt(preview, position * (10_000 - 50) / 10_000, "preview must be capped by liquidity");
+        (,,,,,,,, uint256 slippageBPS) = IMYTStrategy(strategy).params();
+        assertLt(preview, position * (10_000 - slippageBPS) / 10_000, "preview must be capped by liquidity");
 
         vm.prank(allocator);
         vm.expectRevert(bytes("insufficient liquidity"));

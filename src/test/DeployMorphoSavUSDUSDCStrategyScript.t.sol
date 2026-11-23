@@ -35,7 +35,7 @@ contract DeployMorphoSavUSDUSDCStrategyScriptTest is Test {
         assertEq(uint256(params.riskClass), uint256(IMYTStrategy.RiskClass.HIGH), "unexpected risk class");
         assertEq(params.cap, 10_000e6, "unexpected cap");
         assertEq(params.globalCap, 0.1e18, "unexpected global cap");
-        assertEq(params.slippageBPS, 50, "unexpected slippage");
+        assertEq(params.slippageBPS, 1, "unexpected slippage");
         assertTrue(params.additionalIncentives, "market pays Merkl incentives");
 
         assertEq(mp.loanToken, BASE_USDC, "unexpected loan token");
