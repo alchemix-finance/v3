@@ -1,0 +1,529 @@
+        AUDIT
+     COMPETITION
+      SUMMARY
+       REPORT
+
+
+
+ALCHEMIX V3    JAN 2026
+INDEX
+
+
+OVERVIEW          2
+SCOPE OF ASSETS   3
+SUMMARY           4
+LEADERBOARD       5
+TOP 5 REPORTS     13
+OVERVIEW
+
+Immuneﬁ Audit Competitions are special, time-limited events that supercharge the
+reach and visibility of programs to our whitehat community.
+
+From 14 October 2025 to 4 November 2025, the Alchemix V3 Competition offered up
+to $100,000 USD in rewards for security researchers.
+
+Immuneﬁ’s Discord server hosted a channel for enhanced, two-way communication
+between whitehats and the Alchemix team, improving feedback and response times.
+Managed Triaging was also activated for the duration of this event, streamlining the
+resolution process for incoming bug reports.
+
+During this event, 67 critical bugs, 178 high, 80 medium bugs, 155 low, and 47 insight
+reports were found on the target contracts. A total of 298 security researchers
+participated.
+
+Alchemix distributed the $100,000 reward pool to 527 of the very best submissions
+for the security researchers’ valiant efforts, including “Insight” submissions scored on
+a rating system that takes into account levels of:
+
+1) Security best practices
+
+2) Code optimizations and enhancements
+
+3) Architectural decentralization and composability
+
+4) Documentation improvements
+
+
+
+
+2 / Immunefi                                           Audit Competition Summary Report
+PROJECT NAME INTRO
+Alchemix is your uniﬁed platform for saving, earning, borrowing, and ﬁxed-term
+ﬁxed-yield opportunities—all in one place. Built on years of iteration since launching
+the original self-repaying loan in 2021, Alchemix v3 brings all three pillars together
+with a smarter, more ﬂexible design.
+
+
+
+
+SCOPE OF ASSETS
+The target assets in scope for the Audit Competition were Alchemix’s smart contract
+assets. The total nSLOC was 2612.
+
+
+
+
+3 / Immunefi                                           Audit Competition Summary Report
+SUMMARY
+
+
+
+
+      Duration:             Comp Date:            Rewards Pool:            nSLOC:
+     Three weeks        14 Oct 2025 - 4 Nov         $100,000                2612
+                               2025
+
+
+
+
+  Submitted reports:   Security researchers:   Valid vulnerabilities:   Insight reports:
+        952                     298                    480                    47
+
+
+
+
+4 / Immunefi                                              Audit Competition Summary Report
+TOTAL WHITEHAT PARTICIPATION
+
+TOTAL RESEARCHERS                                                  298
+PAID RESEARCHERS                                                      191
+
+
+LEADERBOARD
+
+Position       Reward   Username       Valids              Insights
+1              12446    farismaulana   15                 1
+2              8714     zeroK          5                  0
+3              7780     niroh          9                  0
+4              6997     magtentic      3                  2
+5              6748     Paludo0x       4                  1
+6              6698     shadowHunter   1                  0
+7              3632     gizzy          5                  0
+8              3557     pirex          2                  0
+9              3556     arturtoros     2                  0
+10             3556     MahdiKarimi    1                  0
+11             2554     silver_eth     3                  0
+12             1868     OxPhantom      7                  0
+13             1832     kenzo          4                  0
+14             1756     XDZIBECX       5                  0
+15             1556     fullstop       5                  1
+16             1537     Tadev          8                  0
+17             1537     Icon0x         1                  1
+
+
+
+
+5 / Immunefi                                Audit Competition Summary Report
+18             1533   JoeMama        6                 1
+19             1443   algizsec       2                 0
+20             1119   pashap9990     7                 2
+21             1096   ox9527         7                 0
+22             1057   hashbug        3                 0
+23             909    godwinudo      6                 0
+24             902    T0nraq         3                 0
+25             899    Brainiac5      3                 0
+26             889    al0x23         2                 0
+27             887    dobrevaleri    8                 2
+28             864    blacksaviour   1                 0
+29             729    terrah         3                 0
+30             636    PotEater       6                 5
+31             611    Outliers       5                 0
+32             567    aua_oo7        2                 0
+33             437    aman           6                 0
+34             437    teoslaf1       8                 0
+35             435    MentemDeus28 3                   0
+36             420    blackdruiid    1                 0
+37             403    enoch          2                 1
+                      Oxdeadmanwal
+38             384    king         10                  1
+39             360    Razkky         2                 0
+40             323    oxrex          6                 1
+41             305    nem0theﬁnder 9                   1
+42             291    Cryptor        3                 0
+
+
+
+
+6 / Immunefi                             Audit Competition Summary Report
+43             255   manvi         2                  1
+44             211   algiz         2                  1
+45             195   SOPROBRO      5                  0
+46             194   OxPrince      0                  2
+47             175   joicygiore    7                  1
+48             171   damdam0249    3                  0
+49             158   a16           5                  0
+50             156   pindarev      2                  0
+51             147   luc1jan       2                  0
+52             147   ﬂora          1                  0
+53             137   Smartkelvin   4                  0
+54             135   spongebob     4                  1
+55             134   Cyborg        5                  0
+                     mohitisimmorta
+56             130   l              2                 0
+57             117   sol_4th05     1                  1
+58             116   Snuggle       1                  2
+59             116   wylis         1                  2
+                     chief_hunter88
+60             116   8              2                 2
+61             109   Anirruth      4                  1
+                     Ambitious_DyD
+62             100   x             2                  0
+63             99    X0sauce       2                  0
+64             99    j3x           1                  0
+65             99    Arkindyo      1                  0
+66             97    Davuka        1                  1
+
+
+
+
+7 / Immunefi                            Audit Competition Summary Report
+67             96   Bluedragon      2                 0
+68             93   hunter0xweb3    4                 1
+69             92   InAllHonesty    2                 0
+70             87   Josh4324        6                 1
+71             78   Petrus          5                 0
+72             77   haidoka017      0                 2
+73             77   silencedogood   1                 0
+74             77   sus_bandicoot   1                 0
+75             58   SAAJ            1                 1
+76             58   Purpledragon    0                 1
+77             58   rbd3            0                 1
+78             58   randomnpc       0                 1
+79             57   yesofcourse     6                 0
+80             57   legion          4                 0
+81             54   Orhuk1          3                 0
+82             54   pxng0lin        5                 0
+83             47   Codexstar       2                 0
+84             46   Jugger63        2                 0
+85             41   winnerz         2                 0
+86             40   Oxvictorsr      1                 0
+87             39   jayx            3                 0
+88             39   kodyvim         0                 1
+89             39   tygra           0                 1
+90             39   lirezarazavi    0                 1
+91             38   Django          2                 0
+92             38   Impala53732     1                 0
+
+
+
+
+8 / Immunefi                            Audit Competition Summary Report
+                    InquisitorScyth
+93             38   e               1                   0
+94             38   Tarnishedx0       3                 0
+95             37   IronsideSec       2                 0
+96             37   kaysoft           4                 0
+97             36   dldLambda         4                 0
+98             32   ByteKnight        3                 0
+99             31   ayden             1                 0
+100            30   humaira45         5                 0
+101            29   dray              4                 0
+102            27   Ratt13snak3       5                 0
+103            26   dizaye            2                 0
+104            25   fawarano          1                 0
+105            21   Idealz            2                 0
+106            20   griffin           1                 0
+107            20   unique            1                 0
+108            17   emmac002          2                 0
+109            17   x0xmechanic       2                 0
+110            16   failsafe_intern   3                 0
+111            15   oct0pwn           3                 0
+112            15   securehash1       2                 0
+113            15   nvalkov           1                 0
+114            13   riptide           3                 0
+115            13   Pro_King          2                 0
+116            13   grearlake         1                 0
+117            13   theboiledcorn     1                 0
+
+
+
+
+9 / Immunefi                              Audit Competition Summary Report
+118             13   vivekd          2                 0
+119             12   zcai            4                 0
+120             12   xanony          2                 0
+121             11   Bizarro         3                 0
+122             11   mzfr            2                 0
+123             11   Another         2                 0
+124             10   Pig46940        1                 0
+125             9    Lion47624       2                 0
+126             9    Coachmike       1                 0
+127             9    omarAli001      1                 0
+128             9    resosiloris     1                 0
+129             9    bigbear1229     1                 0
+130             7    Bug82427        2                 0
+                     LogicalJosselyn
+131             6    798             1                 0
+132             6    ZenHunter       1                 0
+133             6    Diavol0         4                 0
+134             5    DeoGratias      2                 0
+135             3    niffylord       3                 0
+136             3    auditagent      2                 0
+137             3    KiLl3rX         1                 0
+138             3    ayeslick        1                 0
+139             3    edantes         2                 0
+140             3    ihtishamsudo    4                 0
+                     HandsomeEarth
+141             3    worm6         3                   0
+
+
+
+
+10 / Immunefi                            Audit Competition Summary Report
+142             3   Pataroff       2                  0
+143             3   Ibukun         1                  0
+144             3   Bear36435      1                  0
+145             2   ibrahimatix0x01 3                 0
+146             2   Tomioka        2                  0
+147             2   TyroneX        2                  0
+148             2   Aiden          1                  0
+149             2   Tee0x          1                  0
+150             2   iAfrika        1                  0
+151             1   call_me_rp     1                  0
+                    Novathemachin
+152             1   e             2                   0
+153             0   rshackin       3                  0
+154             0   unineko        3                  0
+155             0   Kissiahmyo     2                  0
+156             0   DashBug        1                  0
+                    JavaScript3614
+157             0   2              1                  0
+158             0   IShiftOnBlue   1                  0
+159             0   Johnyfwesh     1                  0
+160             0   konvati        1                  0
+161             0   EagleEye       2                  0
+162             0   ENIGMA         1                  0
+163             0   akioniace      1                  0
+164             0   liae           1                  0
+165             0   Eagle_Eye      1                  0
+
+
+
+
+11 / Immunefi                           Audit Competition Summary Report
+166             0   KKam86          1                 0
+167             0   pikachu0203     1                 0
+168             0   silverologist   1                 0
+169             0   Y4nhu1          1                 0
+170             0   Ekene           1                 0
+171             0   acnologiac      1                 0
+172             0   Bx4             1                 0
+173             0   Vanshika        1                 0
+174             0   rand            1                 0
+175             0   Khay3           1                 0
+176             0   Shivansh        1                 0
+177             0   madman          1                 0
+178             0   s_a_l_e_m       1                 0
+179             0   cmds            1                 0
+180             0   vah_13          1                 0
+181             0   gor97           1                 0
+182             0   DeusVult        1                 0
+183             0   TianYu4n        1                 0
+184             0   [redacted]      0                 1
+185             0   [redacted]      1                 0
+186             0   [redacted]      5                 0
+187             0   [redacted]      1                 0
+188             0   [redacted]      2                 0
+189             0   [redacted]      1                 0
+190             0   [redacted]      1                 0
+191             0   [redacted]      1                 0
+
+
+
+
+12 / Immunefi                           Audit Competition Summary Report
+TOP 5 REPORTS
+
+
+
+
+claimRedemption would not return all
+alAsset that is not get converted to MYT
+in some case
+Report number: 56702            Submitted by: @farismaulana
+
+Target:
+https://github.com/alchemix-ﬁnance/v3-poc/blob/immuneﬁ_audit/src/Transmuter.s
+ol
+
+Impacts: Permanent freezing of funds
+
+Program Action: Conﬁrmed as critical severity.
+
+
+
+
+13 / Immunefi                                      Audit Competition Summary Report
+Report Excerpt:
+
+`claimRedemption` function in the `Transmuter` is designed to handle cases where
+the system can't obtain enough yield tokens (MYT) to fulﬁll a user's entire claim. It
+correctly caps the amount of MYT sent to the user. but the function fails to refund
+the corresponding portion of the user's synthetic asset (`alAsset`) that would be
+burned but not converted. resulting in a permanent loss of funds for the user, as their
+`alAsset` is destroyed without them receiving the equivalent value in yield tokens.
+
+
+
+
+14 / Immunefi                                          Audit Competition Summary Report
+Incorrect boundary condition in
+queryGraph leads to systematic
+under-earmarking and transmuter
+redemption fund loss
+Report number: 56732            Submitted by: @enoch
+
+Target:
+https://github.com/alchemix-ﬁnance/v3-poc/blob/immuneﬁ_audit/src/Transmuter.s
+ol
+
+Impacts: Permanent freezing of funds
+
+Program Action: Conﬁrmed as critical severity.
+
+Report Excerpt:
+
+The Alchemix V3 protocol implements a transmuter system where users can deposit
+synthetic tokens (alAssets) to eventually receive yield-bearing tokens. The
+transmuter tracks position maturation through a staking graph data structure that
+records active stakes across block ranges.
+
+The `AlchemistV3` contract maintains an earmarking mechanism to allocate borrower
+debt for redemption by transmuter users. The earmarking process queries the
+transmuter's staking graph to determine how much active stake should be converted
+into earmarked debt, which directly determines the redemption capacity available to
+transmuter users.
+
+
+
+
+15 / Immunefi                                       Audit Competition Summary Report
+Liquidation Fee Overdraft Drains Pooled
+Collateral
+Report number: 56365             Submitted by: @failsafe_intern
+
+Target:
+https://github.com/alchemix-ﬁnance/v3-poc/blob/immuneﬁ_audit/src/AlchemistV3.
+sol
+
+Impacts: Direct theft of any user funds, whether at-rest or in-motion, other than
+unclaimed yield
+
+Program Action: Conﬁrmed as critical severity.
+
+Report Excerpt:
+
+The `_liquidate` function pays liquidators a repayment fee that exceeds what was
+deducted from the liquidated account, stealing the shortfall from the protocol's
+pooled MYT collateral shared by all users.
+
+When an account with earmarked debt is liquidated and the debt fully clears,
+`_resolveRepaymentFee` calculates the fee but only deducts `min(fee,
+collateralBalance)` from the account:
+
+
+
+
+16 / Immunefi                                         Audit Competition Summary Report
+Repay removes earmark, meant to be
+reducing debt while collateral is still
+reduced
+Report number: 57916              Submitted by: @JoeMama
+
+Target:
+https://github.com/alchemix-ﬁnance/v3-poc/blob/immuneﬁ_audit/src/AlchemistV3.
+sol
+
+Impacts: Direct theft of any user funds, whether at-rest or in-motion, other than
+unclaimed yield
+
+Program Action: Conﬁrmed as critical severity.
+
+Report Excerpt:
+
+When a user repays a portion of his debt, the `repay` function will remove the
+earmark, but keep the collateral position, when `sync` is called afterwards, it will
+**wrongly** remove some of the users collateral but not remove the debt because
+earmark is 0.
+
+- One issue is that `Repay` is paying off the debt that would normally been removed
+by sync. ( up to the earmark amount )
+
+- The second issue is that it makes the user lose a portion of its collateral while not
+reducing debt during the next sync.
+
+function repay(uint256 amount, uint256 recipientTokenId) public returns (uint256) {
+
+.... snip ...
+
+account.earmarked -= earmarkToRemove;
+
+}
+
+
+
+
+17 / Immunefi                                           Audit Competition Summary Report
+Integer Division Precision Loss in
+normalizeDebtTokensToUnderlying Leads
+to Permanent Collateral Locking
+Report number: 57053              Submitted by: @enoch
+
+Target:
+https://github.com/alchemix-ﬁnance/v3-poc/blob/immuneﬁ_audit/src/AlchemistV3.
+sol
+
+Impacts: Permanent freezing of funds
+
+Program Action: Conﬁrmed as critical severity.
+
+Report Excerpt:
+
+A critical precision loss vulnerability exists in the AlchemistV3 contract's
+debt-to-underlying conversion logic. When a user or attacker repays a very small
+amount of debt (an amount less than the underlyingConversionFactor), the integer
+division in normalizeDebtTokensToUnderlying rounds the amount of collateral to be
+"freed" down to zero. This causes a critical state desynchronization: the user's debt is
+correctly reduced, but their internal rawLocked collateral accounting is not. This
+desynchronized state acts as a "trap," which is later triggered by a global redeem
+event. When triggered, the contract's _sync logic incorrectly seizes a portion of the
+user's actual collateralBalance to cover global redemptions, leading to a permanent
+and irrecoverable loss of user funds.
+
+
+
+
+18 / Immunefi                                          Audit Competition Summary Report
+DISCLAIMER
+
+
+This report is subject to the terms and conditions set forth in the Master Services
+Agreement, or the scope of services, and terms and conditions provided to the
+Company in connection with the Agreement. This report may be used by the
+Company only to the extent permitted under the terms and conditions set forth in the
+Agreement.
+
+Customer may not transmit, disclose, refer to or rely upon this report for any
+purposes without Immuneﬁ’s prior written consent. This report is not, nor should be
+considered, an indication of the economics or value of any "product" or "asset"
+created by any team or project that contracts Immuneﬁ to perform a security
+assessment. Immuneﬁ does not provide any warranty or guarantee regarding the
+bug-free nature of the technology analyzed, nor does Immuneﬁ provide any
+indication of approval of the technology's proprietors, business, business model or
+legal compliance.
+
+This report should not be used in any way to make decisions around investment or
+involvement with any particular project.
+
+Customer is solely responsible for its own due diligence and continuous security and
+compliance programs. Immuneﬁ expressly disclaims any warranty associated with
+Services as summarized in this report. Customer acknowledges that this report does
+not represent an extensive security review and is intended solely to summarize the
+ﬁndings and statistics of the audit competition.
+
+
+
+
+19 / Immunefi                                         Audit Competition Summary Report
+IMMUNEFI.COM
+
