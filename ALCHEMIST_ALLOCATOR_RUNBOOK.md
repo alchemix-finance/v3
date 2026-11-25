@@ -438,6 +438,46 @@ Scenarios:
 11. Claim window lapsed with nothing claimed. Nothing is lost, the shares are still ours. Keeper: `requestExit(amount, false)` again. Expect `availableSyncLiquidity()` to read low until IPOR's next release overwrites the reservation counter.
 12. `redeemFromRequest` reverts on access. IPOR has re-gated the claim path. Fall back to sync exits sized to `availableSyncLiquidity()`. This shares the access manager with `redeem`, so treat it as a signal that sync exits may be next. The bot watches that access manager's role updates for both selectors.
 
+### `FluidLiteETHStrategy`
+
+Instadapp Fluid Lite `iETHv2` (leveraged `stETH` vault) on Ethereum. Entry is by swap only. Exits are a market sale of `stETH`, or the Lido withdrawal queue for amounts the market or the vault's idle `stETH` cannot cover.
+
+Supported allocator paths:
+
+- `allocateWithSwap()`
+- `deallocate()`
+- `deallocateWithUnwrapAndSwap()`
+
+`allocate()` reverts `ActionNotSupported`. `deallocateWithSwap()` is not used.
+
+Notes:
+
+1. `allocateWithSwap()` takes a `WETH -> stETH` quote, which must return at least `amount` less `slippageBPS` (50 at deploy). The share price must sit inside `priceBounds()` after the deposit, or the call reverts `PriceOutsideRoom`.
+2. `deallocateWithUnwrapAndSwap(adapter, amount, txData, minIntermediateOut)` sells `stETH` for `WETH`. Size `amount` from `previewAdjustedWithdraw(target)` and quote `stETH -> WETH` for at least `amount` out. The strategy spends at most `ceil(amount * 10_000 / (10_000 - slippageBPS))` `stETH`, and `minIntermediateOut` must not exceed that. Loose `stETH` is used first, then `iETHv2` is redeemed (5 bp withdraw fee, floor checked). Unsold `stETH` stays in the strategy and counts in `realAssets()`.
+3. `iETHv2` only pays out `stETH` idle in the vault. A low `previewAdjustedWithdraw` means the vault is fully deployed: exit in smaller pieces or wait for Instadapp to rebalance.
+4. `deallocate()` only returns idle `WETH`, after claiming a finalized Lido request on its own.
+5. Async exit, keeper or owner: `withdrawFromVault(x)`, `requestExits(x)`, wait for Lido, `claimExits()` (permissionless), then the allocator calls `deallocate()`. One request open at a time, between 100 wei and 1,000 `stETH`. The request counts in `realAssets()`: the lower of its face and current `stETH` value until finalized, then the exact claimable ETH. Views: `pendingExit()`, `claimableExits()`.
+6. Share price room defaults: 50 bp minimum, 10 bp per day up, 2 bp per day down, 200 bp maximum up, 100 bp maximum down. Over about 360 days `iETHv2` averaged +1.2 bp per day, with a worst week of +16 bp and a worst drawdown of 2.2 bp. `realAssets()` values the `iETHv2` leg at the live price clamped into `priceBounds()`.
+7. The price read is `iETHv2`'s stored `exchangePrice`, which only Instadapp's rebalancer updates. A loss in the vault is not visible until Instadapp posts it.
+8. Owner only: `acceptPrice(minPps, maxPps)` (read `liveSharePrice()` first and pass about 1% around it), `setPriceGuard`, `setKeeper`, `setCanForceDeallocate`.
+
+`poke()` cadence:
+
+1. Anyone calls `poke()` once a week. `allocateWithSwap()`, `deallocateWithUnwrapAndSwap()` and `withdrawFromVault()` also move the anchor, so the weekly poke only matters in weeks without one.
+2. Why weekly is enough: a week accrues 70 bp of upward budget against a worst observed week of +16 bp, so one poke always catches the anchor up. Reported value is exact in between, since the price stays far inside the ceiling.
+3. Why not less often: the floor loosens the longer the anchor sits still. A drop of 50 bp from the live price trips it on a fresh anchor, about 75 bp after a week, and about 130 bp after 25 days. After about 165 days the price passes the ceiling, allocations revert and `realAssets()` under-reports.
+4. Extra pokes are harmless. A poke with no accrued budget does nothing and does not restart the clock.
+
+Scenarios:
+
+1. No allocator or keeper activity this week. Anyone: `poke()`.
+2. Allocate. Allocator operator: `allocateWithSwap(adapter, amount, txData)`.
+3. Exit the market can absorb. Allocator operator: `deallocateWithUnwrapAndSwap(adapter, amount, txData, minIntermediateOut)`. If the swap returns less than `amount` it reverts `InvalidAmount`: requote or lower `amount`.
+4. `stETH` below par by more than `slippageBPS`, or the exit is too large for the market. Keeper: `withdrawFromVault`, `requestExits`. Bot: call `claimExits()` when `claimableExits()` is nonzero. Allocator operator: `deallocate()`.
+5. `liveSharePrice()` above the ceiling. Anyone: `poke()`. Owner: `acceptPrice(minPps, maxPps)` if one poke does not close the gap.
+6. `liveSharePrice()` under the floor. Redeems revert `PriceOutsideRoom`. Stop and escalate. The owner checks the `iETHv2` position, then calls `acceptPrice(minPps, maxPps)`, which books the loss to the MYT. Exits covered by idle `WETH` or loose `stETH` still work.
+7. No `LogUpdateExchangePrice` from `iETHv2` for more than a week. Bot alerts. The anchor cannot move while the price is flat, so the floor keeps loosening.
+
 ### `Re7ETHMidasStrategy`
 
 Supported allocator paths:
